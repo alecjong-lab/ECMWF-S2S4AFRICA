@@ -6,3 +6,4 @@ cartopy
 cfgrib
 pandas
 netCDF4
+scipy
