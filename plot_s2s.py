@@ -3,6 +3,7 @@ import xarray as xr
 import get_ECMWF_functions as gef
 import xarray as xr
 import cfgrib
+import matplotlib.pyplot as plt
 
 with open("latest_file.txt") as f:
     grib_file = f.read().strip()
