@@ -37,7 +37,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: s2s_grib
-          path: s2s*.grib
+          path: data/*.grib
 
       - name: Generate plots
         run: |

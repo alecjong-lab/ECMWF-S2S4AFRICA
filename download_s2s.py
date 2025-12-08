@@ -35,7 +35,10 @@ server = ECMWFDataServer()
 # ---------------------------
 # Retrieve S2S data
 # ---------------------------
-target_file = f"s2s.grib"
+
+os.makedirs(f'data', exist_ok=True)
+
+target_file = f"data/s2s.grib"
 
 server.retrieve({
     "class": "s2",
