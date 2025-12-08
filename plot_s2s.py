@@ -30,13 +30,12 @@ bboxes = {
 }
 
 
-country='Madagascar'
+for country in bboxes.keys():
+    gef.lat1=bboxes[country]['lat1']
+    gef.lat2=bboxes[country]['lat2']
+    gef.lon1=bboxes[country]['lon1']
+    gef.lon2=bboxes[country]['lon2']
 
-gef.lat1=bboxes[country]['lat1']
-gef.lat2=bboxes[country]['lat2']
-gef.lon1=bboxes[country]['lon1']
-gef.lon2=bboxes[country]['lon2']
-
-ds_to_plot=diff_data.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
-fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='Blues',fontsize=12)
-plt.savefig('test.png')
+    ds_to_plot=diff_data.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
+    fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='Blues',fontsize=12)
+    plt.savefig(f'weekly_{country}.png')
