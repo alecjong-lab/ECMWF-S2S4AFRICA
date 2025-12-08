@@ -88,7 +88,7 @@ major_cities = {
 }
 
 for country in bboxes.keys():
-    m_climate=m_climate_big.sel(longitude=slice([country]['lon1'], [country]['lon2']),latitude=slice([country]['lat1'], [country]['lat1']))
+    m_climate=m_climate_big.sel(longitude=slice(bboxes[country]['lon1'], bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'], bboxes[country]['lat2']))
     gef.lat1=bboxes[country]['lat1']
     gef.lat2=bboxes[country]['lat2']
     gef.lon1=bboxes[country]['lon1']
