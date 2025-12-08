@@ -35,7 +35,7 @@ server = ECMWFDataServer()
 # ---------------------------
 # Retrieve S2S data
 # ---------------------------
-target_file = f"s2s_{date_str}.grib"
+target_file = f"s2s.grib"
 
 server.retrieve({
     "class": "s2",

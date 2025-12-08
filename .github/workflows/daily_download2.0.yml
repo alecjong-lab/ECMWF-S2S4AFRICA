@@ -44,3 +44,11 @@ jobs:
         with:
           name: s2s_plots
           path: "*.png"
+      - name: Save generated files in repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/
+          git commit -m "Daily automated update" || echo "No changes to commit"
+          git push
