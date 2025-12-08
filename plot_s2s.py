@@ -19,7 +19,6 @@ diff_data = xr.DataArray(
 diff_data=diff_data.to_dataset(name='tp')
 diff_data.tp.attrs=data.tp.attrs
 
-
 bboxes = {
     "Namibia": {"lat1": -15, "lon1": 10, "lat2": -31, "lon2": 27},
     "Botswana": {"lat1": -15, "lon1": 18, "lat2": -28, "lon2": 31},
@@ -94,57 +93,61 @@ for country in bboxes.keys():
     gef.lon1=bboxes[country]['lon1']
     gef.lon2=bboxes[country]['lon2']
 
+    if country='Madagascar':
+        fs=12
+    else:
+        fs=16
+
     os.makedirs(f'plots/{country}/', exist_ok=True)
 
     ds_to_plot=diff_data.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
-    fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='Blues',fontsize=12)
+    fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='Blues',fontsize=fs)
     plt.savefig(f'plots/{country}/weekly_precip.png',bbox_inches='tight')
 
-    gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,weekly=True)
+    gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,weekly=True,fontsize=fs)
     plt.savefig(f'plots/{country}/weekly_change_in_precip.png',bbox_inches='tight')
 
     chance_to_exceed=gef.chance_to_exceed_mclimate(ds_to_plot,quantile=75,m_climate=m_climate)
-    gef.panel_plot_variable(chance_to_exceed,'tp',chance_to_exceed.step.values,cmap='Blues',fontsize=16)
+    gef.panel_plot_variable(chance_to_exceed,'tp',chance_to_exceed.step.values,cmap='Blues',fontsize=fs)
     plt.savefig(f'plots/{country}/75th_percentile_exedance_precip.png',bbox_inches='tight')
 
     chance_to_exceed=gef.chance_to_exceed_mclimate(ds_to_plot,quantile=50,m_climate=m_climate)
-    gef.panel_plot_variable(chance_to_exceed,'tp',chance_to_exceed.step.values,cmap='Blues',fontsize=16)
+    gef.panel_plot_variable(chance_to_exceed,'tp',chance_to_exceed.step.values,cmap='Blues',fontsize=fs)
     plt.savefig(f'plots/{country}/50th_percentile_exedance_precip.png',bbox_inches='tight')
 
     chance_to_exceed=gef.chance_to_exceed_mclimate(ds_to_plot,quantile=25,m_climate=m_climate)
-    gef.panel_plot_variable(chance_to_exceed,'tp',chance_to_exceed.step.values,cmap='Reds_r',fontsize=16)
+    gef.panel_plot_variable(chance_to_exceed,'tp',chance_to_exceed.step.values,cmap='Reds_r',fontsize=fs)
     plt.savefig(f'plots/{country}/25th_percentile_exedance_precip.png',bbox_inches='tight')
 
     anom_clim=gef.anomaly_from_mclimate(ds_to_plot,quantile=50,m_climate=m_climate)
-    gef.panel_plot_variable(anom_clim,'tp',anom_clim.step.values,cmap='RdBu',fontsize=16)
+    gef.panel_plot_variable(anom_clim,'tp',anom_clim.step.values,cmap='RdBu',fontsize=fs)
     plt.savefig(f'plots/{country}/anomaly_from_50th.png',bbox_inches='tight')
 
     anom_clim=gef.anomaly_from_mclimate(ds_to_plot,quantile=75,m_climate=m_climate)
-    gef.panel_plot_variable(anom_clim,'tp',anom_clim.step.values,cmap='RdBu',fontsize=16)
+    gef.panel_plot_variable(anom_clim,'tp',anom_clim.step.values,cmap='RdBu',fontsize=fs)
     plt.savefig(f'plots/{country}/anomaly_from_75th.png',bbox_inches='tight')
 
     anom_clim=gef.anomaly_from_mclimate(ds_to_plot,quantile=25,m_climate=m_climate)
-    gef.panel_plot_variable(anom_clim,'tp',anom_clim.step.values,cmap='RdBu',fontsize=16)
+    gef.panel_plot_variable(anom_clim,'tp',anom_clim.step.values,cmap='RdBu',fontsize=fs)
     plt.savefig(f'plots/{country}/anomaly_from_25th.png',bbox_inches='tight')
 
     tercile_clim=gef.tercile_from_mclimate(ds_to_plot,'tp',category_choice='near-normal',m_climate=m_climate)
-    gef.panel_plot_variable(tercile_clim,'tp',tercile_clim.step.values,cmap='rainbow')
+    gef.panel_plot_variable(tercile_clim,'tp',tercile_clim.step.values,cmap='rainbow',fontsize=fs)
     plt.savefig(f'plots/{country}/chance_of_near_normal.png',bbox_inches='tight')
 
     tercile_clim=gef.tercile_from_mclimate(ds_to_plot,'tp',category_choice='below-normal',m_climate=m_climate)
-    gef.panel_plot_variable(tercile_clim,'tp',tercile_clim.step.values,cmap='rainbow')
+    gef.panel_plot_variable(tercile_clim,'tp',tercile_clim.step.values,cmap='rainbow',fontsize=fs)
     plt.savefig(f'plots/{country}/chance_of_below_normal.png',bbox_inches='tight')
 
     tercile_clim=gef.tercile_from_mclimate(ds_to_plot,'tp',category_choice='above-normal',m_climate=m_climate)
-    gef.panel_plot_variable(tercile_clim,'tp',tercile_clim.step.values,cmap='rainbow')
+    gef.panel_plot_variable(tercile_clim,'tp',tercile_clim.step.values,cmap='rainbow',fontsize=fs)
     plt.savefig(f'plots/{country}/chance_of_above_normal.png',bbox_inches='tight')
 
     latf,lonf=major_cities[country][0][0],major_cities[country][0][1]
     gef.meteogram_double(ds_to_plot,m_climate,lat=latf,lon=lonf)
     plt.savefig(f'plots/{country}/meteogram_biggest_city.png',bbox_inches='tight')
 
-    lats,lons=major_cities[country][0][0],major_cities[country][0][1]
+    lats,lons=major_cities[country][1][0],major_cities[country][1][1]
     gef.meteogram_double(ds_to_plot,m_climate,lat=lats,lon=lons)
     plt.savefig(f'plots/{country}/meteogram_second_biggest_city.png',bbox_inches='tight')
-
-
+    
