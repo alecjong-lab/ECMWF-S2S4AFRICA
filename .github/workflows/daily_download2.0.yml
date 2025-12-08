@@ -43,13 +43,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: s2s_plots
-          path: "*.png"
+          path: plots/**/*.png
       - name: Save generated files in repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add data/
+          
           - name: Commit latest outputs into repository
           git add plots/
           git commit -m "Daily automated update" || echo "No changes to commit"
