@@ -1,0 +1,37 @@
+name: Daily ECMWF Download
+
+on:
+  schedule:
+    - cron: "30 10 * * *"  # every day at 02:00 UTC
+  workflow_dispatch:      # allows manual run
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run download script
+        env:
+          ECMWF_API_URL: ${{ secrets.ECMWF_API_URL }}
+          ECMWF_API_KEY: ${{ secrets.ECMWF_API_KEY }}
+          ECMWF_API_EMAIL: ${{ secrets.ECMWF_API_EMAIL }}
+        run: |
+          python download_s2s.py
+
+      - name: Upload GRIB file as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: s2s_grib
+          path: s2s_*.grib
