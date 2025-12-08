@@ -31,7 +31,7 @@ jobs:
           python download_s2s.py
 
       - name: Upload GRIB file as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: s2s_grib
           path: s2s_*.grib
