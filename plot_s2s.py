@@ -93,7 +93,7 @@ for country in bboxes.keys():
     gef.lon1=bboxes[country]['lon1']
     gef.lon2=bboxes[country]['lon2']
 
-    if country='Madagascar':
+    if country=='Madagascar':
         fs=12
     else:
         fs=16
@@ -150,4 +150,4 @@ for country in bboxes.keys():
     lats,lons=major_cities[country][1][0],major_cities[country][1][1]
     gef.meteogram_double(ds_to_plot,m_climate,lat=lats,lon=lons)
     plt.savefig(f'plots/{country}/meteogram_second_biggest_city.png',bbox_inches='tight')
-    
+
