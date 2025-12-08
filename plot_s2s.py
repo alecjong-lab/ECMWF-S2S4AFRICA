@@ -34,4 +34,4 @@ gef.lon2=bboxes['Namibia']['lon2']
 
 ds_to_plot=weekly_all_vars
 fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='Blues')
-plt.savefig('test')
+plt.savefig('test.png')

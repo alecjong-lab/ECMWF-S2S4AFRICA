@@ -35,3 +35,12 @@ jobs:
         with:
           name: s2s_grib
           path: s2s_*.grib
+
+      - name: Generate plots
+        run: |
+          python plot_s2s.py
+      - name: Upload plots as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: s2s_plots
+          path: "*.png"
