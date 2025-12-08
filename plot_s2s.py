@@ -4,8 +4,10 @@ import get_ECMWF_functions as gef
 import xarray as xr
 import cfgrib
 
-grib_file = sys.argv[1]  # gets the filename from workflow
+with open("latest_file.txt") as f:
+    grib_file = f.read().strip()
 
+print("Plotting from:", grib_file)
 data=xr.open_dataset(grib_file,engine='cfgrib')
 
 diff_data = xr.DataArray(

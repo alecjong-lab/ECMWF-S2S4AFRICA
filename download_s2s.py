@@ -47,7 +47,7 @@ server.retrieve({
     "number": "1/to/100",
     "origin": "ecmf",
     "param": "228228",
-    "step": "0/to/1104/by/24",
+    "step": "0/to/1104/by/168",
     "stream": "enfo",
     "time": "00:00:00",
     "type": "pf",
@@ -56,3 +56,7 @@ server.retrieve({
 })
 
 print(f"Downloaded {target_file} successfully!")
+
+# Write to a helper file for the next step
+with open("latest_file.txt", "w") as f:
+    f.write(target_file)
