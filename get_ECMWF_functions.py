@@ -703,16 +703,14 @@ def make_windroses(ensemble_mean,lat,lon,num_partitions,num_steps):
 cities = {
 }
 
-def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax='None',weekly=True,add_contour=None,contourlevels=None,contourcmap=None,contourwidths=None,fontsize=16):
+def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax='None',add_contour=None,contourlevels=None,contourcmap=None,contourwidths=None,fontsize=16):
     #get start and end time
     lines=None
-    start_time=ds.time+ds.sel(step=forecast_timestep).step-np.timedelta64(1, 'D')
-    if weekly==True:
-        end_time=start_time+np.timedelta64(7, 'D')
-        ax.set_title(f"{str(start_time.values)[:16]} until {str(end_time.values)[:16]}", fontsize=int(fontsize*0.8))
-    else:
-        end_time=start_time+np.timedelta64(1, 'D')
-        ax.set_title(f"{str(start_time.values)[:16]} until {str(end_time.values)[:16]}", fontsize=int(fontsize*0.8))
+
+    dt=ds.step[1]-ds.step[0]
+
+    start_time=ds.sel(step=forecast_timestep).valid_time-dt
+    end_time=ds.sel(step=forecast_timestep).valid_time
         
     ds = ds.sel(step=forecast_timestep)
 
@@ -752,7 +750,7 @@ def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax=
              
     return contour,lines
 
-def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=None,vmin=None,units=None,change=False,weekly=True,add_contour=None,contourlevels=None,contourcmap=None,contourwidths=None,fontsize=16):
+def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=None,vmin=None,units=None,change=False,add_contour=None,contourlevels=None,contourcmap=None,contourwidths=None,fontsize=16):
     if 'number' in ds.dims:
         ds=ensemble_mean(ds)
         if isinstance(add_contour, (xr.DataArray, xr.Dataset)):
@@ -807,7 +805,7 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
     
     for i, s in enumerate(np.atleast_1d(forecast_timestep)):
         ax = axes[i]
-        contour,lines=plot_variable(ds,variable,s,vmax,vmin,cities=cities,cmap=cmap,ax=ax,weekly=weekly,add_contour=add_contour,contourlevels=contourlevels,contourcmap=contourcmap,contourwidths=contourwidths,fontsize=fontsize)
+        contour,lines=plot_variable(ds,variable,s,vmax,vmin,cities=cities,cmap=cmap,ax=ax,add_contour=add_contour,contourlevels=contourlevels,contourcmap=contourcmap,contourwidths=contourwidths,fontsize=fontsize)
     for j in range(num_steps, len(axes)):
         axes[j].set_visible(False)  # or axes[j].remove() for Matplotlib >= 3.4
     fig.tight_layout() 
