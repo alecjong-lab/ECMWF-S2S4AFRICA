@@ -711,6 +711,8 @@ def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax=
 
     start_time=ds.sel(step=forecast_timestep).valid_time-dt
     end_time=ds.sel(step=forecast_timestep).valid_time
+
+    ax.set_title(f"{str(start_time.values)[:16]} until {str(end_time.values)[:16]}", fontsize=int(fontsize*0.8))
         
     ds = ds.sel(step=forecast_timestep)
 
