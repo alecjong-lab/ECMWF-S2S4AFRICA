@@ -104,7 +104,7 @@ for country in bboxes.keys():
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='Blues',fontsize=fs)
     plt.savefig(f'plots/{country}/weekly_precip.png',bbox_inches='tight')
 
-    gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,weekly=True,fontsize=fs)
+    gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,fontsize=fs)
     plt.savefig(f'plots/{country}/weekly_change_in_precip.png',bbox_inches='tight')
 
     chance_to_exceed=gef.chance_to_exceed_mclimate(ds_to_plot,quantile=75,m_climate=m_climate)
