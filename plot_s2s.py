@@ -13,7 +13,7 @@ data=xr.open_dataset(grib_file,engine='cfgrib')
 
 diff_data = xr.DataArray(
     data.isel(step=slice(1,None)).tp.values - data.isel(step=slice(0,6)).tp.values,
-    coords={'latitude':data.latitude,'longitude':data.longitude,'step': data.step[1:,'time':data.time,'valid_time':data.valid_time[1:]},  # new step coordinate
+    coords={'latitude':data.latitude,'longitude':data.longitude,'step': data.step[1:],'time':data.time,'valid_time':data.valid_time[1:]},  # new step coordinate
     dims=data.dims
 ).clip(min=0)
 diff_data=diff_data.to_dataset(name='tp')
