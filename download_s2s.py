@@ -54,7 +54,7 @@ server.retrieve({
     "stream": "enfo",
     "time": "00:00:00",
     "type": "pf",
-    "area": "23/-4/-37/59",
+    "area": "23/-20/-37/59",
     "target": target_file
 })
 
