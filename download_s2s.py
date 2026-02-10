@@ -50,7 +50,7 @@ server.retrieve({
     "number": "1/to/100",
     "origin": "ecmf",
     "param": "228228",
-    "step": "0/to/1104/by/168",
+    "step": "0/168/240/336/480/504/672/720/840/960/1008",
     "stream": "enfo",
     "time": "00:00:00",
     "type": "pf",
