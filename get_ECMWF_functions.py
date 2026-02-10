@@ -16,6 +16,7 @@ import site
 import json
 import re
 import operator
+# from IPython.display import clear_output
 
 # # # namibia botswana
 lat1=-15
@@ -472,7 +473,7 @@ def open_mclimate(daily_all_vars,folder_path=f'{os.getcwd()}/m-climate/'):
     #open climatology
     path=f'{os.getcwd()}/m-climate/'
     file= closest_file
-    m_climate = xr.open_dataset(path+file, engine="netcdf4",decode_timedelta=True).sel(longitude=slice(lon1, lon2),latitude=slice(lat1, lat2))
+    m_climate = xr.open_dataset(path+file, engine="netcdf4",decode_timedelta=True)
     
     return m_climate
 

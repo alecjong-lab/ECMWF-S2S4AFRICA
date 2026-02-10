@@ -58,14 +58,12 @@ for country in bboxes.keys():
     os.makedirs(f'plots/{country}/weekly', exist_ok=True)
     os.makedirs(f'plots/{country}/dekadal', exist_ok=True)
 
-    print(country)
-
     ds_to_plot=diff_data.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='Blues',fontsize=fs)
     plt.savefig(f'plots/{country}/weekly/weekly_precip.png',bbox_inches='tight')
 
-    ds_to_plot=diff_data.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
-    fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='Blues',fontsize=fs)
+    ds_to_plot_dekade=data_dekade.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
+    fig=gef.panel_plot_variable(ds_to_plot_dekade,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap='Blues',fontsize=fs)
     plt.savefig(f'plots/{country}/dekadal/weekly_precip.png',bbox_inches='tight')
 
     gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,fontsize=fs)
