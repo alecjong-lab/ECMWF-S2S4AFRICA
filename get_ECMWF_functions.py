@@ -157,6 +157,15 @@ def day_mean(ds):
         d_mean[i].attrs=ds[i].attrs.copy()
     return d_mean
 
+def acum_to_instant(data):
+    diff_data = xr.DataArray(
+        data.isel(step=slice(1,None)).tp.values - data.isel(step=slice(0,len(data.step)-1)).tp.values,
+        coords={'latitude':data.latitude,'longitude':data.longitude,'step': data.step[1:],'time':data.time,'valid_time':data.valid_time[1:]},  # new step coordinate
+        dims=data.dims
+    ).clip(min=0)
+    diff_data=diff_data.to_dataset(name='tp')
+    diff_data.tp.attrs=data.tp.attrs
+    return diff_data
 
 def day_mean_6h_accum(temp_data,variable):
     if int(len(np.atleast_1d(temp_data.step.values))/4)>1: 
@@ -425,11 +434,7 @@ def ensemble_mean(ds,dim='number'):
                     ens_mean[var].attrs = ds[var].attrs.copy()
     return ens_mean
 
-def open_mclimate(daily_all_vars):
-    HOME=os.getcwd()
-    # Define the folder path
-    folder_path = f'{HOME}/m-climate/'
-    
+def open_mclimate(daily_all_vars,folder_path=f'{os.getcwd()}/m-climate/'):
     # List all files
     files = os.listdir(folder_path)
     
