@@ -58,6 +58,7 @@ for country in bboxes.keys():
     os.makedirs(f'plots/{country}/weekly', exist_ok=True)
     os.makedirs(f'plots/{country}/dekadal', exist_ok=True)
 
+    print(country)
 
     ds_to_plot=diff_data.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='Blues',fontsize=fs)
@@ -113,4 +114,3 @@ for country in bboxes.keys():
     lats,lons=major_cities[country][1][0],major_cities[country][1][1]
     gef.meteogram_double(ds_to_plot,m_climate,lat=lats,lon=lons)
     plt.savefig(f'plots/{country}/weekly/meteogram_second_biggest_city.png',bbox_inches='tight')
-
