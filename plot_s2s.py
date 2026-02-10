@@ -64,7 +64,7 @@ for country in bboxes.keys():
 
     ds_to_plot_dekade=data_dekade.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
     fig=gef.panel_plot_variable(ds_to_plot_dekade,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap='Blues',fontsize=fs)
-    plt.savefig(f'plots/{country}/dekadal/weekly_precip.png',bbox_inches='tight')
+    plt.savefig(f'plots/{country}/dekadal/dekadal_precip.png',bbox_inches='tight')
 
     gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,fontsize=fs)
     plt.savefig(f'plots/{country}/weekly/weekly_change_in_precip.png',bbox_inches='tight')
