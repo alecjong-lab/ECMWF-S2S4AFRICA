@@ -470,7 +470,7 @@ def open_mclimate(daily_all_vars,folder_path=f'{os.getcwd()}/m-climate/'):
     print(f"Model climatology starting on: {closest_file[10:20]}")
     
     #open climatology
-    path=f'{HOME}/m-climate/'
+    path=f'{os.getcwd()}/m-climate/'
     file= closest_file
     m_climate = xr.open_dataset(path+file, engine="netcdf4",decode_timedelta=True).sel(longitude=slice(lon1, lon2),latitude=slice(lat1, lat2))
     
