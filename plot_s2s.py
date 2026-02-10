@@ -1,4 +1,3 @@
-import sys
 import xarray as xr
 import get_ECMWF_functions as gef
 import xarray as xr
