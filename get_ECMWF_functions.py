@@ -764,9 +764,7 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
         if isinstance(add_contour, (xr.DataArray, xr.Dataset)):
             add_contour=ensemble_mean(add_contour)
         
-    #select Namibia from the data
     ds=lon_convert(ds)
-    #ds=ds.sel(longitude=slice(lon1, lon2), latitude=slice(lat1, lat2))
 
     if 'step' not in ds.dims and 'step' in ds.coords:
         ds = ds.expand_dims(step=[ds.step.values])

@@ -38,7 +38,7 @@ server = ECMWFDataServer()
 
 os.makedirs(f'data', exist_ok=True)
 
-target_file = f"data/s2s.grib"
+target_file_pf = f"data/ECMWF_s2s_pf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
 
 server.retrieve({
     "class": "s2",
@@ -55,11 +55,32 @@ server.retrieve({
     "time": "00:00:00",
     "type": "pf",
     "area": "23/-20/-37/59",
-    "target": target_file
+    "target": target_file_pf
 })
 
-print(f"Downloaded {target_file} successfully!")
+target_file_cf = f"data/ECMWF_s2s_cf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
+
+server.retrieve({
+    "class": "s2",
+    "dataset": "s2s",
+    "date": date_str,
+    "expver": "prod",
+    "levtype": "sfc",
+    "model": "glob",
+    "origin": "ecmf",
+    "param": "228228",
+    "step": "0/168/240/336/480/504/672/720/840/960/1008",
+    "stream": "enfo",
+    "time": "00:00:00",
+    "type": "cf",
+    "area": "23/-20/-37/59",
+    "target": target_file_cf
+})
 
 # Write to a helper file for the next step
 with open("latest_file.txt", "w") as f:
-    f.write(target_file)
+    f.write(target_file_pf)
+    f.write("\n")
+    f.write(target_file_cf)
+
+
