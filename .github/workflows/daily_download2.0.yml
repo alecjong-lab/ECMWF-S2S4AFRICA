@@ -52,6 +52,14 @@ jobs:
         with:
           name: s2s_nc
           path: data/*.nc
+      - name: perform downscaling
+        run: |
+          python dowscale_dekade.py
+      - name: Upload plots as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: downscale_plots
+          path: plots/**/*.png
       - name: Save generated files in repo
         run: |
           git config user.name "github-actions[bot]"
