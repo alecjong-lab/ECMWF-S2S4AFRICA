@@ -24,6 +24,9 @@ data_dekade=data.sel(step=dekade)
 data_weekly=gef.acum_to_instant(data_weekly)
 data_dekade=gef.acum_to_instant(data_dekade)
 
+data_weekly.to_netcdf('data/data_weekly.nc')
+data_dekade.to_netcdf('data/data_dekade.nc')
+
 bboxes = {
     "Namibia": {"lat1": -15, "lon1": 10, "lat2": -31, "lon2": 27},
     "Botswana": {"lat1": -15, "lon1": 18, "lat2": -28, "lon2": 31},

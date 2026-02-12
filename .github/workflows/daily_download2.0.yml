@@ -47,6 +47,11 @@ jobs:
         with:
           name: s2s_plots
           path: plots/**/*.png
+      - name: Upload netCDF file as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: s2s_nc
+          path: data/*.nc
       - name: Save generated files in repo
         run: |
           git config user.name "github-actions[bot]"
