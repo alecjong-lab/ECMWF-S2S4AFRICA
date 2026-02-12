@@ -24,6 +24,102 @@ lat2=-29.5
 lon1=11
 lon2=29
 
+import numpy as np
+import xarray as xr
+
+def rank_upscale_and_align(
+    source_da,
+    target_da,
+    rank_dim="year",
+    upscale_factor=30,
+    rank_threshold=1,
+    lat_name="latitude",
+    lon_name="longitude",
+):
+    """
+    Rank a DataArray along a dimension, optionally threshold ranks,
+    upscale spatially via repetition, align to a target grid,
+    and use as indexer for sorting target data.
+
+    Parameters
+    ----------
+    source_da : xr.DataArray
+        Input data to rank and upscale.
+    target_da : xr.DataArray
+        Target data to align to and sort.
+    rank_dim : str
+        Dimension along which to compute ranks.
+    upscale_factor : int
+        Factor to increase spatial resolution.
+    rank_threshold : int or float, optional
+        Minimum allowed rank value.
+    lat_name : str
+        Name of latitude dimension.
+    lon_name : str
+        Name of longitude dimension.
+
+    Returns
+    -------
+    sorted_target : xr.DataArray
+        Target dataset reordered using aligned rank indices.
+    """
+
+    # ---- Rank ----
+    ranks = source_da.rank(dim=rank_dim)
+
+    if rank_threshold is not None:
+        ranks = ranks.where(ranks >= rank_threshold, ranks.max() + 1) - 1
+
+    # ---- Upscale ----
+    n_lat = ranks.sizes[lat_name] * upscale_factor
+    n_lon = ranks.sizes[lon_name] * upscale_factor
+
+    new_lat = np.linspace(
+        ranks[lat_name].max().values,
+        ranks[lat_name].min().values,
+        n_lat,
+    )
+    new_lon = np.linspace(
+        ranks[lon_name].min().values,
+        ranks[lon_name].max().values,
+        n_lon,
+    )
+
+    upscaled = xr.DataArray(
+        np.repeat(
+            np.repeat(ranks.values, upscale_factor, axis=2),
+            upscale_factor,
+            axis=3,
+        ),
+        coords={
+            'step':ranks['step'],
+            rank_dim: ranks[rank_dim],
+            lat_name: new_lat,
+            lon_name: new_lon,
+        },
+        dims=['step',rank_dim, lat_name, lon_name],
+    )
+
+    # ---- Align to target grid ----
+    aligned = (
+        upscaled
+        .isel(
+            longitude=slice(0, target_da.sizes[lon_name]),
+            latitude=slice(0, target_da.sizes[lat_name]),
+        )
+        .assign_coords({
+            lat_name: target_da[lat_name],
+            lon_name: target_da[lon_name],
+        })
+        .astype("int")
+    )
+
+    # ---- Sort target ----
+    sorted_target = target_da.isel(rank=aligned.isel(year=-1))
+
+    return sorted_target.T
+
+
 def link_ECMWF_key(api_config):
     # Get the current working directory
     current_path = os.getcwd()
