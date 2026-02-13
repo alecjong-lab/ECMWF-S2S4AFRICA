@@ -115,7 +115,8 @@ def rank_upscale_and_align(
     )
 
     # ---- Sort target ----
-    sorted_target = target_da.isel(rank=aligned.isel(year=-1))
+    ##get chirps data based on ranks, if rank of forecast is highest observed clip to be max lenght of years of CHIRPS
+    sorted_target = target_da.isel(rank=aligned.isel(year=-1).clip(min=None,max=len(target_da['rank'])-1))
 
     return sorted_target.T
 

@@ -51,7 +51,7 @@ try:
     data_to_add=data_dekade.assign_coords({"year":int(data_dekade.time.dt.year.values)}).mean('number').sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
     extended_fclim=xr.concat([reforecast_clims_ds,data_to_add],dim='year')
 
-    rescaled_forecast=gef.rank_upscale_and_align(extended_fclim.tp.isel(year=slice(1,None)),chirps_dekades_ds.tp)
+    rescaled_forecast=gef.rank_upscale_and_align(extended_fclim.tp,chirps_dekades_ds.tp)
     rescaled_forecast=rescaled_forecast.assign_coords({'time':extended_fclim.time,'valid_time':extended_fclim.valid_time}).to_dataset(name='tp')
     rescaled_forecast.tp.attrs=data_dekade.tp.attrs
 
