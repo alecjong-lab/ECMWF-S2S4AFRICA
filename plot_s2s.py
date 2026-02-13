@@ -4,6 +4,11 @@ import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+from datetime import datetime, timedelta
+
+today = datetime.today()
+two_days_earlier = today - timedelta(days=2)
+date_str = two_days_earlier.strftime("%Y-%m-%d"
 
 with open("latest_file.txt") as f:
     grib_file = f.read().split("\n")
@@ -24,8 +29,8 @@ data_dekade=data.sel(step=dekade)
 data_weekly=gef.acum_to_instant(data_weekly)
 data_dekade=gef.acum_to_instant(data_dekade)
 
-data_weekly.to_netcdf('data/data_weekly.nc')
-data_dekade.to_netcdf('data/data_dekade.nc')
+data_weekly.to_netcdf(f'data/data_weekly_{date_str}.nc')
+data_dekade.to_netcdf(f'data/data_dekade_{date_str}.nc')
 
 bboxes = {
     "Namibia": {"lat1": -15, "lon1": 10, "lat2": -31, "lon2": 27},
