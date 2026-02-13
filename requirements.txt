@@ -8,3 +8,5 @@ pandas
 netCDF4
 scipy
 bottleneck
+geopandas
+rioxarray

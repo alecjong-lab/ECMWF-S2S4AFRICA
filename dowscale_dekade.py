@@ -1,14 +1,17 @@
-import xarray as xr
 import get_ECMWF_functions as gef
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
+import geopandas as gpd
+import rioxarray
+from matplotlib.colors import LinearSegmentedColormap
+
 
 data_dekade=xr.open_dataset('data/data_dekade.nc')
 
 #####change after test######################
 month=int(data_dekade.time.dt.month.values)
-day=int(data_dekade.time.dt.day.values)
+day=17#int(data_dekade.time.dt.day.values)
 
 forecast_files = {
     (2, 17): ["ECMWF_tp_forecasts_02-17-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_06_Kenya.nc"],
@@ -60,8 +63,25 @@ try:
     gef.lon1=bboxes[country]['lon1']
     gef.lon2=bboxes[country]['lon2']
 
+    colors = ["white","wheat","lightgreen", "green","lightblue", "blue","yellow","orange", "red","purple"]
+    cmap = LinearSegmentedColormap.from_list("wbgyr", colors)
+
     ds_to_plot=rescaled_forecast.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
-    fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='rainbow',fontsize=fs,vmax=int(ds_to_plot.quantile(0.99).tp.values))
+    fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=cmap,fontsize=fs,vmax=int(ds_to_plot.quantile(0.99).tp.values))
     plt.savefig(f'plots/{country}/dekadal/dekadal_precip_downscaled.png',bbox_inches='tight')
+
+    gdf = gpd.read_file("downscale_data/Kenya_Counties_KNSDI.shp").set_crs("EPSG:4326")
+
+    rescaled_forecast = rescaled_forecast.rio.write_crs("EPSG:4326")
+
+    # Reproject shapefile
+    gdf = gdf.to_crs(rescaled_forecast.rio.crs)
+
+    # Clip
+    ds_to_plot = rescaled_forecast.rio.clip(gdf.geometry, gdf.crs, drop=True)
+    fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=cmap,fontsize=fs,vmax=int(ds_to_plot.quantile(0.99).tp.values))
+    plt.savefig(f'plots/{country}/dekadal/dekadal_precip_downscaled_clipped.png',bbox_inches='tight')
+
+    
 except ValueError:
     print('these are not the days you are looking for...')
