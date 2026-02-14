@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 today = datetime.today()
 two_days_earlier = today - timedelta(days=2)
-date_str = two_days_earlier.strftime("%Y-%m-%d"
+date_str = two_days_earlier.strftime("%Y-%m-%d")
 
 with open("latest_file.txt") as f:
     grib_file = f.read().split("\n")
