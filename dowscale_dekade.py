@@ -5,10 +5,13 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 import rioxarray
 from matplotlib.colors import LinearSegmentedColormap
+from datetime import datetime, timedelta
 
+today = datetime.today()
+two_days_earlier = today - timedelta(days=2)
+date_str = two_days_earlier.strftime("%Y-%m-%d")
 
-data_dekade=xr.open_dataset('data/data_dekade.nc')
-
+data_dekade=xr.open_dataset(f'data/{date_str}/data_dekade.nc')
 #####change after test######################
 month=int(data_dekade.time.dt.month.values)
 day=17#int(data_dekade.time.dt.day.values)
@@ -68,7 +71,7 @@ try:
 
     ds_to_plot=rescaled_forecast.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=cmap,fontsize=fs,vmax=int(ds_to_plot.quantile(0.99).tp.values))
-    plt.savefig(f'plots/{country}/dekadal/dekadal_precip_downscaled.png',bbox_inches='tight')
+    plt.savefig(f'plots/{country}/{date_str}/dekadal/dekadal_precip_downscaled.png',bbox_inches='tight')
 
     gdf = gpd.read_file("downscale_data/Kenya_Counties_KNSDI.shp").set_crs("EPSG:4326")
 
@@ -80,7 +83,7 @@ try:
     # Clip
     ds_to_plot = rescaled_forecast.rio.clip(gdf.geometry, gdf.crs, drop=True)
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=cmap,fontsize=fs,vmax=int(ds_to_plot.quantile(0.99).tp.values))
-    plt.savefig(f'plots/{country}/dekadal/dekadal_precip_downscaled_clipped.png',bbox_inches='tight')
+    plt.savefig(f'plots/{country}/{date_str}/dekadal/dekadal_precip_downscaled_clipped.png',bbox_inches='tight')
 
     
 except ValueError:

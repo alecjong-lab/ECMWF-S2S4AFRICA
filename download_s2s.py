@@ -35,10 +35,10 @@ server = ECMWFDataServer()
 # ---------------------------
 # Retrieve S2S data
 # ---------------------------
+path=f'data/{date_str}'
+os.makedirs(path, exist_ok=True)
 
-os.makedirs(f'data', exist_ok=True)
-
-target_file_pf = f"data/ECMWF_s2s_pf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
+target_file_pf = f"{path}/ECMWF_s2s_pf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
 
 server.retrieve({
     "class": "s2",
@@ -58,7 +58,7 @@ server.retrieve({
     "target": target_file_pf
 })
 
-target_file_cf = f"data/ECMWF_s2s_cf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
+target_file_cf = f"{path}/ECMWF_s2s_cf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
 
 server.retrieve({
     "class": "s2",

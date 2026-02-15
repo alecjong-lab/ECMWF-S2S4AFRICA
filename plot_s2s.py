@@ -29,8 +29,8 @@ data_dekade=data.sel(step=dekade)
 data_weekly=gef.acum_to_instant(data_weekly)
 data_dekade=gef.acum_to_instant(data_dekade)
 
-data_weekly.to_netcdf(f'data/data_weekly_{date_str}.nc')
-data_dekade.to_netcdf(f'data/data_dekade_{date_str}.nc')
+data_weekly.to_netcdf(f'data/{date_str}/data_weekly.nc')
+data_dekade.to_netcdf(f'data/{date_str}/data_dekade.nc')
 
 bboxes = {
     "Namibia": {"lat1": -15, "lon1": 10, "lat2": -31, "lon2": 27},
@@ -53,51 +53,57 @@ major_cities = {
 diff_data=data_weekly
 
 for country in bboxes.keys():
-    m_climate=m_climate_big.sel(longitude=slice(bboxes[country]['lon1'], bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'], bboxes[country]['lat2']))
     gef.lat1=bboxes[country]['lat1']
     gef.lat2=bboxes[country]['lat2']
     gef.lon1=bboxes[country]['lon1']
     gef.lon2=bboxes[country]['lon2']
+
+    m_climate=m_climate_big.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
+
 
     if country=='Madagascar':
         fs=12
     else:
         fs=16
 
-    os.makedirs(f'plots/{country}/', exist_ok=True)
-    os.makedirs(f'plots/{country}/weekly', exist_ok=True)
-    os.makedirs(f'plots/{country}/dekadal', exist_ok=True)
+    base_path=f'plots/{country}/{date_str}'
+    weekly_path=f'{base_path}/weekly'
+    dekade_path=f'{base_path}/dekadal'
 
-    ds_to_plot=diff_data.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
+    os.makedirs(base_path, exist_ok=True)
+    os.makedirs(weekly_path, exist_ok=True)
+    os.makedirs(dekade_path, exist_ok=True)
+
+    ds_to_plot=diff_data.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='Blues',fontsize=fs)
-    plt.savefig(f'plots/{country}/weekly/weekly_precip.png',bbox_inches='tight')
+    plt.savefig(f'{weekly_path}/weekly_precip.png',bbox_inches='tight')
 
-    ds_to_plot_dekade=data_dekade.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
+    ds_to_plot_dekade=data_dekade.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     fig=gef.panel_plot_variable(ds_to_plot_dekade,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap='Blues',fontsize=fs)
-    plt.savefig(f'plots/{country}/dekadal/dekadal_precip.png',bbox_inches='tight')
+    plt.savefig(f'{dekade_path}/dekadal_precip.png',bbox_inches='tight')
 
     gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,fontsize=fs)
-    plt.savefig(f'plots/{country}/weekly/weekly_change_in_precip.png',bbox_inches='tight')
+    plt.savefig(f'{weekly_path}/weekly_change_in_precip.png',bbox_inches='tight')
 
     quantiles=[75,50,25]
 
     for quantile in quantiles:
         chance_to_exceed=gef.chance_to_exceed_mclimate(ds_to_plot,quantile=quantile,m_climate=m_climate)
         gef.panel_plot_variable(chance_to_exceed,'tp',chance_to_exceed.step.values,cmap='Blues',fontsize=fs)
-        plt.savefig(f'plots/{country}/weekly/{quantile}th_percentile_exedance_precip.png',bbox_inches='tight')
+        plt.savefig(f'{weekly_path}/{quantile}th_percentile_exedance_precip.png',bbox_inches='tight')
 
         anom_clim=gef.anomaly_from_mclimate(ds_to_plot,quantile=quantile,m_climate=m_climate)
         gef.panel_plot_variable(anom_clim,'tp',anom_clim.step.values,cmap='RdBu',fontsize=fs)
-        plt.savefig(f'plots/{country}/weekly/anomaly_from_{quantile}th.png',bbox_inches='tight')
+        plt.savefig(f'{weekly_path}/anomaly_from_{quantile}th.png',bbox_inches='tight')
 
     tercil_cats=['near-normal','below-normal','above-normal']
 
     for cat in tercil_cats:
         tercile_clim=gef.tercile_from_mclimate(ds_to_plot,'tp',category_choice=cat,m_climate=m_climate)
         gef.panel_plot_variable(tercile_clim,'tp',tercile_clim.step.values,cmap='rainbow',fontsize=fs)
-        plt.savefig(f'plots/{country}/weekly/chance_of_{cat}.png',bbox_inches='tight')
+        plt.savefig(f'{weekly_path}/chance_of_{cat}.png',bbox_inches='tight')
 
     for i in range(2):
         latf,lonf=major_cities[country][i][0],major_cities[country][i][1]
         gef.meteogram_double(ds_to_plot,m_climate,lat=latf,lon=lonf)
-        plt.savefig(f'plots/{country}/weekly/meteogram_{major_cities[country][2][i]}.png',bbox_inches='tight')
+        plt.savefig(f'{weekly_path}/meteogram_{major_cities[country][2][i]}.png',bbox_inches='tight')
