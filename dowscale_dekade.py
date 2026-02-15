@@ -85,6 +85,5 @@ try:
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=cmap,fontsize=fs,vmax=int(ds_to_plot.quantile(0.99).tp.values))
     plt.savefig(f'plots/{country}/{date_str}/dekadal/dekadal_precip_downscaled_clipped.png',bbox_inches='tight')
 
-    
 except ValueError:
     print('these are not the days you are looking for...')

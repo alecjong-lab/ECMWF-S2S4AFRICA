@@ -60,7 +60,6 @@ for country in bboxes.keys():
 
     m_climate=m_climate_big.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
 
-
     if country=='Madagascar':
         fs=12
     else:
