@@ -12,9 +12,8 @@ two_days_earlier = today - timedelta(days=2)
 date_str = two_days_earlier.strftime("%Y-%m-%d")
 
 data_dekade=xr.open_dataset(f'data/{date_str}/data_dekade.nc')
-#####change after test######################
 month=int(data_dekade.time.dt.month.values)
-day=17#int(data_dekade.time.dt.day.values)
+day=int(data_dekade.time.dt.day.values)
 
 forecast_files = {
     (2, 17): ["ECMWF_tp_forecasts_02-17-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_06_Kenya.nc"],
