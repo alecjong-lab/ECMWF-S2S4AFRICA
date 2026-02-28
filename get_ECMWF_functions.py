@@ -5,17 +5,16 @@ import pandas as pd
 import xarray as xr
 import cfgrib
 import matplotlib.pyplot as plt
-import matplotlib.patheffects as path_effects
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from datetime import date, timedelta, datetime
 from ecmwfapi import ECMWFDataServer
-from pathlib import Path
-import site
 import json
 import re
 import operator
+from scipy.ndimage import gaussian_filter
+from scipy.ndimage import grey_opening, grey_closing
 # from IPython.display import clear_output
 
 # # # namibia botswana
@@ -23,9 +22,6 @@ lat1=-15
 lat2=-29.5
 lon1=11
 lon2=29
-
-import numpy as np
-import xarray as xr
 
 def rank_upscale_and_align(
     source_da,
@@ -113,12 +109,33 @@ def rank_upscale_and_align(
         })
         .astype("int")
     )
+   
 
+    smoothed = xr.apply_ufunc(
+    grey_closing,
+    aligned,
+    kwargs={"size": (50, 50)},   # 3x3 spatial window
+    input_core_dims=[["latitude", "longitude"]],
+    output_core_dims=[["latitude", "longitude"]],
+    vectorize=True,
+    output_dtypes=[aligned.dtype],
+    )
+
+    smoothed = xr.apply_ufunc(
+    gaussian_filter,
+    smoothed,
+    kwargs={"sigma": 1.5},
+    input_core_dims=[["latitude", "longitude"]],
+    output_core_dims=[["latitude", "longitude"]],
+    vectorize=True,
+    output_dtypes=[aligned.dtype],
+    )
+    
     # ---- Sort target ----
-    ##get chirps data based on ranks, if rank of forecast is highest observed clip to be max lenght of years of CHIRPS
-    sorted_target = target_da.isel(rank=aligned.isel(year=-1).clip(min=None,max=len(target_da['rank'])-1))
+    sorted_target = target_da.isel(rank=smoothed.isel(year=-1).clip(min=None,max=len(target_da['rank'])-1))
 
     return sorted_target.T
+
 
 
 def link_ECMWF_key(api_config):
