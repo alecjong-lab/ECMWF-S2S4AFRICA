@@ -57,6 +57,8 @@ try:
     rescaled_forecast=rescaled_forecast.assign_coords({'time':extended_fclim.time,'valid_time':extended_fclim.valid_time}).to_dataset(name='tp')
     rescaled_forecast.tp.attrs=data_dekade.tp.attrs
 
+    rescaled_forecast.to_netcdf(f'data/{date_str}/data_dekade_downscaled.nc')
+
     fs=12
     country='Kenya'
 
