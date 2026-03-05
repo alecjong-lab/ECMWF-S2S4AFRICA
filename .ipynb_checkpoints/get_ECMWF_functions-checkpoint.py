@@ -16,10 +16,6 @@ import operator
 from scipy.ndimage import gaussian_filter
 from scipy.ndimage import grey_opening, grey_closing
 from IPython.display import clear_output
-from matplotlib.colors import LinearSegmentedColormap
-
-colors = ["white","wheat","lightgreen", "green","lightblue", "blue","yellow","orange", "red","purple"]
-cmap = LinearSegmentedColormap.from_list("wgbrp", colors)
 
 # # # namibia botswana
 lat1=-15
@@ -37,18 +33,9 @@ def rank_upscale_and_align(
     lon_name="longitude",
 ):
     """
-    perform empirical quantile matching and downscaling of the ECMWF s2s forecasts.
-    
-    first step is to get the rank of the ECMWF data. 
-
-    then the data array with the ranks is increased in resolution by transforming a 1.5x1.5 cube of data -
-    - to 30 pixels of 0.05x0.05deg 
-
-    the resulting longitude dimension does not completly allign with chirps, so they are aligned
-
-    the upscaled ranks are then passed to a gray closing, filling in areas of low precip by surounding precip
-
-    then it is all smoothed with a gaussian filter
+    Rank a DataArray along a dimension, optionally threshold ranks,
+    upscale spatially via repetition, align to a target grid,
+    and use as indexer for sorting target data.
 
     Parameters
     ----------
@@ -74,7 +61,6 @@ def rank_upscale_and_align(
     """
 
     # ---- Rank ----
-    #get ranks of forecast compared to the model climatology
     ranks = source_da.rank(dim=rank_dim)
 
     if rank_threshold is not None:
@@ -95,7 +81,6 @@ def rank_upscale_and_align(
         n_lon,
     )
 
-    #construct new higher resolution DataArray
     upscaled = xr.DataArray(
         np.repeat(
             np.repeat(ranks.values, upscale_factor, axis=2),
@@ -125,21 +110,21 @@ def rank_upscale_and_align(
         .astype("int")
     )
    
-    #apply gray closing filter to fill up some wierd artifacts
+
     smoothed = xr.apply_ufunc(
     grey_closing,
     aligned,
-    kwargs={"size": (50, 50)},   # 50x50 spatial window (chosen by trail and error)
+    kwargs={"size": (50, 50)},   # 3x3 spatial window
     input_core_dims=[["latitude", "longitude"]],
     output_core_dims=[["latitude", "longitude"]],
     vectorize=True,
     output_dtypes=[aligned.dtype],
     )
-    #apply gaussian filter to smooth away the obvious artifacts but keep data similar
+
     smoothed = xr.apply_ufunc(
     gaussian_filter,
     smoothed,
-    kwargs={"sigma": 1.5}, #relatively low smoothing value
+    kwargs={"sigma": 1.5},
     input_core_dims=[["latitude", "longitude"]],
     output_core_dims=[["latitude", "longitude"]],
     vectorize=True,
@@ -147,11 +132,10 @@ def rank_upscale_and_align(
     )
     
     # ---- Sort target ----
-    # select the last year as this will be the forecast: smoothed.isel(year=-1)
-    # then we clipi the values so the rank cannot be larger than the amount of years in the climatology: .clip(min=None,max=len(target_da['rank'])-1)
     sorted_target = target_da.isel(rank=smoothed.isel(year=-1).clip(min=None,max=len(target_da['rank'])-1))
 
     return sorted_target.T
+
 
 
 def link_ECMWF_key(api_config):
@@ -199,7 +183,6 @@ def open_allfiles_and_compute_weekly(filename):
     weekly_var=[]
 
     print("⏳ Converting Hourly Data to Daily and Weekly")
-    #check if any 6 houtly variables where chosen to then convert them to daily
     if "ds_inst_acc" in locals() or "ds_inst_acc" in globals():
         if "u10" in ds_inst_acc.data_vars or "v10" in ds_inst_acc.data_vars:    ### Get daily and weekly values for wind
             u_cond,v_cond="u10" in ds_inst_acc.data_vars,"v10" in ds_inst_acc.data_vars
@@ -221,17 +204,16 @@ def open_allfiles_and_compute_weekly(filename):
             tp_day.tp.attrs=ds_inst_acc.tp.attrs.copy()
             daily_var.append(tp_day.clip(min=0))
     
-            if int(len(np.atleast_1d(ds_inst_acc.step.values))/4/7)>1:
-                data_store=[]
-                for i in range(1,int(len(ds.step)/4/7)+1):
-                    one_week=ds_inst_acc['tp'].isel(step=4*7*(i))-ds_inst_acc['tp'].isel(step=4*7*(i-1))
-                    one_week=one_week.assign_coords(step=ds_inst_acc['tp'].isel(step=4*7*(i)).step-np.timedelta64(6, 'D'))
-                    data_store.append(one_week)
-                tp_week=xr.concat(data_store,dim='step',coords='different',compat='equals').to_dataset()
-                tp_week.tp.attrs=ds_inst_acc.tp.attrs.copy()
-                weekly_var.append(tp_week.clip(min=0))
-    
-    #check if the min/max temp in last 6 hour variable has been chosen, this is downloaded as a seperate file cause they cannot be downloaded with the same MARS request as the other variables
+        if int(len(np.atleast_1d(ds_inst_acc.step.values))/4/7)>1:
+            data_store=[]
+            for i in range(1,int(len(ds.step)/4/7)+1):
+                one_week=ds_inst_acc['tp'].isel(step=4*7*(i))-ds_inst_acc['tp'].isel(step=4*7*(i-1))
+                one_week=one_week.assign_coords(step=ds_inst_acc['tp'].isel(step=4*7*(i)).step-np.timedelta64(6, 'D'))
+                data_store.append(one_week)
+            tp_week=xr.concat(data_store,dim='step',coords='different',compat='equals').to_dataset()
+            tp_week.tp.attrs=ds_inst_acc.tp.attrs.copy()
+            weekly_var.append(tp_week.clip(min=0))
+                
     if filename+'_6hourly_temperature'in os.listdir():
         if "mx2t6" in temp_data.data_vars or "mn2t6" in temp_data.data_vars:
             ### Get daily and weekly values for max/min temperature
@@ -243,12 +225,10 @@ def open_allfiles_and_compute_weekly(filename):
                 temp_6h_week=week_mean(temp_6h_day)
                 weekly_var.append(temp_6h_week)
 
-    # if filename+'_hourly' in os.listdir():
-    #     print("✅ Done")
-    # clear_output(wait=True)
+    if filename+'_hourly' in os.listdir():
+        print("✅ Done")
+    clear_output(wait=True)
     
-    #Pressure also gets downloaded as a seperate file, becuase the timestep is different than the other variables
-    #So we check if it has been downloaded and then open it
     if filename+'_pressure' in os.listdir():
         print("⏳ Opening and Agregating Pressure Data")
         ### Get daily and weekly values for pressure
@@ -293,7 +273,6 @@ def day_mean(ds):
     return d_mean
 
 def acum_to_instant(data):
-    #funtion to turn accumulated data into daily/ weekly values 
     diff_data = xr.DataArray(
         data.isel(step=slice(1,None)).tp.values - data.isel(step=slice(0,len(data.step)-1)).tp.values,
         coords={'latitude':data.latitude,'longitude':data.longitude,'step': data.step[1:],'time':data.time,'valid_time':data.valid_time[1:]},  # new step coordinate
@@ -304,7 +283,6 @@ def acum_to_instant(data):
     return diff_data
 
 def day_mean_6h_accum(temp_data,variable):
-    #function to calculate the day mean of 6 hour temperature variables
     if int(len(np.atleast_1d(temp_data.step.values))/4)>1: 
         arrr=[]
         for i in range(int(len(temp_data.step)/4)):
@@ -336,7 +314,7 @@ def lon_convert(ds,cut=True):
     return ds
 
 def compute_figsize_from_extent(lon_min, lon_max, lat_min, lat_max, base_height_per_row=5):
-    #"Scale width of plot according to the lat/lon extent to make it look nice"
+    #"Scale width according to the lat/lon extent"
     lat_range = lat_max - lat_min
     lon_range = lon_max - lon_min
     aspect = lon_range / lat_range
@@ -345,7 +323,6 @@ def compute_figsize_from_extent(lon_min, lon_max, lat_min, lat_max, base_height_
     return width, height
 
 def diff_ds(ds,weeks):
-    #calculate the change in day/week  
     ds_list=[]
     for i in range(weeks-1):
         diff = ds.isel(step=i + 1) - ds.isel(step=i)
@@ -360,7 +337,6 @@ def diff_ds(ds,weeks):
     return ds_diff
 
 def get_check_box_value(checkboxes, name):
-    #transfer the value of the clicked buttons to request ready string
     arr = [i.description for i in checkboxes if i.value]
     if not arr:
         raise ValueError(f'⚠️Please check at least one of the {name} boxes⚠️')
@@ -369,8 +345,8 @@ def get_check_box_value(checkboxes, name):
     else:
         return '/'.join(arr)
 
+# Function to generate the date range string from the year and month values
 def generate_date_range(year, month,day):
-    # Function to generate the date range string from the year and month values
     months = ["January", "February", "March", "April", "May", "June", 
     "July", "August", "September", "October", "November", "December"]
     # Get the month number
@@ -381,9 +357,8 @@ def generate_date_range(year, month,day):
     return f"{year}-{month_number:02d}-{day:02d}"
 
 
+#if you have selected ensemble mean than you can only download control forecast
 def edit_base_request(request,param,step,name,ensemble_mean=True):
-    #update the base request with the things clicked on the button
-    #if you have selected ensemble mean than you can only download control forecast
     request['param']=param
     request['step']=step
     if ensemble_mean==True:
@@ -395,9 +370,8 @@ def edit_base_request(request,param,step,name,ensemble_mean=True):
     request['target']=name
     return request
         
-def get_ECMWF(gui, name):
-#function to download ECMWF forecast based on clicked buttons
-    # Find all matching files
+def get_ECWMF(gui, name):
+# Find all matching files
     files_to_delete = [f for f in os.listdir() if f.startswith(name) and os.path.isfile(f)]
     
     if files_to_delete:
@@ -477,7 +451,7 @@ def get_ECMWF(gui, name):
         "stream": "enfo",
         "time": "00:00:00",
     }
-    #make seperate downloads for the variables that cannot be downloaded with the same request
+    
     # ---------- HOURLY VARIABLES ----------
     if len(chosen_vars_hourly) > 0:
         print("⏳ Downloading instantaneous and accumulated variables")
@@ -489,7 +463,6 @@ def get_ECMWF(gui, name):
     
         if 0 in step_array:
             items = chosen_vars_hourly.split('/')
-            #check if 6 hourly temperature data is chosen
             if any(v in ["121", "122"] for v in items):
                 temp_flag = True
     
@@ -501,8 +474,7 @@ def get_ECMWF(gui, name):
     
                 chosen_vars_hourly = '/'.join(not_temp)
                 chosen_vars_hourly_temp = '/'.join(temp)
-
-            #make the request and download the temperature data
+    
                 req = edit_base_request(
                     base_request,
                     chosen_vars_hourly_temp,
@@ -511,8 +483,7 @@ def get_ECMWF(gui, name):
                     ensemble_mean=gui.ensemble_checkbox.value
                 )
                 server.retrieve(req)
-
-
+    
         req = edit_base_request(
             base_request,
             chosen_vars_hourly,
@@ -560,8 +531,8 @@ def get_ECMWF(gui, name):
     clear_output(wait=True)
     print("🎉 All requested data has been downloaded")
 
+#change units from kelvin to degree celcius
 def convert_to_celcius(ds,var,reverse=False):
-    #change units from kelvin to degree celcius
     units=ds[var].attrs.copy()
     units['units']='°C'
     celcius_ds=(ds[var]-273.15).to_dataset()
@@ -572,7 +543,6 @@ def convert_to_celcius(ds,var,reverse=False):
 def ensemble_mean(ds,dim='number'):
     ens_mean=ds.mean(dim='number')
     ens_mean.attrs=ds.attrs.copy()
-    #keep atributes, because they are needed for plotting
     if isinstance(ds, xr.Dataset):
         for var in ens_mean.data_vars:
                 if var in ds:
@@ -854,17 +824,8 @@ cities = {
 }
 
 def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax='None',add_contour=None,contourlevels=None,contourcmap=None,contourwidths=None,fontsize=16):
-    '''
-    function to plot a variable from the ECMWF forecast with the option of adding another variable as contour
-
-    inputs:
-    ds: dataset to plot from
-    variable: which variable to plot
-    forecast_timestep: which forecast timesteps to plot
-
-    '''
-    lines=None
     #get start and end time
+    lines=None
 
     dt=ds.step[1]-ds.step[0]
 
@@ -912,7 +873,6 @@ def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax=
     return contour,lines
 
 def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=None,vmin=None,units=None,change=False,add_contour=None,contourlevels=None,contourcmap=None,contourwidths=None,fontsize=16):
-    #take ensemble mean before plotting if needed
     if 'number' in ds.dims:
         ds=ensemble_mean(ds)
         if isinstance(add_contour, (xr.DataArray, xr.Dataset)):
@@ -920,11 +880,9 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
         
     ds=lon_convert(ds)
 
-    #if only a single step is selected, make sure rest of code still works
     if 'step' not in ds.dims and 'step' in ds.coords:
         ds = ds.expand_dims(step=[ds.step.values])
         
-    #plot the change in a variable
     if change==True:
         ds=diff_ds(ds.sel(step=forecast_timestep),len(forecast_timestep))
         # if len(np.atleast_1d(forecast_timestep))>5:
@@ -954,7 +912,6 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
     lat_min, lat_max = lon1, lon2
     lon_min, lon_max = lat2, lat1
 
-    #calculate the figure size so that the chosen lat lon area does not change the look of the plot
     single_width, single_height = compute_figsize_from_extent(
         lon_min, lon_max, lat_min, lat_max
     )
@@ -970,14 +927,12 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
         ax = axes[i]
         contour,lines=plot_variable(ds,variable,s,vmax,vmin,cities=cities,cmap=cmap,ax=ax,add_contour=add_contour,contourlevels=contourlevels,contourcmap=contourcmap,contourwidths=contourwidths,fontsize=fontsize)
     for j in range(num_steps, len(axes)):
-        axes[j].set_visible(False) #delete extra empty plots
+        axes[j].set_visible(False)  # or axes[j].remove() for Matplotlib >= 3.4
     fig.tight_layout() 
     plt.tight_layout()
     cbar_ax = fig.add_axes([0.15, -0.015, 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
     cbar = fig.colorbar(contour, cax=cbar_ax, orientation='horizontal',fraction=5)
     cbar.set_label(ds[variable].GRIB_name+f'[{units}]')
-
-    #manage the location of the colorbar
     if lines!=None:
         pos = cbar.ax.get_position()  # Bbox in figure coordinates
         # Shift down by some fraction of the height
@@ -1060,7 +1015,9 @@ def get_exceedance_percentage(ds,variable, threshold, comparison='None', dim="nu
     return percentage.to_dataset()  
 
 def chance_to_exceed_mclimate(ds,quantile,m_climate):
-    
+    # regridder = xe.Regridder(ds, m_climate, method="conservative")
+    # ds=regridder(ds,m_climate)
+
     ds=ds.interp(latitude=m_climate.latitude, longitude=m_climate.longitude,method="linear")
 
     hold=[]    
@@ -1086,6 +1043,8 @@ def chance_to_exceed_mclimate(ds,quantile,m_climate):
 def anomaly_from_mclimate(ds,quantile,m_climate,var='tp'):
     hold=[]
     units=ds[var].attrs['units']
+    # regridder = xe.Regridder(ds, m_climate, method="conservative")
+    # ds=regridder(ds,m_climate)    
     ds=ds.interp(latitude=m_climate.latitude, longitude=m_climate.longitude,method="linear")
     
     for forecast_timestep in ds.step.values:
@@ -1108,7 +1067,9 @@ def anomaly_from_mclimate(ds,quantile,m_climate,var='tp'):
 
 def tercile_from_mclimate(ds,var,category_choice,m_climate):
     hold=[]
- 
+    # regridder = xe.Regridder(ds, m_climate, method="conservative")
+    # ds=regridder(ds,m_climate)    
+
     ds=ds.interp(latitude=m_climate.latitude, longitude=m_climate.longitude,method="linear")
     
     for forecast_timestep in ds.step.values:
@@ -1150,7 +1111,8 @@ def tercile_from_mclimate(ds,var,category_choice,m_climate):
 
 def meteogram_double(ds,m_climate,lat,lon):
     wh=ds.interp(latitude=m_climate.latitude, longitude=m_climate.longitude, method="linear").sel(longitude=lon,latitude=lat,method="nearest")
-    
+    # regridder = xe.Regridder(ds, m_climate, method="conservative")
+    # wh=regridder(ds,m_climate).isel(latitude=slice(1, -1), longitude=slice(1, -1)).sel(longitude=lon,latitude=lat,method="nearest")
     data2=m_climate.sel(longitude=lon,latitude=lat,method="nearest").tp.isel(time=slice(0,len(wh.step.values))).values.T
     data = wh.tp.values.T
     # Compute ensemble mean
