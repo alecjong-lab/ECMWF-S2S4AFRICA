@@ -67,8 +67,7 @@ try:
     gef.lon1=bboxes[country]['lon1']
     gef.lon2=bboxes[country]['lon2']
 
-    colors = ["white","wheat","lightgreen", "green","lightblue", "blue","yellow","orange", "red","purple"]
-    cmap = LinearSegmentedColormap.from_list("wbgyr", colors)
+    cmap=gef.cmap
 
     ds_to_plot=rescaled_forecast.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=cmap,fontsize=fs,vmax=int(ds_to_plot.quantile(0.99).tp.values))
