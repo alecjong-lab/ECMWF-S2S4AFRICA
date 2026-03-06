@@ -82,5 +82,3 @@ with open("latest_file.txt", "w") as f:
     f.write(target_file_pf)
     f.write("\n")
     f.write(target_file_cf)
-
-

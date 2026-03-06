@@ -10,11 +10,8 @@ today = datetime.today()
 two_days_earlier = today - timedelta(days=2)
 date_str = two_days_earlier.strftime("%Y-%m-%d")
 
-with open("latest_file.txt") as f:
-    grib_file = f.read().split("\n")
-
-pf=xr.open_dataset(grib_file[0],engine='cfgrib')
-cf=xr.open_dataset(grib_file[1],engine='cfgrib').assign_coords({'number':0})
+pf=xr.open_dataset(f"data/{date_str}/ECMWF_s2s_pf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib",engine='cfgrib')
+cf=xr.open_dataset(f"data/{date_str}/ECMWF_s2s_cf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib",engine='cfgrib').assign_coords({'number':0})
 
 data=xr.concat([pf,cf],dim='number')
 
@@ -83,13 +80,14 @@ for country in bboxes.keys():
     fig=gef.panel_plot_variable(ds_to_plot_dekade,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
     plt.savefig(f'{dekade_path}/dekadal_precip.png',bbox_inches='tight')
 
-    exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot_dekade,var,20,comparison='greater')
-    fig=gef.panel_plot_variable(exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
-    plt.savefig(f'{dekade_path}/chance_higherthan_20mm.png',bbox_inches='tight')
+    if country=='Kenya':
+        exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot_dekade,'tp',20,comparison='greater')
+        fig=gef.panel_plot_variable(exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
+        plt.savefig(f'{dekade_path}/chance_higherthan_20mm.png',bbox_inches='tight')
 
-    exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot_dekade,var,25,comparison='greater')
-    fig=gef.panel_plot_variable(exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
-    plt.savefig(f'{dekade_path}/chance_higherthan_25mm.png',bbox_inches='tight')
+        exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot_dekade,'tp',25,comparison='greater')
+        fig=gef.panel_plot_variable(exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
+        plt.savefig(f'{dekade_path}/chance_higherthan_25mm.png',bbox_inches='tight')
 
     gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,fontsize=fs)
     plt.savefig(f'{weekly_path}/weekly_change_in_precip.png',bbox_inches='tight')
