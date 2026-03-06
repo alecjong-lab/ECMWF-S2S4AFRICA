@@ -83,6 +83,14 @@ for country in bboxes.keys():
     fig=gef.panel_plot_variable(ds_to_plot_dekade,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
     plt.savefig(f'{dekade_path}/dekadal_precip.png',bbox_inches='tight')
 
+    exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot_dekade,var,20,comparison='greater')
+    fig=gef.panel_plot_variable(exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
+    plt.savefig(f'{dekade_path}/chance_higherthan_20mm.png',bbox_inches='tight')
+
+    exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot_dekade,var,25,comparison='greater')
+    fig=gef.panel_plot_variable(exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
+    plt.savefig(f'{dekade_path}/chance_higherthan_25mm.png',bbox_inches='tight')
+
     gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,fontsize=fs)
     plt.savefig(f'{weekly_path}/weekly_change_in_precip.png',bbox_inches='tight')
 
