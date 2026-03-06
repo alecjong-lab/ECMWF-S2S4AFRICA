@@ -37,17 +37,19 @@ bboxes = {
     "Botswana": {"lat1": -15, "lon1": 18, "lat2": -28, "lon2": 31},
     "Kenya": {"lat1": 7, "lon1": 32, "lat2": -6, "lon2": 43},
     "Zambia": {"lat1": -6, "lon1": 20, "lat2": -20, "lon2": 35},
-    "Madagascar": {"lat1": -10, "lon1": 42, "lat2": -27, "lon2": 52}
+    "Madagascar": {"lat1": -10, "lon1": 42, "lat2": -27, "lon2": 52},
+    "Angola": {"lat1": -5, "lon1": 12, "lat2": -18, "lon2": 24}
 }
 
-m_climate_big=gef.open_mclimate(data_weekly)
+m_climate_big = gef.open_mclimate(data_weekly)
 
 major_cities = {
-    "Namibia": [(-22.5594, 17.0832), (-17.9333, 19.7667),('Windhoek', 'Rundu')],         # Windhoek, Rundu :
-    "Botswana": [(-24.6545, 25.9086), (-21.1700, 27.5000),('Gaborone', 'Francistown')],       # Gaborone, Francistown 
-    "Kenya": [(-1.28333, 36.8167), (-4.0547, 39.6636),('Nairobi', 'Mombasa')],            # Nairobi, Mombasa 
-    "Zambia": [(-15.4067, 28.2871), (-12.80243, 28.21323),('Lusaka', 'Kitwe')],        # Lusaka, Kitwe 
-    "Madagascar": [(-18.9137, 47.5361), (-18.1500, 49.4000),('Antananarivo', 'Toamasina')]       # Antananarivo, Toamasina
+    "Namibia": [(-22.5594, 17.0832), (-17.9333, 19.7667), ('Windhoek', 'Rundu')],         # Windhoek, Rundu
+    "Botswana": [(-24.6545, 25.9086), (-21.1700, 27.5000), ('Gaborone', 'Francistown')],   # Gaborone, Francistown
+    "Kenya": [(-1.28333, 36.8167), (-4.0547, 39.6636), ('Nairobi', 'Mombasa')],            # Nairobi, Mombasa
+    "Zambia": [(-15.4067, 28.2871), (-12.80243, 28.21323), ('Lusaka', 'Kitwe')],           # Lusaka, Kitwe
+    "Madagascar": [(-18.9137, 47.5361), (-18.1500, 49.4000), ('Antananarivo', 'Toamasina')],  # Antananarivo, Toamasina
+    "Angola": [(-8.8368, 13.2343), (-11.2027, 17.8739), ('Luanda', 'Huambo')]              # Luanda, Huambo
 }
 
 diff_data=data_weekly
