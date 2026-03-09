@@ -73,6 +73,13 @@ try:
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=cmap,fontsize=fs,vmax=int(ds_to_plot.quantile(0.99).tp.values))
     plt.savefig(f'plots/{country}/{date_str}/dekadal/dekadal_precip_downscaled.png',bbox_inches='tight')
 
+    dirname=f'data/{date_str}/geotifs_kenya/'
+    os.mkdir(dirname)
+    
+    for i in range(4):
+        fname=f'forecast_init_{str(ds_to_plot.isel(step=0).valid_time.values-dt)[5:10]}_start_{str(ds_to_plot.isel(step=i).valid_time.values-dt)[5:10]}_end_{str(ds_to_plot.isel(step=i).valid_time.values)[5:10]}.tif'
+        ds_to_plot.isel(step=i).rio.to_raster(dirname+fname)    
+
     gdf = gpd.read_file("downscale_data/Kenya_Counties_KNSDI.shp").set_crs("EPSG:4326")
 
     rescaled_forecast = rescaled_forecast.rio.write_crs("EPSG:4326")

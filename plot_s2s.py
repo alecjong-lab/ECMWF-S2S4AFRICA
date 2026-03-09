@@ -23,11 +23,13 @@ weekly=[data.step.values[i] for i in np.where(steps%168==0)[0]]
 data_weekly=data.sel(step=weekly)
 data_dekade=data.sel(step=dekade)
 
+data_monthly=data_dekade.isel(step=2)
 data_weekly=gef.acum_to_instant(data_weekly)
 data_dekade=gef.acum_to_instant(data_dekade)
 
 data_weekly.to_netcdf(f'data/{date_str}/data_weekly.nc')
 data_dekade.to_netcdf(f'data/{date_str}/data_dekade.nc')
+data_monthly.to_netcdf(f'data/{date_str}/data_monthly.nc')
 
 bboxes = {
     "Namibia": {"lat1": -15, "lon1": 10, "lat2": -31, "lon2": 27},
@@ -67,6 +69,7 @@ for country in bboxes.keys():
     base_path=f'plots/{country}/{date_str}'
     weekly_path=f'{base_path}/weekly'
     dekade_path=f'{base_path}/dekadal'
+    monthly_path=f'{base_path}/monthly'
 
     os.makedirs(base_path, exist_ok=True)
     os.makedirs(weekly_path, exist_ok=True)
@@ -78,7 +81,12 @@ for country in bboxes.keys():
 
     ds_to_plot_dekade=data_dekade.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     fig=gef.panel_plot_variable(ds_to_plot_dekade,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
+    plt.savefig(f'{monthly_path}/monthly_precip.png',bbox_inches='tight')
+
+    ds_to_plot_dekade=data_dekade.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
+    fig=gef.panel_plot_variable(ds_to_plot_dekade,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
     plt.savefig(f'{dekade_path}/dekadal_precip.png',bbox_inches='tight')
+
 
     if country=='Kenya':
         exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot_dekade,'tp',20,comparison='greater')
