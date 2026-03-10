@@ -23,7 +23,7 @@ weekly=[data.step.values[i] for i in np.where(steps%168==0)[0]]
 data_weekly=data.sel(step=weekly)
 data_dekade=data.sel(step=dekade)
 
-data_monthly=data_dekade.isel(step=2)
+data_monthly=data_weekly.isel(step=3)
 data_weekly=gef.acum_to_instant(data_weekly)
 data_dekade=gef.acum_to_instant(data_dekade)
 
@@ -74,6 +74,8 @@ for country in bboxes.keys():
     os.makedirs(base_path, exist_ok=True)
     os.makedirs(weekly_path, exist_ok=True)
     os.makedirs(dekade_path, exist_ok=True)
+    os.makedirs(monthly_path, exist_ok=True)
+
 
     ds_to_plot=diff_data.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=gef.cmap,fontsize=fs)
