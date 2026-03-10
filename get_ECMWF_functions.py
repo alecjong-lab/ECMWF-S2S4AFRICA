@@ -863,6 +863,7 @@ def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax=
 
     '''
     lines=None
+    
     #get start and end time
     if forecast_timestep == np.atleast_1d(ds.step)[0]:
         start_time=ds.time
