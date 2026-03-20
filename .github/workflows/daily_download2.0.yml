@@ -101,4 +101,4 @@ jobs:
           from: 'Nimbus Data Share <info@dashboards.rhizaresearch.org'
           body: Attached are the dekadal outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
-          attachments: plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/*.png
+          attachments: plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/*.png, plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/*.png
