@@ -1,13 +1,15 @@
-import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
+"""Plot satellite vs. station rainfall over a country."""
 import argparse
 from datetime import datetime, timedelta
-from sheerwater.data.imerg import imerg_raw_live
-from sheerwater.utils import roll_and_agg
-from sheerwater.spatial_subdivisions import polygon_subdivision_geodataframe, clip_region
+import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
+from matplotlib.colors import LinearSegmentedColormap, BoundaryNorm
+
 import xarray as xr
 import pandas as pd
-from matplotlib.colors import LinearSegmentedColormap, BoundaryNorm
+
+from sheerwater.utils import roll_and_agg
+from sheerwater.spatial_subdivisions import polygon_subdivision_geodataframe
 
 # Use a grey color for zero value on the colorbar instead of white.
 colors = ["#bdbdbd", "wheat", "lightgreen", "green",

@@ -40,7 +40,7 @@ if __name__ == "__main__":
         'TA')]
 
     station_data = []
-    # Get data for the last 3 decads plus some margin
+    # Get data for the last 4 decads
     now = datetime.datetime.now()
     start_time = now - datetime.timedelta(days=40)
     for i, station_id in enumerate(country_stations.station_id):
@@ -84,7 +84,7 @@ if __name__ == "__main__":
             ds["station_id"] = station_id
             station_data.append(ds)
             print(f"Station {i + 1} of {len(country_stations)}: {station_id}")
-        except:
+        except Exception as e:
             print(
                 f"Station {i + 1} of {len(country_stations)}: {station_id} has no data")
             continue
