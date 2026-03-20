@@ -87,7 +87,7 @@ jobs:
 
       - name: Get EMCWF lagged date
         id: ecmwf_date
-        run: echo "::set-output name=date::$(date -r $(( $(date '+%s') - 2 * 86400 )) '+%Y-%m-%d')"
+        run: echo "::set-output name=date::$(date -d '2 days ago' +'%Y-%m-%d')"
 
       - name: Email out generated plots
         uses: dawidd6/action-send-mail@v16
