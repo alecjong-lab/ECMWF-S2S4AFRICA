@@ -90,7 +90,6 @@ jobs:
         with:
           server_address: smtp.resend.com
           server_port: 587
-          secure: true
           username: resend
           password: ${{ secrets.RESEND_API_KEY }}
           subject: Daily S2S Outlook
