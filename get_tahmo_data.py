@@ -16,104 +16,131 @@ if __name__ == "__main__":
         "--country", type=str, default="Kenya", help="Country code for stations to process (default: Kenya)"
     )
     country_to_code = {
-        "Kenya": "KE",
+        "Burkina Faso": "BF",
+        "Benin": "BJ",
+        "DR Congo": "CD",
+        "Côte d'Ivoire": "CI",
+        "Cameroon": "CM",
         "Ethiopia": "ET",
-        "Senegal": "SN",
         "Ghana": "GH",
+        "Lesotho": "LS",
+        "Madagascar": "MG",
+        "Mali": "ML",
+        "Malawi": "MW",
+        "Mozambique": "MZ",
+        "Niger": "NE",
+        "Nigeria": "NG",
+        "Rwanda": "RW",
+        "Senegal": "SN",
+        "Chad": "TD",
+        "Togo": "TG",
+        "Tanzania": "TZ",
+        "Uganda": "UG",
+        "South Africa": "ZA",
+        "Zambia": "ZM",
+        "Zimbabwe": "ZW",
+        "Kenya": "KE",
     }
-
     args = parser.parse_args()
-    country = args.country
-    try:
-        country_code = country_to_code[country]
-    except KeyError:
-        print(
-            f"Country {country} not found in country_to_code. Available countries: {country_to_code.keys()}")
-        exit(1)
-
+    countries = args.country.split(',')
     stations = tahmo_deployment()
-    country_stations = stations[stations.location_countrycode == country_code][
-        ["code", "location_latitude", "location_longitude"]
-    ]
-    country_stations = country_stations.rename(columns={"code": "station_id"})
-    country_stations = country_stations[country_stations['station_id'].str.startswith(
-        'TA')]
-
-    station_data = []
-    # Get data for the last 4 decads
-    now = datetime.datetime.now()
-    start_time = now - datetime.timedelta(days=40)
-    for i, station_id in enumerate(country_stations.station_id):
+    for country in countries:
         try:
-            ds = tahmo_wide(start_time=start_time, end_time=now,
-                            station_id=station_id, dataset="controlled")
-            if ds is None or len(ds) == 0:
+            country_code = country_to_code[country]
+        except KeyError:
+            print(
+                f"Country {country} not found in country_to_code. Available countries: {country_to_code.keys()}")
+            continue
+
+        country_stations = stations[stations.location_countrycode == country_code][
+            ["code", "location_latitude", "location_longitude"]
+        ]
+        country_stations = country_stations.rename(columns={"code": "station_id"})
+        country_stations = country_stations[country_stations['station_id'].str.startswith(
+            'TA')]
+        if len(country_stations) == 0:
+            print(f"No stations found for country {country}")
+            continue
+
+        station_data = []
+        # Get data for the last 4 decads
+        now = datetime.datetime.now()
+        start_time = now - datetime.timedelta(days=40)
+        for i, station_id in enumerate(country_stations.station_id):
+            try:
+                ds = tahmo_wide(start_time=start_time, end_time=now,
+                                station_id=station_id, dataset="controlled")
+                if ds is None or len(ds) == 0:
+                    print(
+                        f"Station {i + 1} of {len(country_stations)}: {station_id} has no data")
+                    continue
+
+                # Remove data with quality flag > 2, manually flagged as bad
+                if "precipitation_1_quality_tahmo" in ds.columns:
+                    ds = ds[ds["precipitation_1_quality_tahmo"] <= 2]
+                if "humidity_quality_tahmo" in ds.columns:
+                    ds = ds[ds["humidity_quality_tahmo"] <= 2]
+                if "temperature_quality_tahmo" in ds.columns:
+                    ds = ds[ds["temperature_quality_tahmo"] <= 2]
+                if "pressure_quality_tahmo" in ds.columns:
+                    ds = ds[ds["pressure_quality_tahmo"] <= 2]
+
+                ds = ds[["time", "precipitation_1_tahmo", "precipitation_1_sensor_id_tahmo",
+                        "humidity_tahmo", "temperature_tahmo", "pressure_tahmo"]]
+                ds = ds.set_index("time")
+
+                # Resample by day
+                ds = ds.resample("D").agg({
+                    "precipitation_1_tahmo": "sum",
+                    "precipitation_1_sensor_id_tahmo": "first",
+                    "humidity_tahmo": "mean",
+                    "temperature_tahmo": ["mean", "max", "min"],
+                    "pressure_tahmo": "mean",
+                })
+                ds.columns = ["_".join(c).strip("_") for c in ds.columns]
+                ds = ds.rename(columns={
+                    "precipitation_1_tahmo_sum": "cumulative_precipitation_mm",
+                    "precipitation_1_sensor_id_tahmo_first": "precipitation_sensor_id",
+                })
+
+                # Remove data with quality flag > 2, manually flagged as bad
+                ds["station_id"] = station_id
+                station_data.append(ds)
+                print(f"Station {i + 1} of {len(country_stations)}: {station_id}")
+            except Exception as e:
                 print(
                     f"Station {i + 1} of {len(country_stations)}: {station_id} has no data")
                 continue
 
-            # Remove data with quality flag > 2, manually flagged as bad
-            if "precipitation_1_quality_tahmo" in ds.columns:
-                ds = ds[ds["precipitation_1_quality_tahmo"] <= 2]
-            if "humidity_quality_tahmo" in ds.columns:
-                ds = ds[ds["humidity_quality_tahmo"] <= 2]
-            if "temperature_quality_tahmo" in ds.columns:
-                ds = ds[ds["temperature_quality_tahmo"] <= 2]
-            if "pressure_quality_tahmo" in ds.columns:
-                ds = ds[ds["pressure_quality_tahmo"] <= 2]
-
-            ds = ds[["time", "precipitation_1_tahmo", "precipitation_1_sensor_id_tahmo",
-                    "humidity_tahmo", "temperature_tahmo", "pressure_tahmo"]]
-            ds = ds.set_index("time")
-
-            # Resample by day
-            ds = ds.resample("D").agg({
-                "precipitation_1_tahmo": "sum",
-                "precipitation_1_sensor_id_tahmo": "first",
-                "humidity_tahmo": "mean",
-                "temperature_tahmo": ["mean", "max", "min"],
-                "pressure_tahmo": "mean",
-            })
-            ds.columns = ["_".join(c).strip("_") for c in ds.columns]
-            ds = ds.rename(columns={
-                "precipitation_1_tahmo_sum": "cumulative_precipitation_mm",
-                "precipitation_1_sensor_id_tahmo_first": "precipitation_sensor_id",
-            })
-
-            # Remove data with quality flag > 2, manually flagged as bad
-            ds["station_id"] = station_id
-            station_data.append(ds)
-            print(f"Station {i + 1} of {len(country_stations)}: {station_id}")
-        except Exception as e:
-            print(
-                f"Station {i + 1} of {len(country_stations)}: {station_id} has no data")
+        if len(station_data) == 0:
+            print(f"No data found for country {country}")
             continue
+        all_ds = pd.concat(station_data).reset_index()
 
-    all_ds = pd.concat(station_data).reset_index()
+        # Merge in the station metadata
+        all_ds = all_ds.merge(country_stations, on="station_id", how="left")
 
-    # Merge in the station metadata
-    all_ds = all_ds.merge(country_stations, on="station_id", how="left")
+        # Spatially join in the admin level 1 geometry
+        gdf = admin_level_gdf(admin_level=1)
+        gdf = gdf[['NAME_0', 'NAME_1', 'geometry']]
+        all_ds = gpd.GeoDataFrame(all_ds, geometry=gpd.points_from_xy(
+            all_ds.location_longitude, all_ds.location_latitude), crs="EPSG:4326")
+        all_ds = gpd.sjoin(all_ds, gdf, how="left", predicate="within")
 
-    # Spatially join in the admin level 1 geometry
-    gdf = admin_level_gdf(admin_level=1)
-    gdf = gdf[['NAME_0', 'NAME_1', 'geometry']]
-    all_ds = gpd.GeoDataFrame(all_ds, geometry=gpd.points_from_xy(
-        all_ds.location_longitude, all_ds.location_latitude), crs="EPSG:4326")
-    all_ds = gpd.sjoin(all_ds, gdf, how="left", predicate="within")
+        all_ds = all_ds.rename(
+            columns={'NAME_0': 'country', 'NAME_1': 'admin_level_1'})
 
-    all_ds = all_ds.rename(
-        columns={'NAME_0': 'country', 'NAME_1': 'admin_level_1'})
+        # Sortby time index
+        all_ds = all_ds.sort_values(by=["time", "station_id", "admin_level_1"])
 
-    # Sortby time index
-    all_ds = all_ds.sort_values(by=["time", "station_id", "admin_level_1"])
-
-    # Reorder the columns to put the station metadata first
-    order = ['time', 'station_id', 'location_latitude', 'location_longitude',
-             'country', 'admin_level_1',
-             'cumulative_precipitation_mm', 'humidity_tahmo_mean', 'pressure_tahmo_mean',
-             'temperature_tahmo_mean', 'temperature_tahmo_max', 'temperature_tahmo_min',
-             'precipitation_sensor_id']
-    all_ds = all_ds[order]
-    today = now.strftime('%Y-%m-%d')
-    os.makedirs(f"station_data/{country}/{today}", exist_ok=True)
-    all_ds.to_csv(f"station_data/{country}/{today}/tahmo_data_{country}.csv", index=False, mode='w')
+        # Reorder the columns to put the station metadata first
+        order = ['time', 'station_id', 'location_latitude', 'location_longitude',
+                'country', 'admin_level_1',
+                'cumulative_precipitation_mm', 'humidity_tahmo_mean', 'pressure_tahmo_mean',
+                'temperature_tahmo_mean', 'temperature_tahmo_max', 'temperature_tahmo_min',
+                'precipitation_sensor_id']
+        all_ds = all_ds[order]
+        today = now.strftime('%Y-%m-%d')
+        dirpath = f"private_data/station_data/{country}/{today}"
+        os.makedirs(dirpath, exist_ok=True)
+        all_ds.to_csv(f"{dirpath}/tahmo_data_{country}.csv", index=False, mode='w')

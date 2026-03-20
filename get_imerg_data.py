@@ -11,9 +11,10 @@ if __name__ == "__main__":
         "--country", type=str, default="Kenya", help="Country code for stations to process (default: Kenya)"
     )
     args = parser.parse_args()
-    country = args.country
+    countries = args.country.split(',')
 
-    live_lag = 3
+    # Get the global IMERG data
+    live_lag = 4 # IMERG early release is 4 days behind
     now_dt = datetime.now().date()
     lagged_now_dt = now_dt - timedelta(days=live_lag)
     start_time = (lagged_now_dt - timedelta(days=30)).strftime("%Y-%m-%d")
@@ -21,11 +22,14 @@ if __name__ == "__main__":
     live_time = now_dt.strftime("%Y-%m-%d")
 
     ds_imerg = imerg_raw_live(
-        start_time, end_time, version='late', cache_mode='local_overwrite', delayed=False, recompute=True)
+        start_time, live_time, version='late', cache_mode='local_overwrite', delayed=False, recompute=True)
     ds_imerg = ds_imerg.rename({'precipitation': 'precip'})
-    ds_imerg = clip_region(ds_imerg, region=country, grid='global0_1')
 
-    # Write as a NETCDF file
-    dir_path = f"satellite_data/{country}/{live_time}"
-    os.makedirs(dir_path, exist_ok=True)
-    ds_imerg.to_netcdf(f"{dir_path}/imerg_data_{country}.nc")
+    # Clip the IMERG data to the countries
+    for country in countries:
+        ds_clip = clip_region(ds_imerg, region=country, grid='global0_1')
+
+        # Write as a NETCDF file
+        dir_path = f"satellite_data/{country}/{live_time}"
+        os.makedirs(dir_path, exist_ok=True)
+        ds_clip.to_netcdf(f"{dir_path}/imerg_data_{country}.nc")
