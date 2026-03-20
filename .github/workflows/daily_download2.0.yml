@@ -85,6 +85,10 @@ jobs:
         id: date
         run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
 
+      - name: Get EMCWF lagged date
+        id: ecmwf_date
+        run: echo "::set-output name=date::$(date -r $(( $(date '+%s') - 2 * 86400 )) '+%Y-%m-%d')"
+
       - name: Email out generated plots
         uses: dawidd6/action-send-mail@v16
         with:
@@ -97,4 +101,4 @@ jobs:
           from: 'Nimbus Data Share <info@dashboards.rhizaresearch.org'
           body: Attached are the dekadal outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
-          attachments: plots/Kenya/${{ steps.date.outputs.date }}/*.png
+          attachments: plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/*.png
