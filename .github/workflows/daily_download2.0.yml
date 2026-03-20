@@ -95,6 +95,6 @@ jobs:
           subject: Daily S2S Outlook
           to: genevieve@rhizaresearch.org, josh@rhizaresearch.org
           from: 'Nimbus Data Share <info@dashboards.rhizaresearch.org'
-          body: Attached are the dekadal outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at https://github.com/alecjong-lab/ECMWF-S2S4AFRICA.
+          body: Attached are the dekadal outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
           attachments: plots/Kenya/${{ steps.date.outputs.date }}/*.png
