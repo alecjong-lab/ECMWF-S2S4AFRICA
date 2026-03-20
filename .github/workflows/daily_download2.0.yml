@@ -11,6 +11,10 @@ on:
 jobs:
   download:
     runs-on: ubuntu-latest
+    env:
+      ECMWF_API_URL: ${{ secrets.ECMWF_API_URL }}
+      ECMWF_API_KEY: ${{ secrets.ECMWF_API_KEY }}
+      ECMWF_API_EMAIL: ${{ secrets.ECMWF_API_EMAIL }}
 
     steps:
       - name: Checkout repo
@@ -26,10 +30,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run download script
-        env:
-          ECMWF_API_URL: ${{ secrets.ECMWF_API_URL }}
-          ECMWF_API_KEY: ${{ secrets.ECMWF_API_KEY }}
-          ECMWF_API_EMAIL: ${{ secrets.ECMWF_API_EMAIL }}
+        if: ${{ env.ECMWF_API_URL != '' }}
         run: |
           python download_s2s.py
 
