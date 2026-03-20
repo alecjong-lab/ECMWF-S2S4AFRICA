@@ -42,29 +42,35 @@ jobs:
       - name: Generate plots
         run: |
           python plot_s2s.py
+
       - name: Upload plots as artifacts
         uses: actions/upload-artifact@v4
         with:
           name: s2s_plots
           path: plots/**/*.png
+
       - name: Upload netCDF file as artifact
         uses: actions/upload-artifact@v4
         with:
           name: s2s_nc
           path: data/*.nc
+
       - name: perform downscaling
         run: |
           python dowscale_dekade.py
+
       - name: Upload plots as artifacts
         uses: actions/upload-artifact@v4
         with:
           name: downscale_plots
           path: plots/**/*.png
+
       - name: Upload netCDF file as artifact
         uses: actions/upload-artifact@v4
         with:
           name: s2s_nc
           path: data/*.nc
+
       - name: Save generated files in repo
         run: |
           git config user.name "github-actions[bot]"
@@ -73,3 +79,22 @@ jobs:
           git add data/
           git commit -m "Daily automated update" || echo "No changes to commit"
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+
+      - name: Get current date
+        id: date
+        run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
+
+      - name: Email out generated plots
+        uses: dawidd6/action-send-mail@v16
+        with:
+          server_address: smtp.resend.com
+          server_port: 587
+          secure: true
+          username: resend
+          password: ${{ .secrets.RESEND_API_KEY }}
+          subject: Daily S2S Outlook
+          to: genevieve@rhizaresearch.org, josh@rhizaresearch.org
+          from: 'Nimbus Data Share <info@dashboards.rhizaresearch.org'
+          body: Attached are the dekadal outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at <insert github repo address>.
+          reply_to: genevieve@rhizaresearch.org
+          attachments: plots/Kenya/${{ steps.date.outputs.date }}/*.png
