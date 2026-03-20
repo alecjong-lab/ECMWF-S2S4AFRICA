@@ -4,7 +4,7 @@ import datetime
 import os
 import pandas as pd
 import geopandas as gpd
-from get_tahmo_data import tahmo_deployment, tahmo_wide
+from tahmo_api import tahmo_deployment, tahmo_wide
 from sheerwater.spatial_subdivisions import admin_level_gdf
 
 import argparse
@@ -36,47 +36,58 @@ if __name__ == "__main__":
         ["code", "location_latitude", "location_longitude"]
     ]
     country_stations = country_stations.rename(columns={"code": "station_id"})
+    country_stations = country_stations[country_stations['station_id'].str.startswith(
+        'TA')]
 
     station_data = []
-    # Get data for the last 3 decads
+    # Get data for the last 3 decads plus some margin
     now = datetime.datetime.now()
-    start_time = now - datetime.timedelta(days=30)
+    start_time = now - datetime.timedelta(days=40)
     for i, station_id in enumerate(country_stations.station_id):
-        ds = tahmo_wide(start_time=start_time, end_time=now,
-                        station_id=station_id, dataset="controlled")
-        if ds is None:
+        try:
+            ds = tahmo_wide(start_time=start_time, end_time=now,
+                            station_id=station_id, dataset="controlled")
+            if ds is None or len(ds) == 0:
+                print(
+                    f"Station {i + 1} of {len(country_stations)}: {station_id} has no data")
+                continue
+
+            # Remove data with quality flag > 2, manually flagged as bad
+            if "precipitation_1_quality_tahmo" in ds.columns:
+                ds = ds[ds["precipitation_1_quality_tahmo"] <= 2]
+            if "humidity_quality_tahmo" in ds.columns:
+                ds = ds[ds["humidity_quality_tahmo"] <= 2]
+            if "temperature_quality_tahmo" in ds.columns:
+                ds = ds[ds["temperature_quality_tahmo"] <= 2]
+            if "pressure_quality_tahmo" in ds.columns:
+                ds = ds[ds["pressure_quality_tahmo"] <= 2]
+
+            ds = ds[["time", "precipitation_1_tahmo", "precipitation_1_sensor_id_tahmo",
+                    "humidity_tahmo", "temperature_tahmo", "pressure_tahmo"]]
+            ds = ds.set_index("time")
+
+            # Resample by day
+            ds = ds.resample("D").agg({
+                "precipitation_1_tahmo": "sum",
+                "precipitation_1_sensor_id_tahmo": "first",
+                "humidity_tahmo": "mean",
+                "temperature_tahmo": ["mean", "max", "min"],
+                "pressure_tahmo": "mean",
+            })
+            ds.columns = ["_".join(c).strip("_") for c in ds.columns]
+            ds = ds.rename(columns={
+                "precipitation_1_tahmo_sum": "cumulative_precipitation_mm",
+                "precipitation_1_sensor_id_tahmo_first": "precipitation_sensor_id",
+            })
+
+            # Remove data with quality flag > 2, manually flagged as bad
+            ds["station_id"] = station_id
+            station_data.append(ds)
+            print(f"Station {i + 1} of {len(country_stations)}: {station_id}")
+        except:
             print(
                 f"Station {i + 1} of {len(country_stations)}: {station_id} has no data")
             continue
-
-        # Remove data with quality flag > 2, manually flagged as bad
-        ds = ds[ds["precipitation_1_quality_tahmo"] <= 2]
-        ds = ds[ds["humidity_quality_tahmo"] <= 2]
-        ds = ds[ds["temperature_quality_tahmo"] <= 2]
-        ds = ds[ds["pressure_quality_tahmo"] <= 2]
-
-        ds = ds[["time", "precipitation_1_tahmo", "precipitation_1_sensor_id_tahmo",
-                 "humidity_tahmo", "temperature_tahmo", "pressure_tahmo"]]
-        ds = ds.set_index("time")
-
-        # Resample by day
-        ds = ds.resample("D").agg({
-            "precipitation_1_tahmo": "sum",
-            "precipitation_1_sensor_id_tahmo": "first",
-            "humidity_tahmo": "mean",
-            "temperature_tahmo": ["mean", "max", "min"],
-            "pressure_tahmo": "mean",
-        })
-        ds.columns = ["_".join(c).strip("_") for c in ds.columns]
-        ds = ds.rename(columns={
-            "precipitation_1_tahmo_sum": "cumulative_precipitation_mm",
-            "precipitation_1_sensor_id_tahmo_first": "precipitation_sensor_id",
-        })
-
-        # Remove data with quality flag > 2, manually flagged as bad
-        ds["station_id"] = station_id
-        station_data.append(ds)
-        print(f"Station {i + 1} of {len(country_stations)}: {station_id}")
 
     all_ds = pd.concat(station_data).reset_index()
 
@@ -105,6 +116,4 @@ if __name__ == "__main__":
     all_ds = all_ds[order]
     today = now.strftime('%Y-%m-%d')
     os.makedirs(f"station_data/{country}/{today}", exist_ok=True)
-    all_ds.to_csv(
-        f"station_data/{country}/{today}/tahmo_data_{country_code}_{today}.csv", index=False, mode='w'
-    )
+    all_ds.to_csv(f"station_data/{country}/{today}/tahmo_data_{country}.csv", index=False, mode='w')
