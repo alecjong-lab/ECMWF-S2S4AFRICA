@@ -42,14 +42,11 @@ Variables (accessible thru tahmo_variables()):
     mp: Matric potential (kPa)
     lv: Logger battery voltage (mV)
 """
-import json
 import re
 import warnings
 import os
 import dask.dataframe as dd
-import fsspec
 import pandas as pd
-from sheerwater.utils import tahmo_secret
 
 from TAHMO import apiWrapper
 
