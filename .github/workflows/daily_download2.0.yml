@@ -115,4 +115,5 @@ jobs:
           reply_to: genevieve@rhizaresearch.org
           attachments: >
             plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/*.png, 
-            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/*.png
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/*.png,
+            private_plots/Kenya/${{ steps.date.outputs.date }}/*.png
