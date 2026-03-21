@@ -113,14 +113,6 @@ jobs:
           from: 'Nimbus Data Share <info@dashboards.rhizaresearch.org>'
           body: Attached are the dekadal outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
-          # attachments: ${{ steps.mail_attachments.outputs.list }}
           attachments: >
-            private_plots/Kenya/2026-03-19/sat_vs_stations_Kenya_weekly.png,
-            private_plots/Kenya/2026-03-19/sat_vs_stations_Kenya_dekadal.png,
-            plots/Kenya/2026-03-19/weekly/imerg_Kenya_weekly.png,
-            plots/Kenya/2026-03-19/dekadal/imerg_Kenya_dekadal.png,
-            private_plots/Ghana/2026-03-19/sat_vs_stations_Ghana_weekly.png,
-            private_plots/Ghana/2026-03-19/sat_vs_stations_Ghana_dekadal.png,
-            plots/Ghana/2026-03-19/weekly/imerg_Ghana_weekly.png,
-            plots/Ghana/2026-03-19/dekadal/imerg_Ghana_dekadal.png
-
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/*.png, 
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/*.png
