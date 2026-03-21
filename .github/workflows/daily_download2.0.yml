@@ -89,17 +89,17 @@ jobs:
         id: ecmwf_date
         run: echo "::set-output name=date::$(date -d '3 days ago' +'%Y-%m-%d')"
 
-      # - name: download tahmo data 
-      #   run: |
-      #     python get_tahmo_data.py --country Kenya,Ghana
+      - name: download tahmo data 
+        run: |
+          python get_tahmo_data.py --country Kenya
 
-      # - name: download imerg data 
-      #   run: |
-      #     python get_imerg_data.py
+      - name: download imerg data 
+        run: |
+          python get_imerg_data.py --country Kenya
 
-      # - name: generate plots
-      #   run: |
-      #     python plot_sat_vs_stations.py
+      - name: generate plots
+        run: |
+          python plot_sat_vs_stations.py --country Kenya
 
       - name: Email out generated plots
         uses: dawidd6/action-send-mail@v16
@@ -114,7 +114,9 @@ jobs:
           body: Attached are the dekadal outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
           attachments: >
-            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/*.png, 
-            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/*.png,
-            private_plots/Kenya/${{ steps.date.outputs.date }}/*.png,
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/dekadal_precip.png, 
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip.png, 
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Kenya_dekadal.png, 
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Kenya_weekly.png, 
+            private_plots/Kenya/${{ steps.date.outputs.date }}/*.png, 
             private_data/Kenya/${{ steps.date.outputs.date }}/*.csv
