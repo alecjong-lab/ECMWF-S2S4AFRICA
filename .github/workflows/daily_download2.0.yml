@@ -116,4 +116,5 @@ jobs:
           attachments: >
             plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/*.png, 
             plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/*.png,
-            private_plots/Kenya/${{ steps.date.outputs.date }}/*.png
+            private_plots/Kenya/${{ steps.date.outputs.date }}/*.png,
+            private_data/Kenya/${{ steps.date.outputs.date }}/*.csv
