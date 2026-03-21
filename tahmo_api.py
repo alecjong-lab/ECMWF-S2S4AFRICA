@@ -45,7 +45,7 @@ Variables (accessible thru tahmo_variables()):
 import json
 import re
 import warnings
-
+import os
 import dask.dataframe as dd
 import fsspec
 import pandas as pd
@@ -94,7 +94,8 @@ def tahmo_deployment():
     with keys separated by underscores.
     """
     api = apiWrapper()
-    username, password = tahmo_secret()
+    username = os.environ["TAHMO_API_USERNAME"]
+    password = os.environ["TAHMO_API_PASSWORD"]
     api.setCredentials(username, password)
     stations = api.getStations()
 
@@ -138,7 +139,8 @@ def tahmo_raw(start_time, end_time, station_id, dataset="controlled"):
             "station_id should be of the form T[A, D, or H][5-digit number]")
 
     api = apiWrapper()
-    username, password = tahmo_secret()
+    username = os.environ["TAHMO_API_USERNAME"]
+    password = os.environ["TAHMO_API_PASSWORD"]
     api.setCredentials(username, password)
 
     # These dates should be kinda close to the real limits of the data, because we send a request to

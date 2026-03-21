@@ -15,6 +15,8 @@ jobs:
       ECMWF_API_URL: ${{ secrets.ECMWF_API_URL }}
       ECMWF_API_KEY: ${{ secrets.ECMWF_API_KEY }}
       ECMWF_API_EMAIL: ${{ secrets.ECMWF_API_EMAIL }}
+      TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
+      TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
 
     steps:
       - name: Checkout repo
