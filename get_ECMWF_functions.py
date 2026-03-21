@@ -326,6 +326,8 @@ def week_mean(ds):
     if int(len(np.atleast_1d(ds.step.values))/7)<1:
         raise ValueError(f'⚠️The dataset contains less than 1 week of data⚠️')
     w_mean=ds.isel(step=slice(0,int(len(ds.step)/7)*7)).resample(step='7D').mean()
+    new_times = w_mean.step + pd.Timedelta(days=6)
+    w_mean = w_mean.assign_coords(step=new_times)
     return w_mean
 
 def lon_convert(ds,cut=True):
@@ -870,8 +872,8 @@ def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax=
         end_time=(ds.time+forecast_timestep)
     else:
         dt=ds.step[1]-ds.step[0]
-        start_time=ds.sel(step=forecast_timestep).valid_time-dt
-        end_time=ds.sel(step=forecast_timestep).valid_time
+        start_time=ds.time+forecast_timestep-dt
+        end_time=ds.time+forecast_timestep
 
     ax.set_title(f"{str(start_time.values)[:16]} until {str(end_time.values)[:16]}", fontsize=int(fontsize*0.8))
         
