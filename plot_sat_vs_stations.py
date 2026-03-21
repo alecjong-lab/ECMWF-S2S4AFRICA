@@ -171,5 +171,5 @@ if __name__ == "__main__":
             ecmwf_date = now_dt - timedelta(days=2)
             dir = f"plots/{country}/{ecmwf_date.strftime('%Y-%m-%d')}/{agg}"
             os.makedirs(dir, exist_ok=True)
-            plt.savefig(f"{dir}/imerg_only_{country}_{agg}.png", bbox_inches='tight', dpi=150)
+            plt.savefig(f"{dir}/imerg_{country}_{agg}.png", bbox_inches='tight', dpi=150)
             plt.close()
