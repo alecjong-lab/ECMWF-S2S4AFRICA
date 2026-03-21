@@ -125,7 +125,7 @@ if __name__ == "__main__":
         all_ds = all_ds.merge(country_stations, on="station_id", how="left")
 
         # Spatially join in the admin level 1 geometry
-        gdf = admin_level_gdf(admin_level=1)
+        gdf = admin_level_gdf(admin_level=1, cache_mode='local')
         gdf = gdf[['NAME_0', 'NAME_1', 'geometry']]
         all_ds = gpd.GeoDataFrame(all_ds, geometry=gpd.points_from_xy(
             all_ds.location_longitude, all_ds.location_latitude), crs="EPSG:4326")
