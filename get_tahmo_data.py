@@ -112,6 +112,10 @@ if __name__ == "__main__":
                     f"Station {i + 1} of {len(country_stations)}: {station_id} has no data")
                 continue
 
+            if i > 3:
+                # For now
+                break
+
         if len(station_data) == 0:
             print(f"No data found for country {country}")
             continue
