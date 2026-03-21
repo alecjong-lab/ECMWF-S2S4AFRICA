@@ -89,6 +89,50 @@ jobs:
         id: ecmwf_date
         run: echo "::set-output name=date::$(date -d '2 days ago' +'%Y-%m-%d')"
 
+      - name: download tahmo data 
+        run: |
+          python get_tahmo_data.py --country Kenya,Ghana
+
+      - name: download imerg data 
+        run: |
+          python get_imerg_data.py
+
+      - name: generate plots
+        run: |
+          python plot_sat_vs_stations.py
+
+      # action-send-mail splits attachments on commas only; join with IFS=, so line breaks stay readable
+      # and paths never pick up leading spaces (YAML folded blocks would).
+      - name: Build email attachment list
+        id: mail_attachments
+        run: |
+          D_ECMWF="${{ steps.ecmwf_date.outputs.date }}"
+          D_LIVE="${{ steps.date.outputs.date }}"
+          paths=(
+            "private_plots/Kenya/${D_LIVE}/sat_vs_stations_Kenya_weekly.png"
+            "private_plots/Kenya/${D_LIVE}/sat_vs_stations_Kenya_dekadal.png"
+            "plots/Kenya/${D_ECMWF}/weekly/imerg_Kenya_weekly.png"
+            "plots/Kenya/${D_ECMWF}/dekadal/imerg_Kenya_dekadal.png"
+            "private_plots/Ghana/${D_LIVE}/sat_vs_stations_Ghana_weekly.png"
+            "private_plots/Ghana/${D_LIVE}/sat_vs_stations_Ghana_dekadal.png"
+            "plots/Ghana/${D_ECMWF}/weekly/imerg_Ghana_weekly.png"
+            "plots/Ghana/${D_ECMWF}/dekadal/imerg_Ghana_dekadal.png"
+            "private_plots/Senegal/${D_LIVE}/sat_vs_stations_Senegal_weekly.png"
+            "private_plots/Senegal/${D_LIVE}/sat_vs_stations_Senegal_dekadal.png"
+            "plots/Senegal/${D_ECMWF}/weekly/imerg_Senegal_weekly.png"
+            "plots/Senegal/${D_ECMWF}/dekadal/imerg_Senegal_dekadal.png"
+            "private_plots/Ethiopia/${D_LIVE}/sat_vs_stations_Ethiopia_weekly.png"
+            "private_plots/Ethiopia/${D_LIVE}/sat_vs_stations_Ethiopia_dekadal.png"
+            "plots/Ethiopia/${D_ECMWF}/weekly/imerg_Ethiopia_weekly.png"
+            "plots/Ethiopia/${D_ECMWF}/dekadal/imerg_Ethiopia_dekadal.png"
+          )
+          existing=()
+          for p in "${paths[@]}"; do
+            [[ -f "$p" ]] && existing+=("$p")
+          done
+          IFS=,
+          echo "list=${existing[*]}" >> "$GITHUB_OUTPUT"
+
       - name: Email out generated plots
         uses: dawidd6/action-send-mail@v16
         with:
@@ -98,7 +142,8 @@ jobs:
           password: ${{ secrets.RESEND_API_KEY }}
           subject: Daily S2S Outlook
           to: genevieve@rhizaresearch.org, josh@rhizaresearch.org
-          from: 'Nimbus Data Share <info@dashboards.rhizaresearch.org'
+          from: 'Nimbus Data Share <info@dashboards.rhizaresearch.org>'
           body: Attached are the dekadal outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
-          attachments: plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/*.png, plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/*.png
+          attachments: ${{ steps.mail_attachments.outputs.list }}
+
