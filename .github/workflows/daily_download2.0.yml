@@ -93,7 +93,7 @@ jobs:
 
       - name: Get EMCWF lagged date
         id: ecmwf_date
-        run: echo "::set-output name=date::$(date -d '3 days ago' +'%Y-%m-%d')"
+        run: echo "::set-output name=date::$(date -d '2 days ago' +'%Y-%m-%d')"
 
       - name: Install dependencies
         run: |
