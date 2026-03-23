@@ -34,16 +34,18 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run download script
+        continue-on-error: true
         run: |
           python download_s2s.py
 
-      - name: Upload GRIB file as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: s2s_grib
-          path: data/*.grib
+          #- name: Upload GRIB file as artifact
+          #  uses: actions/upload-artifact@v4
+          #  with:
+          #    name: s2s_grib
+          #    path: data/*.grib
 
       - name: Generate plots
+        continue-on-error: true
         run: |
           python plot_s2s.py
 
@@ -60,6 +62,7 @@ jobs:
           #    path: data/*.nc
 
       - name: perform downscaling
+        continue-on-error: true
         run: |
           python dowscale_dekade.py
 
@@ -93,14 +96,17 @@ jobs:
         run: echo "::set-output name=date::$(date -d '3 days ago' +'%Y-%m-%d')"
 
       - name: download tahmo data 
+        continue-on-error: true
         run: |
           yes | python get_tahmo_data.py --country Kenya
 
       - name: download imerg data 
+        continue-on-error: true
         run: |
           yes | python get_imerg_data.py --country Kenya
 
       - name: generate plots
+        continue-on-error: true
         run: |
           yes | python plot_sat_vs_stations.py --country Kenya
 
