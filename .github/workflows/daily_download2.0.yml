@@ -93,15 +93,15 @@ jobs:
 
       - name: download tahmo data 
         run: |
-          python get_tahmo_data.py --country Kenya
+          yes | python get_tahmo_data.py --country Kenya
 
       - name: download imerg data 
         run: |
-          python get_imerg_data.py --country Kenya
+          yes | python get_imerg_data.py --country Kenya
 
       - name: generate plots
         run: |
-          python plot_sat_vs_stations.py --country Kenya
+          yes | python plot_sat_vs_stations.py --country Kenya
 
       - name: Email out generated plots
         uses: dawidd6/action-send-mail@v16
@@ -113,7 +113,7 @@ jobs:
           subject: Daily S2S Outlook
           to: genevieve@rhizaresearch.org, josh@rhizaresearch.org
           from: 'KMD Data Share <info@dashboards.rhizaresearch.org>'
-          body: Attached are the dekadal outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
+          body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
           attachments: >
             plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/dekadal_precip.png, 
