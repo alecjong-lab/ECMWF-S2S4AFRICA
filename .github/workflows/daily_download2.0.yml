@@ -17,6 +17,8 @@ jobs:
       ECMWF_API_EMAIL: ${{ secrets.ECMWF_API_EMAIL }}
       TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
       TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
+      EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+      EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
 
     steps:
       - name: Checkout repo
