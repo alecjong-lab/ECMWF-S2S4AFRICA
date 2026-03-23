@@ -1,5 +1,6 @@
 import xarray as xr
 import get_ECMWF_functions as gef
+import efi_sot
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,8 +11,12 @@ today = datetime.today()
 two_days_earlier = today - timedelta(days=2)
 date_str = two_days_earlier.strftime("%Y-%m-%d")
 
-pf=xr.open_dataset(f"data/{date_str}/ECMWF_s2s_pf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib",engine='cfgrib')
-cf=xr.open_dataset(f"data/{date_str}/ECMWF_s2s_cf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib",engine='cfgrib').assign_coords({'number':0})
+data_path_pf = f"data/{date_str}/ECMWF_s2s_pf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
+data_path_cf = f"data/{date_str}/ECMWF_s2s_cf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
+filelist_path = f"m-climate/*.nc"
+
+pf=xr.open_dataset(data_path_pf,engine='cfgrib')
+cf=xr.open_dataset(data_path_cf,engine='cfgrib').assign_coords({'number':0})
 
 data=xr.concat([pf,cf],dim='number')
 
@@ -38,15 +43,15 @@ data_dekade.to_netcdf(f'data/{date_str}/data_dekade.nc')
 data_monthly.to_netcdf(f'data/{date_str}/data_monthly.nc')
 
 bboxes = {
-    # "Namibia": {"lat1": -15, "lon1": 10, "lat2": -31, "lon2": 27},
-    # "Botswana": {"lat1": -15, "lon1": 18, "lat2": -28, "lon2": 31},
+    "Namibia": {"lat1": -15, "lon1": 10, "lat2": -31, "lon2": 27},
+    "Botswana": {"lat1": -15, "lon1": 18, "lat2": -28, "lon2": 31},
     "Kenya": {"lat1": 7, "lon1": 32, "lat2": -6, "lon2": 43},
-    # "Zambia": {"lat1": -6, "lon1": 20, "lat2": -20, "lon2": 35},
-    # "Madagascar": {"lat1": -10, "lon1": 42, "lat2": -27, "lon2": 52},
-    # "Angola": {"lat1": -5, "lon1": 12, "lat2": -18, "lon2": 24},
-    # "Ghana": {"lat1": 12, "lon1": -4, "lat2": 4, "lon2": 2},
-    # "Senegal": {"lat1": 17, "lon1": -17.5, "lat2": 12, "lon2": -11},
-    # "Ethiopia": {"lat1": 16, "lon1": 32, "lat2": 2, "lon2": 49},
+    "Zambia": {"lat1": -6, "lon1": 20, "lat2": -20, "lon2": 35},
+    "Madagascar": {"lat1": -10, "lon1": 42, "lat2": -27, "lon2": 52},
+    "Angola": {"lat1": -5, "lon1": 12, "lat2": -18, "lon2": 24},
+    "Ghana": {"lat1": 12, "lon1": -4, "lat2": 4, "lon2": 2},
+    "Senegal": {"lat1": 17, "lon1": -17.5, "lat2": 12, "lon2": -11},
+    "Ethiopia": {"lat1": 16, "lon1": 32, "lat2": 2, "lon2": 49},
 }
 
 m_climate_big = gef.open_mclimate(data_weekly)
@@ -88,7 +93,6 @@ for country in bboxes.keys():
     os.makedirs(dekade_path, exist_ok=True)
     os.makedirs(monthly_path, exist_ok=True)
 
-
     ds_to_plot=diff_data.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     print(ds_to_plot)
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=gef.cmap,fontsize=fs)
@@ -114,36 +118,47 @@ for country in bboxes.keys():
         fig=gef.panel_plot_variable(gef.convert_to_celcius(data_other_var_averaged_week,'t2m'),variable='t2m',forecast_timestep=data_other_var_averaged_week.step.values,cmap='rainbow',fontsize=fs)
         plt.savefig(f'{weekly_path}/t2m.png',bbox_inches='tight')
 
-        print(data_other_var_averaged_week)
-
         fig=gef.panel_plot_variable(data_other_var_averaged_week,variable='cape',forecast_timestep=data_other_var_averaged_week.step.values,cmap='jet',fontsize=fs)
         plt.savefig(f'{weekly_path}/cape.png',bbox_inches='tight')
 
         fig=gef.panel_plot_variable(data_other_var_averaged_week,variable='tcw',forecast_timestep=data_other_var_averaged_week.step.values,cmap='YlGnBu',fontsize=fs)
         plt.savefig(f'{weekly_path}/tcw.png',bbox_inches='tight')
 
-    # gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,fontsize=fs)
-    # plt.savefig(f'{weekly_path}/weekly_change_in_precip.png',bbox_inches='tight')
-    # if country!="Senegal":
-    #     quantiles=[75,50,25]
+    gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,fontsize=fs)
+    plt.savefig(f'{weekly_path}/weekly_change_in_precip.png',bbox_inches='tight')
+    if country!="Senegal":
+        quantiles=[75,50,25]
 
-    #     for quantile in quantiles:
-    #         chance_to_exceed=gef.chance_to_exceed_mclimate(ds_to_plot,quantile=quantile,m_climate=m_climate)
-    #         gef.panel_plot_variable(chance_to_exceed,'tp',chance_to_exceed.step.values,cmap='Blues',fontsize=fs)
-    #         plt.savefig(f'{weekly_path}/{quantile}th_percentile_exedance_precip.png',bbox_inches='tight')
+        for quantile in quantiles:
+            chance_to_exceed=gef.chance_to_exceed_mclimate(ds_to_plot,quantile=quantile,m_climate=m_climate)
+            gef.panel_plot_variable(chance_to_exceed,'tp',chance_to_exceed.step.values,cmap='Blues',fontsize=fs)
+            plt.savefig(f'{weekly_path}/{quantile}th_percentile_exedance_precip.png',bbox_inches='tight')
 
-    #         anom_clim=gef.anomaly_from_mclimate(ds_to_plot,quantile=quantile,m_climate=m_climate)
-    #         gef.panel_plot_variable(anom_clim,'tp',anom_clim.step.values,cmap='RdBu',fontsize=fs)
-    #         plt.savefig(f'{weekly_path}/anomaly_from_{quantile}th.png',bbox_inches='tight')
+            anom_clim=gef.anomaly_from_mclimate(ds_to_plot,quantile=quantile,m_climate=m_climate)
+            gef.panel_plot_variable(anom_clim,'tp',anom_clim.step.values,cmap='RdBu',fontsize=fs)
+            plt.savefig(f'{weekly_path}/anomaly_from_{quantile}th.png',bbox_inches='tight')
 
-    #     tercil_cats=['near-normal','below-normal','above-normal']
+        tercil_cats=['near-normal','below-normal','above-normal']
 
-    #     for cat in tercil_cats:
-    #         tercile_clim=gef.tercile_from_mclimate(ds_to_plot,'tp',category_choice=cat,m_climate=m_climate)
-    #         gef.panel_plot_variable(tercile_clim,'tp',tercile_clim.step.values,cmap='rainbow',fontsize=fs)
-    #         plt.savefig(f'{weekly_path}/chance_of_{cat}.png',bbox_inches='tight')
+        for cat in tercil_cats:
+            tercile_clim=gef.tercile_from_mclimate(ds_to_plot,'tp',category_choice=cat,m_climate=m_climate)
+            gef.panel_plot_variable(tercile_clim,'tp',tercile_clim.step.values,cmap='rainbow',fontsize=fs)
+            plt.savefig(f'{weekly_path}/chance_of_{cat}.png',bbox_inches='tight')
 
-    #     for i in range(2):
-    #         latf,lonf=major_cities[country][i][0],major_cities[country][i][1]
-    #         gef.meteogram_double(ds_to_plot,m_climate,lat=latf,lon=lonf)
-    #         plt.savefig(f'{weekly_path}/meteogram_{major_cities[country][2][i]}.png',bbox_inches='tight')
+        for i in range(2):
+            latf,lonf=major_cities[country][i][0],major_cities[country][i][1]
+            gef.meteogram_double(ds_to_plot,m_climate,lat=latf,lon=lonf)
+            plt.savefig(f'{weekly_path}/meteogram_{major_cities[country][2][i]}.png',bbox_inches='tight')
+
+
+efi,sot = efi_sot.EFI_SOT(data_path_pf, filelist_path, weekly_path)
+
+for step in range(len(efi["step"])):
+    efi_sot.plot_map_EFI(efi.isel(step=step,time=0).drop_vars("time"),title="Extreme Forecast Index (EFI) for precipitation",
+            cbar_title_upper="EFI for dry events", cbar_title_lower="EFI for wet events",)
+    plt.savefig(f'{weekly_path}/EFI_step_{step}.png',bbox_inches='tight')
+
+    #print(sot)
+    efi_sot.plot_map_SOT(sot.isel(step=step,time=0))
+    plt.title("Shift of tails (SOT) for precipitation")
+    plt.savefig(f'{weekly_path}/SOT_step_{step}.png',bbox_inches='tight')
