@@ -33,48 +33,47 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      # - name: Run download script
-      #   if: ${{ env.ECMWF_API_URL != '' }}
-      #   run: |
-      #     python download_s2s.py
+      - name: Run download script
+        run: |
+          python download_s2s.py
 
-      # - name: Upload GRIB file as artifact
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: s2s_grib
-      #     path: data/*.grib
+          #- name: Upload GRIB file as artifact
+          #  uses: actions/upload-artifact@v4
+          #  with:
+          #    name: s2s_grib
+          #    path: data/*.grib
 
-      # - name: Generate plots
-      #   run: |
-      #     python plot_s2s.py
+      - name: Generate plots
+        run: |
+          python plot_s2s.py
 
-      # - name: Upload plots as artifacts
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: s2s_plots
-      #     path: plots/**/*.png
+          #- name: Upload plots as artifacts
+          #  uses: actions/upload-artifact@v4
+          #  with:
+          #    name: s2s_plots
+          #    path: plots/**/*.png
 
-      # - name: Upload netCDF file as artifact
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: s2s_nc
-      #     path: data/*.nc
+          #- name: Upload netCDF file as artifact
+          #  uses: actions/upload-artifact@v4
+          #  with:
+          #    name: s2s_nc
+          #    path: data/*.nc
 
-      # - name: perform downscaling
-      #   run: |
-      #     python dowscale_dekade.py
+      - name: perform downscaling
+        run: |
+          python dowscale_dekade.py
 
-      # - name: Upload plots as artifacts
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: downscale_plots
-      #     path: plots/**/*.png
+          #- name: Upload plots as artifacts
+          #  uses: actions/upload-artifact@v4
+          #  with:
+          #    name: downscale_plots
+          #    path: plots/**/*.png
 
-      # - name: Upload netCDF file as artifact
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: s2s_nc
-      #     path: data/*.nc
+          #- name: Upload netCDF file as artifact
+          #  uses: actions/upload-artifact@v4
+          #  with:
+          #    name: s2s_nc
+          #    path: data/*.nc
 
       - name: Save generated files in repo
         run: |
@@ -123,4 +122,4 @@ jobs:
             plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Kenya_dekadal.png, 
             plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Kenya_weekly.png, 
             private_plots/Kenya/${{ steps.date.outputs.date }}/*.png, 
-            private_data/Kenya/${{ steps.date.outputs.date }}/*.csv
+            private_data/station_data/Kenya/${{ steps.date.outputs.date }}/*.csv
