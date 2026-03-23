@@ -32,4 +32,7 @@ if __name__ == "__main__":
         # Write as a NETCDF file
         dir_path = f"satellite_data/{country}/{live_time}"
         os.makedirs(dir_path, exist_ok=True)
+
+        # some attributes were causing problems
+        ds_clip = ds_clip.drop_attrs()
         ds_clip.to_netcdf(f"{dir_path}/imerg_data_{country}.nc")
