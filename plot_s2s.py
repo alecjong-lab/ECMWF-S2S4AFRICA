@@ -1,5 +1,6 @@
 import xarray as xr
 import get_ECMWF_functions as gef
+import efi_sot
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,8 +11,12 @@ today = datetime.today()
 two_days_earlier = today - timedelta(days=2)
 date_str = two_days_earlier.strftime("%Y-%m-%d")
 
-pf=xr.open_dataset(f"data/{date_str}/ECMWF_s2s_pf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib",engine='cfgrib')
-cf=xr.open_dataset(f"data/{date_str}/ECMWF_s2s_cf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib",engine='cfgrib').assign_coords({'number':0})
+data_path_pf = f"data/{date_str}/ECMWF_s2s_pf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
+data_path_cf = f"data/{date_str}/ECMWF_s2s_cf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
+filelist_path = f"m-climate/*.nc"
+
+pf=xr.open_dataset(data_path_pf,engine='cfgrib')
+cf=xr.open_dataset(data_path_cf,engine='cfgrib').assign_coords({'number':0})
 
 data=xr.concat([pf,cf],dim='number')
 
@@ -124,3 +129,17 @@ for country in bboxes.keys():
         latf,lonf=major_cities[country][i][0],major_cities[country][i][1]
         gef.meteogram_double(ds_to_plot,m_climate,lat=latf,lon=lonf)
         plt.savefig(f'{weekly_path}/meteogram_{major_cities[country][2][i]}.png',bbox_inches='tight')
+
+
+
+efi,sot = efi_sot.EFI_SOT(data_path_pf, filelist_path, weekly_path)
+
+for step in range(len(efi["step"])):
+    efi_sot.plot_map_EFI(efi.isel(step=step,time=0).drop_vars("time"),title="Extreme Forecast Index (EFI) for precipitation",
+            cbar_title_upper="EFI for dry events", cbar_title_lower="EFI for wet events",)
+    plt.savefig(f'{weekly_path}/EFI_step_{step}.png',bbox_inches='tight')
+
+    #print(sot)
+    efi_sot.plot_map_SOT(sot.isel(step=step,time=0))
+    plt.title("Shift of tails (SOT) for precipitation")
+    plt.savefig(f'{weekly_path}/SOT_step_{step}.png',bbox_inches='tight')
