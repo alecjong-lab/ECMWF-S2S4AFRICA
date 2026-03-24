@@ -149,8 +149,6 @@ for country in bboxes.keys():
             gef.meteogram_double(ds_to_plot,m_climate,lat=latf,lon=lonf)
             plt.savefig(f'{weekly_path}/meteogram_{major_cities[country][2][i]}.png',bbox_inches='tight')
 
-print(filelist_path)
-
 efi,sot = efi_sot.EFI_SOT(data_path_pf, filelist_path, weekly_path)
 
 for step in range(len(efi["step"])):

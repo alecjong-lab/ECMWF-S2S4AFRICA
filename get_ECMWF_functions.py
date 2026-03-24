@@ -976,7 +976,7 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
     for j in range(num_steps, len(axes)):
         axes[j].set_visible(False) #delete extra empty plots
     fig.tight_layout() 
-    cbar_ax = fig.add_axes([0.15, -0.015, 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
+    cbar_ax = fig.add_axes([0.15, -0.035+0.5/fig_width , 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
     cbar = fig.colorbar(contour, cax=cbar_ax, orientation='horizontal',fraction=5)
     cbar.set_label(ds[variable].GRIB_name+f'[{units}]')
 

@@ -14,7 +14,7 @@ def EFI_SOT(data_path, filelist_path, weekly_path):
 
     def open_files(data_path,filelist_path):
         # read in data
-        data = xr.open_dataset(data_path,engine="cfgrib")
+        data = xr.open_dataset(data_path)
         #data_mclim = xr.open_mfdataset("D:/Hiwi/EFI_SOT_Kenya/m-climate/*.nc",combine="nested",concat_dim="init_time")
 
         filelist = glob.glob(filelist_path)
