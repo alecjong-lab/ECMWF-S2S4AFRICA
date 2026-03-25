@@ -13,7 +13,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Download and process TAHMO data for a specific country.")
     parser.add_argument(
-        "--country", type=str, default="Kenya", help="Country code for stations to process (default: Kenya)"
+        "--country", type=str, default="Kenya,Ghana", help="Country code for stations to process (default: Kenya)"
     )
     country_to_code = {
         "Burkina Faso": "BF",
@@ -65,7 +65,7 @@ if __name__ == "__main__":
         station_data = []
         # Get data for the last 4 decads
         now = datetime.datetime.now()
-        start_time = now - datetime.timedelta(days=40)
+        start_time = now - datetime.timedelta(days=60)
         for i, station_id in enumerate(country_stations.station_id):
             try:
                 ds = tahmo_wide(start_time=start_time, end_time=now,
