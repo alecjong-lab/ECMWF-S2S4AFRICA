@@ -12,6 +12,8 @@ today = datetime.today()
 two_days_earlier = today - timedelta(days=2)
 date_str = two_days_earlier.strftime("%Y-%m-%d")
 
+date_str='2026-03-20'
+
 data_dekade=xr.open_dataset(f'data/{date_str}/data_dekade.nc')
 month=int(data_dekade.time.dt.month.values)
 day=int(data_dekade.time.dt.day.values)
@@ -20,7 +22,7 @@ forecast_files = {
     (2, 17): ["ECMWF_tp_forecasts_02-17-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_06_Kenya.nc"],
     (2, 27): ["ECMWF_tp_forecasts_02-27-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_07_Kenya.nc"],
     (3, 9): ["ECMWF_tp_forecasts_03-09-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_08_Kenya.nc"],
-    (3, 19): ["ECMWF_tp_forecasts_03-19-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_09_Kenya.nc"],
+    (3, 20): ["ECMWF_tp_forecasts_03-19-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_09_Kenya.nc"],
     (3, 31): ["ECMWF_tp_forecasts_03-31-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_10_Kenya.nc"],
     (4, 9): ["ECMWF_tp_forecasts_04-09-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_11_Kenya.nc"],
     (4, 19): ["ECMWF_tp_forecasts_04-19-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_12_Kenya.nc"],
