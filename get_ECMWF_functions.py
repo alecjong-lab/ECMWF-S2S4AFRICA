@@ -21,6 +21,11 @@ from matplotlib.colors import LinearSegmentedColormap
 colors = ["white","wheat","lightgreen", "green","lightblue", "blue","yellow","orange", "red","purple"]
 cmap = LinearSegmentedColormap.from_list("wgbrp", colors)
 
+from matplotlib.colors import LinearSegmentedColormap
+
+colors = ["white","#ffff00","#ffcc00", "#ff9900","#ff6600", "#ff3300","#ff0000"]
+cmap_efi = LinearSegmentedColormap.from_list("wgbrp", colors)
+
 # # # namibia botswana
 lat1=-15
 lat2=-29.5
@@ -326,6 +331,8 @@ def week_mean(ds):
     if int(len(np.atleast_1d(ds.step.values))/7)<1:
         raise ValueError(f'⚠️The dataset contains less than 1 week of data⚠️')
     w_mean=ds.isel(step=slice(0,int(len(ds.step)/7)*7)).resample(step='7D').mean()
+    new_times = w_mean.step + pd.Timedelta(days=6)
+    w_mean = w_mean.assign_coords(step=new_times)
     return w_mean
 
 def lon_convert(ds,cut=True):
@@ -870,8 +877,8 @@ def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax=
         end_time=(ds.time+forecast_timestep)
     else:
         dt=ds.step[1]-ds.step[0]
-        start_time=ds.sel(step=forecast_timestep).valid_time-dt
-        end_time=ds.sel(step=forecast_timestep).valid_time
+        start_time=ds.time+forecast_timestep-dt
+        end_time=ds.time+forecast_timestep
 
     ax.set_title(f"{str(start_time.values)[:16]} until {str(end_time.values)[:16]}", fontsize=int(fontsize*0.8))
         
@@ -885,13 +892,17 @@ def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax=
         add_contour=add_contour.sel(longitude=slice(lon1, lon2), latitude=slice(lat1, lat2))
         if len(np.atleast_1d(add_contour['step'].values))>1:
             contour_sel = add_contour.sel(step=forecast_timestep)
-        if contourlevels==None:
+        if isinstance(contourlevels, (np.ndarray, list)):
             levels=np.linspace(np.nanmin(add_contour),np.nanmax(add_contour),5)
         if contourwidths==None:
             widths=2
         elif type(contourlevels)==int:
             levels=np.linspace(np.nanmin(add_contour),np.nanmax(add_contour),contourlevels)
-        lines=ax.contour(add_contour.longitude, add_contour.latitude, contour_sel, levels=contourlevels,cmap=contourcmap,linewidths=widths)
+        #make the option to have a one digit color code instead of colormap (contourcmap='k',for all black contours)
+        if len(contourcmap)>1:
+            lines=ax.contour(add_contour.longitude, add_contour.latitude, contour_sel, levels=contourlevels,cmap=contourcmap,linewidths=widths)
+        else:
+            lines=ax.contour(add_contour.longitude, add_contour.latitude, contour_sel, levels=contourlevels,colors=contourcmap,linewidths=widths)
     #focus on target area
     ax.set_extent([lon1, lon2, lat2, lat1], crs=ccrs.PlateCarree())
     
@@ -974,7 +985,7 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
     for j in range(num_steps, len(axes)):
         axes[j].set_visible(False) #delete extra empty plots
     fig.tight_layout() 
-    cbar_ax = fig.add_axes([0.15, -0.015, 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
+    cbar_ax = fig.add_axes([0.15, -0.04 , 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
     cbar = fig.colorbar(contour, cax=cbar_ax, orientation='horizontal',fraction=5)
     cbar.set_label(ds[variable].GRIB_name+f'[{units}]')
 
