@@ -56,6 +56,9 @@ bboxes = {
 
 m_climate_big = gef.open_mclimate(data_weekly)
 
+efi,sot = efi_sot.EFI_SOT(data_weekly, m_climate_big)
+
+
 major_cities = {
     "Namibia":     [(-22.5594, 17.0832), (-17.9333, 19.7667), ('Windhoek', 'Rundu')],
     "Botswana":    [(-24.6545, 25.9086), (-21.1700, 27.5000), ('Gaborone', 'Francistown')],
@@ -67,8 +70,6 @@ major_cities = {
     "Senegal":     [(14.6937, -17.4441), (12.3500, -16.7167), ('Dakar', 'Ziguinchor')],
     "Ethiopia":    [(9.0272, 38.7369),   (11.1400, 42.8000),  ('Addis Ababa', 'Dire Dawa')],
 }
-
-diff_data=data_weekly
 
 for country in bboxes.keys():
     gef.lat1=bboxes[country]['lat1']
@@ -93,9 +94,12 @@ for country in bboxes.keys():
     os.makedirs(dekade_path, exist_ok=True)
     os.makedirs(monthly_path, exist_ok=True)
 
-    ds_to_plot=diff_data.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
+    ds_to_plot=data_weekly.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=gef.cmap,fontsize=fs)
     plt.savefig(f'{weekly_path}/weekly_precip.png',bbox_inches='tight')
+
+    fig=gef.panel_plot_variable(efi,variable='tp',forecast_timestep=efi.step.values,vmax=1,vmin=0.5,cmap=gef.cmap_efi,add_contour=sot.tp,contourlevels=[-0.3,0,1,2,5,8],contourcmap='k',fontsize=fs)
+    plt.savefig(f'{weekly_path}/efi_sot_precip.png',bbox_inches='tight')
 
     ds_to_plot_monthly=data_monthly.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     fig=gef.panel_plot_variable(ds_to_plot_monthly,variable='tp',forecast_timestep=ds_to_plot_monthly.step.values,cmap=gef.cmap,fontsize=fs)
@@ -149,14 +153,14 @@ for country in bboxes.keys():
             gef.meteogram_double(ds_to_plot,m_climate,lat=latf,lon=lonf)
             plt.savefig(f'{weekly_path}/meteogram_{major_cities[country][2][i]}.png',bbox_inches='tight')
 
-efi,sot = efi_sot.EFI_SOT(data_path_pf, filelist_path, weekly_path)
+# efi,sot = efi_sot.EFI_SOT(data_path_pf, filelist_path, weekly_path)
 
-for step in range(len(efi["step"])):
-    efi_sot.plot_map_EFI(efi.isel(step=step,time=0).drop_vars("time"),title="Extreme Forecast Index (EFI) for precipitation",
-            cbar_title_upper="EFI for dry events", cbar_title_lower="EFI for wet events",)
-    plt.savefig(f'{weekly_path}/EFI_step_{step}.png',bbox_inches='tight')
+# for step in range(len(efi["step"])):
+#     efi_sot.plot_map_EFI(efi.isel(step=step,time=0).drop_vars("time"),title="Extreme Forecast Index (EFI) for precipitation",
+#             cbar_title_upper="EFI for dry events", cbar_title_lower="EFI for wet events",)
+#     plt.savefig(f'{weekly_path}/EFI_step_{step}.png',bbox_inches='tight')
 
-    #print(sot)
-    efi_sot.plot_map_SOT(sot.isel(step=step,time=0))
-    plt.title("Shift of tails (SOT) for precipitation")
-    plt.savefig(f'{weekly_path}/SOT_step_{step}.png',bbox_inches='tight')
+#     #print(sot)
+#     efi_sot.plot_map_SOT(sot.isel(step=step,time=0))
+#     plt.title("Shift of tails (SOT) for precipitation")
+#     plt.savefig(f'{weekly_path}/SOT_step_{step}.png',bbox_inches='tight')
