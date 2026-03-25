@@ -78,16 +78,6 @@ jobs:
           #    name: s2s_nc
           #    path: data/*.nc
 
-      - name: Save generated files in repo
-        continue-on-error: true
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add plots/
-          git add data/
-          git commit -m "Daily automated update" || echo "No changes to commit"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
-
       - name: Get current date
         id: date
         run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
@@ -115,6 +105,16 @@ jobs:
         run: |
           yes | python plot_sat_vs_stations.py --country Kenya,Ghana,Senegal,Ethiopia
 
+      - name: Save generated files in repo
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add plots/
+          git add data/
+          git commit -m "Daily automated update" || echo "No changes to commit"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
+
       - name: Email out generated plots in Kenya
         uses: dawidd6/action-send-mail@v16
         with:
@@ -131,7 +131,7 @@ jobs:
             koderaphillips@yahoo.com 
             marykilavi@yahoo.com  
             hwkimani1@gmail.com 
-            chrisfunk@ucsb.edu 
+            chrisfunk@ucsb.edu
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
