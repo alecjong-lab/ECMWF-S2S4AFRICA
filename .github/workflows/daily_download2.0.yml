@@ -5,8 +5,8 @@ permissions:
 
 on:
   schedule:
-    - cron: "16 00 * * *"  # every day at 02:00 UTC
-  workflow_dispatch:      # allows manual run
+    - cron: "16 00 * * *" # every day at 02:00 UTC
+  workflow_dispatch: # allows manual run
 
 jobs:
   download:
@@ -27,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
@@ -100,18 +100,18 @@ jobs:
         run: |
           pip install -r requirements_sheerwater.txt
 
-      - name: download tahmo data 
-        continue-on-error: false 
+      - name: download tahmo data
+        continue-on-error: false
         run: |
           yes | python get_tahmo_data.py --country Kenya,Ghana,Senegal,Ethiopia
 
-      - name: download satellite data 
-        continue-on-error: false 
+      - name: download satellite data
+        continue-on-error: false
         run: |
           yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia
 
       - name: generate plots
-        continue-on-error: false 
+        continue-on-error: false
         run: |
           yes | python plot_sat_vs_stations.py --country Kenya,Ghana,Senegal,Ethiopia
 
@@ -125,8 +125,14 @@ jobs:
           subject: Daily S2S Outlook
           to: >
             genevieve@rhizaresearch.org 
-            josh@rhizaresearch.org 
-          from: 'Kenya Data Share <info@dashboards.rhizaresearch.org>'
+            josh@rhizaresearch.org
+            chriskngetich@gmail.com 
+            gacherujemimah@gmail.com 
+            koderaphillips@yahoo.com 
+            marykilavi@yahoo.com  
+            hwkimani1@gmail.com 
+            chrisfunk@ucsb.edu 
+          from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
           attachments: >
@@ -134,6 +140,8 @@ jobs:
             plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip.png, 
             plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Kenya_dekadal.png, 
             plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Kenya_weekly.png, 
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/chirps_Kenya_dekadal.png, 
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/chirps_Kenya_weekly.png, 
             private_plots/Kenya/${{ steps.date.outputs.date }}/*.png, 
             private_data/station_data/Kenya/${{ steps.date.outputs.date }}/*.csv
 
@@ -147,8 +155,10 @@ jobs:
           subject: Daily S2S Outlook
           to: >
             genevieve@rhizaresearch.org 
-            josh@rhizaresearch.org 
-          from: 'Ghana Data Share <info@dashboards.rhizaresearch.org>'
+            josh@rhizaresearch.org
+            C.M.Wainwright@leeds.ac.uk
+            D.J.Parker@leeds.ac.uk
+          from: "Ghana Data Share <info@dashboards.rhizaresearch.org>"
           body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast for Ghana. You can also view the data at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
           attachments: >
@@ -171,8 +181,10 @@ jobs:
           subject: Daily S2S Outlook
           to: >
             genevieve@rhizaresearch.org 
-            josh@rhizaresearch.org 
-          from: 'Senegal Data Share <info@dashboards.rhizaresearch.org>'
+            josh@rhizaresearch.org
+            C.M.Wainwright@leeds.ac.uk
+            D.J.Parker@leeds.ac.uk
+          from: "Senegal Data Share <info@dashboards.rhizaresearch.org>"
           body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast for Senegal. You can also view the data at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
           attachments: >
@@ -195,14 +207,15 @@ jobs:
           subject: Daily S2S Outlook
           to: >
             genevieve@rhizaresearch.org 
-            josh@rhizaresearch.org 
-          from: 'Ethiopia Data Share <info@dashboards.rhizaresearch.org>'
+            josh@rhizaresearch.org
+            katiekowal@uchicago.edu
+          from: "Ethiopia Data Share <info@dashboards.rhizaresearch.org>"
           body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast for Ethiopia. You can also view the data at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
           attachments: >
             plots/Ethiopia/${{ steps.ecmwf_date.outputs.date }}/dekadal/dekadal_precip.png, 
             plots/Ethiopia/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip.png, 
-            plots/Senegal/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Senegal_dekadal.png, 
+            plots/Ethiopia/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Ethiopia_dekadal.png, 
             plots/Ethiopia/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Ethiopia_weekly.png, 
             plots/Ethiopia/${{ steps.ecmwf_date.outputs.date }}/dekadal/chirps_Ethiopia_dekadal.png, 
             plots/Ethiopia/${{ steps.ecmwf_date.outputs.date }}/weekly/chirps_Ethiopia_weekly.png, 
