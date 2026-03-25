@@ -100,17 +100,17 @@ jobs:
           pip install -r requirements_sheerwater.txt
 
       - name: download tahmo data 
-        continue-on-error: true
+        continue-on-error: false 
         run: |
           yes | python get_tahmo_data.py --country Kenya,Ghana,Senegal,Ethiopia
 
-      - name: download imerg data 
-        continue-on-error: true
+      - name: download satellite data 
+        continue-on-error: false 
         run: |
-          yes | python get_imerg_data.py --country Kenya,Ghana,Senegal,Ethiopia
+          yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia
 
       - name: generate plots
-        continue-on-error: true
+        continue-on-error: false 
         run: |
           yes | python plot_sat_vs_stations.py --country Kenya,Ghana,Senegal,Ethiopia
 
