@@ -43,13 +43,13 @@ data_dekade.to_netcdf(f'data/{date_str}/data_dekade.nc')
 data_monthly.to_netcdf(f'data/{date_str}/data_monthly.nc')
 
 bboxes = {
-    "Namibia": {"lat1": -15, "lon1": 10, "lat2": -31, "lon2": 27},
-    "Botswana": {"lat1": -15, "lon1": 18, "lat2": -28, "lon2": 31},
-    "Kenya": {"lat1": 7, "lon1": 32, "lat2": -6, "lon2": 43},
-    "Zambia": {"lat1": -6, "lon1": 20, "lat2": -20, "lon2": 35},
-    "Madagascar": {"lat1": -10, "lon1": 42, "lat2": -27, "lon2": 52},
-    "Angola": {"lat1": -5, "lon1": 12, "lat2": -18, "lon2": 24},
-    "Ghana": {"lat1": 12, "lon1": -4, "lat2": 4, "lon2": 2},
+    # "Namibia": {"lat1": -15, "lon1": 10, "lat2": -31, "lon2": 27},
+    # "Botswana": {"lat1": -15, "lon1": 18, "lat2": -28, "lon2": 31},
+    # "Kenya": {"lat1": 7, "lon1": 32, "lat2": -6, "lon2": 43},
+    # "Zambia": {"lat1": -6, "lon1": 20, "lat2": -20, "lon2": 35},
+    # "Madagascar": {"lat1": -10, "lon1": 42, "lat2": -27, "lon2": 52},
+    # "Angola": {"lat1": -5, "lon1": 12, "lat2": -18, "lon2": 24},
+    # "Ghana": {"lat1": 12, "lon1": -4, "lat2": 4, "lon2": 2},
     "Senegal": {"lat1": 17, "lon1": -17.5, "lat2": 12, "lon2": -11},
     "Ethiopia": {"lat1": 16, "lon1": 32, "lat2": 2, "lon2": 49},
  }
@@ -98,9 +98,6 @@ for country in bboxes.keys():
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=gef.cmap,fontsize=fs)
     plt.savefig(f'{weekly_path}/weekly_precip.png',bbox_inches='tight')
 
-    fig=gef.panel_plot_variable(efi,variable='tp',forecast_timestep=efi.step.values,vmax=1,vmin=0.5,cmap=gef.cmap_efi,add_contour=sot.tp,contourlevels=[-0.3,0,1,2,5,8],contourcmap='k',fontsize=fs)
-    plt.savefig(f'{weekly_path}/efi_sot_precip.png',bbox_inches='tight')
-
     ds_to_plot_monthly=data_monthly.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     fig=gef.panel_plot_variable(ds_to_plot_monthly,variable='tp',forecast_timestep=ds_to_plot_monthly.step.values,cmap=gef.cmap,fontsize=fs)
     plt.savefig(f'{monthly_path}/monthly_precip.png',bbox_inches='tight')
@@ -129,7 +126,12 @@ for country in bboxes.keys():
 
     gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,fontsize=fs)
     plt.savefig(f'{weekly_path}/weekly_change_in_precip.png',bbox_inches='tight')
+
     if country!="Senegal":
+
+        fig=gef.panel_plot_variable(efi,variable='tp',forecast_timestep=efi.step.values,vmax=1,vmin=0.5,cmap=gef.cmap_efi,add_contour=sot.tp,contourlevels=[-0.3,0,1,2,5,8],contourcmap='k',fontsize=fs)
+        plt.savefig(f'{weekly_path}/efi_sot_precip.png',bbox_inches='tight')
+
         quantiles=[75,50,25]
 
         for quantile in quantiles:
