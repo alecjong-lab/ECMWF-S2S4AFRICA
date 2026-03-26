@@ -1,9 +1,53 @@
-ECMWF weekly subseasonal forecast for Angola, Botswana, Ethiopia, Ghana, Kenya, Madagascar, Namibia, Senegal, and Zambia; updated daily at 00:16 UTC.
-The plots are stored in the /plots folder, and the current plot types included are:
- i) the weekly,dekadal, and monthly accumulated precipitation forecast, the change in weekly accumulated precipitation
- ii) exceedence percentages, defined as the percentage of ensemble members, passing the 25th, 50th, or 75th quantile.
- iii) anomalies from the precentiles of the climatology
- iv) the percentage chance that the forecast falls within 1 of three tercile categories.
- v) meteograms for the two most populated cities.
- vi) weekly Extreme forecast index with Shift of tails as contours
- 
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║               ███████╗ ██████╗███╗   ███╗██╗    ██╗███████╗                  ║
+║               ██╔════╝██╔════╝████╗ ████║██║    ██║██╔════╝                  ║
+║               █████╗  ██║     ██╔████╔██║██║ █╗ ██║█████╗                    ║
+║               ██╔══╝  ██║     ██║╚██╔╝██║██║███╗██║██╔══╝                    ║
+║               ███████╗╚██████╗██║ ╚═╝ ██║╚███╔███╔╝██║                       ║
+║               ╚══════╝ ╚═════╝╚═╝     ╚═╝ ╚══╝╚══╝ ╚═╝                       ║
+║                                                                              ║
+║             S U B S E A S O N A L   F O R E C A S T   P L O T S              ║
+║                              FOR A F R I C A  ·                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
+ECMWF weekly subseasonal precipitation forecast plots for **9 African countries**,
+updated automatically every day at **00:16 UTC**.
+
+---
+
+### Countries covered
+
+`Angola` · `Botswana` · `Ethiopia` · `Ghana` · `Kenya`
+`Madagascar` · `Namibia` · `Senegal` · `Zambia`
+
+---
+
+### Plot types
+
+All plots are stored in the [`/plots`](./plots) folder, organised by country.
+
+| # | Type | Description |
+|---|------|-------------|
+| i | **Accumulated precipitation** | Weekly, dekadal, and monthly totals; includes change in weekly accumulated precipitation |
+| ii | **Exceedance percentages** | Fraction of ensemble members exceeding the 25th, 50th, or 75th climatological quantile |
+| iii | **Anomalies** | Forecast deviation from climatological percentiles |
+| iv | **Tercile probabilities** | Probability of the forecast falling in the below-normal, near-normal, or above-normal category |
+| v | **Meteograms** | Ensemble precipitation vs. climatology for the two most populated cities |
+| vi | **Extreme Forecast Index (EFI)** | Weekly EFI with Shift of Tails (SoT) as contours |
+
+---
+
+### Update schedule
+
+Plots are regenerated daily via GitHub Actions. Last update badge can be added here:
+
+![last update](https://img.shields.io/github/last-commit/alecjong-lab/ECMWF-S2S4AFRICA?label=last%20update)
+
+---
+
+### Data source
+
+Forecast data from [ECMWF](https://www.ecmwf.int/) subseasonal ensemble products.
