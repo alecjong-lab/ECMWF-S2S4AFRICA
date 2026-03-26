@@ -42,7 +42,7 @@ All plots are stored in the [`/plots`](./plots) folder, organised by country.
 
 ### Update schedule
 
-Plots are regenerated daily via GitHub Actions. Last update badge can be added here:
+Plots are regenerated daily via GitHub Actions. 
 
 ![last update](https://img.shields.io/github/last-commit/alecjong-lab/ECMWF-S2S4AFRICA?label=last%20update)
 
