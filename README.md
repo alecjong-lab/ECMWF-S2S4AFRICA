@@ -13,7 +13,7 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ```
 
-ECMWF weekly subseasonal precipitation forecast plots for **9 African countries**,
+ECMWF subseasonal forecast plots for **9 African countries**,
 updated automatically every day at **00:16 UTC**.
 
 ---
