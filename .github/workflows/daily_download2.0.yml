@@ -124,13 +124,13 @@ jobs:
           password: ${{ secrets.RESEND_API_KEY }}
           subject: Daily S2S Outlook
           to: >
-            genevieve@rhizaresearch.org 
-            josh@rhizaresearch.org
-            chriskngetich@gmail.com 
-            gacherujemimah@gmail.com 
-            koderaphillips@yahoo.com 
-            marykilavi@yahoo.com  
-            hwkimani1@gmail.com 
+            genevieve@rhizaresearch.org,
+            josh@rhizaresearch.org,
+            chriskngetich@gmail.com,
+            gacherujemimah@gmail.com,
+            koderaphillips@yahoo.com,
+            marykilavi@yahoo.com,
+            hwkimani1@gmail.com,
             chrisfunk@ucsb.edu 
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
@@ -154,9 +154,9 @@ jobs:
           password: ${{ secrets.RESEND_API_KEY }}
           subject: Daily S2S Outlook
           to: >
-            genevieve@rhizaresearch.org 
-            josh@rhizaresearch.org
-            C.M.Wainwright@leeds.ac.uk
+            genevieve@rhizaresearch.org,
+            josh@rhizaresearch.org,
+            C.M.Wainwright@leeds.ac.uk,
             D.J.Parker@leeds.ac.uk
           from: "Ghana Data Share <info@dashboards.rhizaresearch.org>"
           body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast for Ghana. You can also view the data at ${{ github.server_url }}/${{ github.repository }}.
@@ -180,9 +180,9 @@ jobs:
           password: ${{ secrets.RESEND_API_KEY }}
           subject: Daily S2S Outlook
           to: >
-            genevieve@rhizaresearch.org 
-            josh@rhizaresearch.org
-            C.M.Wainwright@leeds.ac.uk
+            genevieve@rhizaresearch.org,
+            josh@rhizaresearch.org,
+            C.M.Wainwright@leeds.ac.uk,
             D.J.Parker@leeds.ac.uk
           from: "Senegal Data Share <info@dashboards.rhizaresearch.org>"
           body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast for Senegal. You can also view the data at ${{ github.server_url }}/${{ github.repository }}.
@@ -206,8 +206,8 @@ jobs:
           password: ${{ secrets.RESEND_API_KEY }}
           subject: Daily S2S Outlook
           to: >
-            genevieve@rhizaresearch.org 
-            josh@rhizaresearch.org
+            genevieve@rhizaresearch.org,
+            josh@rhizaresearch.org,
             katiekowal@uchicago.edu
           from: "Ethiopia Data Share <info@dashboards.rhizaresearch.org>"
           body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast for Ethiopia. You can also view the data at ${{ github.server_url }}/${{ github.repository }}.
