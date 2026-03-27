@@ -1,9 +1,68 @@
-ECMWF weekly subseasonal forecast for Namibia, Botswana, Kenya, Zambia, and Madagascar; updated daily at 00:16 UTC.
-The plots are stored in the /plots folder, and the current plot types included are:
- i) the weekly accumulated precipitation forecast, the change in weekly accumulated precipitation
- ii) exceedence percentages, defined as the percentage of ensemble members, passing the 25th, 50th, or 75th quantile.
- iii) anomalies from the precentiles of the climatology
- iv) the percentage chance that the forecast falls within 1 of three tercile categories.
- v) meteograms for the two most populated cities. 
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║         .    _.----~~~~~~~7                                                  ║
+║             /              ~-..-~~--..--.                                    ║
+║       .'.'.'                             `.                                  ║
+║         .~         ███████╗██████╗ ███████╗ \                                ║ 
+║       .'           ██╔════╝╚════██╗██╔════╝   .                              ║
+║   .   (            ███████╗ █████╔╝███████╗    \                             ║ 
+║ '.    )            ╚════██║██╔═══╝ ╚════██║     `.                           ║
+║   '  (             ███████║███████╗███████║       ~-.                        ║ 
+║       \           ╚══════╝╚══════╝╚══════╝            ~-~~7                  ║
+║        `.       __.._     F O R  A F R I C A             '                   ║  
+║          ~-.--~~     ~--.                              /                     ║
+║                         ;                          .-~                       ║
+║                         (                        .~                          ║
+║                          `.                    .'                            ║
+║                            ;                   ;                             ║
+║                            `.                  `       _                     ║
+║                             )                   )     / )                    ║
+║                            (                 _.-'  .-' .'                    ║
+║                            `.               (      )   /                     ║
+║                              7             _;      < _/                      ║
+║                               \           /         ~                        ║ 
+║                                \         /                                   ║
+║                                 `. __..-'                                    ║
+║                                   ~                                          ║ 
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
 
-The white borders in many of the plots are a result of the required regridding of the data to match the model climatology. 
+ECMWF subseasonal forecast plots for **9 African countries**,
+updated automatically every day at **00:16 UTC**.
+
+---
+
+### Countries covered
+
+`Angola` · `Botswana` · `Ethiopia` · `Ghana` · `Kenya`
+`Madagascar` · `Namibia` · `Senegal` · `Zambia`
+
+---
+
+### Plot types
+
+All plots are stored in the [`/plots`](./plots) folder, organised by country.
+
+| # | Type | Description |
+|---|------|-------------|
+| i | **Accumulated precipitation** | Weekly, dekadal, and monthly totals; includes change in weekly accumulated precipitation |
+| ii | **Exceedance percentages** | Fraction of ensemble members exceeding the 25th, 50th, or 75th climatological quantile |
+| iii | **Anomalies** | Forecast deviation from climatological percentiles |
+| iv | **Tercile probabilities** | Probability of the forecast falling in the below-normal, near-normal, or above-normal category |
+| v | **Meteograms** | Ensemble precipitation vs. climatology for the two most populated cities |
+| vi | **Extreme Forecast Index (EFI)** | Weekly EFI with Shift of Tails (SoT) as contours |
+
+---
+
+### Update schedule
+
+Plots are regenerated daily via GitHub Actions. 
+
+![last update](https://img.shields.io/github/last-commit/alecjong-lab/ECMWF-S2S4AFRICA?label=last%20update)
+
+---
+
+### Data source
+
+Forecast data from [ECMWF](https://www.ecmwf.int/) subseasonal ensemble products.
