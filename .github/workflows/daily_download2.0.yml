@@ -5,12 +5,20 @@ permissions:
 
 on:
   schedule:
-    - cron: "16 00 * * *"  # every day at 02:00 UTC
-  workflow_dispatch:      # allows manual run
+    - cron: "16 00 * * *" # every day at 02:00 UTC
+  workflow_dispatch: # allows manual run
 
 jobs:
   download:
     runs-on: ubuntu-latest
+    env:
+      ECMWF_API_URL: ${{ secrets.ECMWF_API_URL }}
+      ECMWF_API_KEY: ${{ secrets.ECMWF_API_KEY }}
+      ECMWF_API_EMAIL: ${{ secrets.ECMWF_API_EMAIL }}
+      TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
+      TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
+      EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+      EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
 
     steps:
       - name: Checkout repo
@@ -19,57 +27,197 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
 
       - name: Run download script
-        env:
-          ECMWF_API_URL: ${{ secrets.ECMWF_API_URL }}
-          ECMWF_API_KEY: ${{ secrets.ECMWF_API_KEY }}
-          ECMWF_API_EMAIL: ${{ secrets.ECMWF_API_EMAIL }}
+        continue-on-error: true
         run: |
           python download_s2s.py
 
-      - name: Upload GRIB file as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: s2s_grib
-          path: data/*.grib
+          #- name: Upload GRIB file as artifact
+          #  uses: actions/upload-artifact@v4
+          #  with:
+          #    name: s2s_grib
+          #    path: data/*.grib
 
       - name: Generate plots
+        continue-on-error: true
         run: |
           python plot_s2s.py
-      - name: Upload plots as artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: s2s_plots
-          path: plots/**/*.png
-      - name: Upload netCDF file as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: s2s_nc
-          path: data/*.nc
+
+          #- name: Upload plots as artifacts
+          #  uses: actions/upload-artifact@v4
+          #  with:
+          #    name: s2s_plots
+          #    path: plots/**/*.png
+
+          #- name: Upload netCDF file as artifact
+          #  uses: actions/upload-artifact@v4
+          #  with:
+          #    name: s2s_nc
+          #    path: data/*.nc
+
       - name: perform downscaling
+        continue-on-error: true
         run: |
           python dowscale_dekade.py
-      - name: Upload plots as artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: downscale_plots
-          path: plots/**/*.png
-      - name: Upload netCDF file as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: s2s_nc
-          path: data/*.nc
+
+          #- name: Upload plots as artifacts
+          #  uses: actions/upload-artifact@v4
+          #  with:
+          #    name: downscale_plots
+          #    path: plots/**/*.png
+
+          #- name: Upload netCDF file as artifact
+          #  uses: actions/upload-artifact@v4
+          #  with:
+          #    name: s2s_nc
+          #    path: data/*.nc
+
       - name: Save generated files in repo
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add plots/
           git add data/
           git commit -m "Daily automated update" || echo "No changes to commit"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
+
+      - name: Get current date
+        id: date
+        run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
+
+      - name: Get EMCWF lagged date
+        id: ecmwf_date
+        run: echo "::set-output name=date::$(date -d '2 days ago' +'%Y-%m-%d')"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements_sheerwater.txt
+
+      - name: download tahmo data
+        continue-on-error: false
+        run: |
+          yes | python get_tahmo_data.py --country Kenya,Ghana,Senegal,Ethiopia
+
+      - name: download satellite data
+        continue-on-error: false
+        run: |
+          yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia
+
+      - name: generate plots
+        continue-on-error: false
+        run: |
+          yes | python plot_sat_vs_stations.py --country Kenya,Ghana,Senegal,Ethiopia
+
+      - name: Email out generated plots in Kenya
+        uses: dawidd6/action-send-mail@v16
+        with:
+          server_address: smtp.resend.com
+          server_port: 587
+          username: resend
+          password: ${{ secrets.RESEND_API_KEY }}
+          subject: Daily S2S Outlook
+          to: >
+            genevieve@rhizaresearch.org 
+            josh@rhizaresearch.org
+            chriskngetich@gmail.com 
+            gacherujemimah@gmail.com 
+            koderaphillips@yahoo.com 
+            marykilavi@yahoo.com  
+            hwkimani1@gmail.com 
+            chrisfunk@ucsb.edu 
+          from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
+          body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
+          reply_to: genevieve@rhizaresearch.org
+          attachments: >
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/dekadal_precip.png, 
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip.png, 
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Kenya_dekadal.png, 
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Kenya_weekly.png, 
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/dekadal/chirps_Kenya_dekadal.png, 
+            plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/weekly/chirps_Kenya_weekly.png, 
+            private_plots/Kenya/${{ steps.date.outputs.date }}/*.png, 
+            private_data/station_data/Kenya/${{ steps.date.outputs.date }}/*.csv
+
+      - name: Email out generated plots in Ghana
+        uses: dawidd6/action-send-mail@v16
+        with:
+          server_address: smtp.resend.com
+          server_port: 587
+          username: resend
+          password: ${{ secrets.RESEND_API_KEY }}
+          subject: Daily S2S Outlook
+          to: >
+            genevieve@rhizaresearch.org 
+            josh@rhizaresearch.org
+            C.M.Wainwright@leeds.ac.uk
+            D.J.Parker@leeds.ac.uk
+          from: "Ghana Data Share <info@dashboards.rhizaresearch.org>"
+          body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast for Ghana. You can also view the data at ${{ github.server_url }}/${{ github.repository }}.
+          reply_to: genevieve@rhizaresearch.org
+          attachments: >
+            plots/Ghana/${{ steps.ecmwf_date.outputs.date }}/dekadal/dekadal_precip.png, 
+            plots/Ghana/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip.png, 
+            plots/Ghana/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Ghana_dekadal.png, 
+            plots/Ghana/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Ghana_weekly.png, 
+            plots/Ghana/${{ steps.ecmwf_date.outputs.date }}/dekadal/chirps_Ghana_dekadal.png, 
+            plots/Ghana/${{ steps.ecmwf_date.outputs.date }}/weekly/chirps_Ghana_weekly.png, 
+            private_plots/Ghana/${{ steps.date.outputs.date }}/*.png, 
+            private_data/station_data/Ghana/${{ steps.date.outputs.date }}/*.csv
+
+      - name: Email out generated plots in Senegal
+        uses: dawidd6/action-send-mail@v16
+        with:
+          server_address: smtp.resend.com
+          server_port: 587
+          username: resend
+          password: ${{ secrets.RESEND_API_KEY }}
+          subject: Daily S2S Outlook
+          to: >
+            genevieve@rhizaresearch.org 
+            josh@rhizaresearch.org
+            C.M.Wainwright@leeds.ac.uk
+            D.J.Parker@leeds.ac.uk
+          from: "Senegal Data Share <info@dashboards.rhizaresearch.org>"
+          body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast for Senegal. You can also view the data at ${{ github.server_url }}/${{ github.repository }}.
+          reply_to: genevieve@rhizaresearch.org
+          attachments: >
+            plots/Senegal/${{ steps.ecmwf_date.outputs.date }}/dekadal/dekadal_precip.png, 
+            plots/Senegal/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip.png, 
+            plots/Senegal/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Senegal_dekadal.png, 
+            plots/Senegal/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Senegal_weekly.png, 
+            plots/Senegal/${{ steps.ecmwf_date.outputs.date }}/dekadal/chirps_Senegal_dekadal.png, 
+            plots/Senegal/${{ steps.ecmwf_date.outputs.date }}/weekly/chirps_Senegal_weekly.png, 
+            private_plots/Senegal/${{ steps.date.outputs.date }}/*.png, 
+            private_data/station_data/Senegal/${{ steps.date.outputs.date }}/*.csv
+
+      - name: Email out generated plots in Ethiopia
+        uses: dawidd6/action-send-mail@v16
+        with:
+          server_address: smtp.resend.com
+          server_port: 587
+          username: resend
+          password: ${{ secrets.RESEND_API_KEY }}
+          subject: Daily S2S Outlook
+          to: >
+            genevieve@rhizaresearch.org 
+            josh@rhizaresearch.org
+            katiekowal@uchicago.edu
+          from: "Ethiopia Data Share <info@dashboards.rhizaresearch.org>"
+          body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast for Ethiopia. You can also view the data at ${{ github.server_url }}/${{ github.repository }}.
+          reply_to: genevieve@rhizaresearch.org
+          attachments: >
+            plots/Ethiopia/${{ steps.ecmwf_date.outputs.date }}/dekadal/dekadal_precip.png, 
+            plots/Ethiopia/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip.png, 
+            plots/Ethiopia/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Ethiopia_dekadal.png, 
+            plots/Ethiopia/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Ethiopia_weekly.png, 
+            plots/Ethiopia/${{ steps.ecmwf_date.outputs.date }}/dekadal/chirps_Ethiopia_dekadal.png, 
+            plots/Ethiopia/${{ steps.ecmwf_date.outputs.date }}/weekly/chirps_Ethiopia_weekly.png, 
+            private_plots/Ethiopia/${{ steps.date.outputs.date }}/*.png, 
+            private_data/station_data/Ethiopia/${{ steps.date.outputs.date }}/*.csv
