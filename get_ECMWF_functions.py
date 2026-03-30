@@ -586,7 +586,7 @@ def ensemble_mean(ds,dim='number'):
                     ens_mean[var].attrs = ds[var].attrs.copy()
     return ens_mean
 
-def open_mclimate(daily_all_vars,folder_path=f'{os.getcwd()}/m-climate/'):
+def open_mclimate(daily_all_vars,folder_path=f'{os.getcwd()}/m-climate/T_pr/'):
     # List all files
     files = os.listdir(folder_path)
     
