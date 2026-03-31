@@ -86,7 +86,7 @@ try:
             dt=data_dekade.step[1]-data_dekade.step[0]
             start_time=data_dekade.sel(step=forecast_timestep).valid_time-dt
             end_time=data_dekade.sel(step=forecast_timestep).valid_time
-        fname=f'downscaled_rainfall_forecast_init_{str(data_dekade.time.values)[0:10]}_{fclim_chirps[2][i]}.tif'
+        fname=f'downscaled_rainfall_forecast_init_{str(data_dekade.time.values)[0:10]}_{fclim_chirps[2][i]}'
 
         ds_to_plot.isel(step=i).rio.to_raster(dirname+fname)    
 
