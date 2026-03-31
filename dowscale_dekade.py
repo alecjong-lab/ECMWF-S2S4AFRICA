@@ -19,14 +19,14 @@ month=int(data_dekade.time.dt.month.values)
 day=int(data_dekade.time.dt.day.values)
 
 forecast_files = {
-    (2, 17): ["ECMWF_tp_forecasts_02-17-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_06_Kenya.nc"],
-    (2, 27): ["ECMWF_tp_forecasts_02-27-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_07_Kenya.nc"],
-    (3, 9): ["ECMWF_tp_forecasts_03-09-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_08_Kenya.nc"],
-    (3, 20): ["ECMWF_tp_forecasts_03-19-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_09_Kenya.nc"],
-    (3, 31): ["ECMWF_tp_forecasts_03-31-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_10_Kenya.nc"],
-    (4, 9): ["ECMWF_tp_forecasts_04-09-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_11_Kenya.nc"],
-    (4, 19): ["ECMWF_tp_forecasts_04-19-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_12_Kenya.nc"],
-    (4, 29): ["ECMWF_tp_forecasts_04-29-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_13_Kenya.nc"],
+    (2, 17): ["ECMWF_tp_forecasts_02-17-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_06_Kenya.nc","Febuary_Dekad3.tif"],
+    (2, 27): ["ECMWF_tp_forecasts_02-27-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_07_Kenya.nc","March_Dekad1.tif"],
+    (3, 9): ["ECMWF_tp_forecasts_03-09-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_08_Kenya.nc","March_Dekad2.tif"],
+    (3, 20): ["ECMWF_tp_forecasts_03-19-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_09_Kenya.nc","March_Dekad3.tif"],
+    (4, 1): ["ECMWF_tp_forecasts_03-31-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_10_Kenya.nc","April_Dekad1.tif"],
+    (4, 11): ["ECMWF_tp_forecasts_04-09-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_11_Kenya.nc","April_Dekad2.tif"],
+    (4, 21): ["ECMWF_tp_forecasts_04-19-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_12_Kenya.nc","April_Dekad3.tif"],
+    (5, 1): ["ECMWF_tp_forecasts_04-29-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_13_Kenya.nc","May_Dekad1.tif"],
 }
 
 try:
@@ -43,11 +43,7 @@ try:
                             
     chirps_dekades=[]
     for i,file in enumerate(fclim_chirps[1]):
-        if file=="chirpsv3_dekads_2005_2025_sorted_11_Kenya.nc":
-            file="chirpsv3_dekads_2005_2025_sorted_12_Kenya.nc"
-            chirps=xr.open_dataset('downscale_data/'+file)*np.nan
-        else:
-         chirps=xr.open_dataset('downscale_data/'+file)
+        chirps=xr.open_dataset('downscale_data/'+file)
         chirps_dekades.append(chirps.assign_coords({'step':data_dekade.step.values[i]}))
     chirps_dekades_ds=xr.concat(chirps_dekades,dim='step')
 
@@ -92,7 +88,7 @@ try:
             dt=data_dekade.step[1]-data_dekade.step[0]
             start_time=data_dekade.sel(step=forecast_timestep).valid_time-dt
             end_time=data_dekade.sel(step=forecast_timestep).valid_time
-        fname=f'forecast_init_{str(data_dekade.time.values)[0:10]}_start_{str(start_time.values)[5:10]}_end_{str(end_time.values)[5:10]}.tif'
+        fname=f'downscaled_rainfall_forecast_init_{str(data_dekade.time.values)[0:10]}_{fclim_chirps[2][i]}.tif'
 
         ds_to_plot.isel(step=i).rio.to_raster(dirname+fname)    
 
