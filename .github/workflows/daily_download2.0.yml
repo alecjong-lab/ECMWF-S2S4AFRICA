@@ -131,7 +131,10 @@ jobs:
             koderaphillips@yahoo.com,
             marykilavi@yahoo.com,
             hwkimani1@gmail.com,
-            chrisfunk@ucsb.edu 
+            chrisfunk@ucsb.edu,
+            alec.jong@gmail.com,
+            uiyov@student.kit.edu,
+            sshukla@ucsb.edu 
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
