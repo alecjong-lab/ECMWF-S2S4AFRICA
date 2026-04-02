@@ -106,7 +106,7 @@ if __name__ == "__main__":
                 top_axes = [fig.add_subplot(gs[0, i]) for i in range(n_indices)]
                 bottom_axes = [fig.add_subplot(gs[1, i]) for i in range(n_indices)]
 
-                times = [now_dt - timedelta(days=agg_days*(ind+1)) for ind in range(n_indices)[::-1]]
+                times = [now_dt - timedelta(days=1+agg_days*(ind+1)) for ind in range(n_indices)[::-1]]
                 end_times = [t + timedelta(days=agg_days - 1) for t in times]
                 times = [x.strftime("%Y-%m-%d") for x in times]
                 end_times = [x.strftime("%Y-%m-%d") for x in end_times]
