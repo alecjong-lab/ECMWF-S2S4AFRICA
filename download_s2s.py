@@ -14,16 +14,16 @@ print(f"Downloading data for: {date_str}")
 # ---------------------------
 # Set up ECMWF API credentials from environment variables
 # ---------------------------
-# api_config = {
-#     "url": os.environ["ECMWF_API_URL"],
-#     "key": os.environ["ECMWF_API_KEY"],
-#     "email": os.environ["ECMWF_API_EMAIL"]
-# }
+api_config = {
+    "url": os.environ["ECMWF_API_URL"],
+    "key": os.environ["ECMWF_API_KEY"],
+    "email": os.environ["ECMWF_API_EMAIL"]
+}
 
 # Write credentials to a temporary JSON file
 file_path = "ecmwf_api_key.json"
-# with open(file_path, "w") as f:
-#     json.dump(api_config, f)
+with open(file_path, "w") as f:
+    json.dump(api_config, f)
 
 os.environ["ECMWF_API_RC_FILE"] = file_path
 
