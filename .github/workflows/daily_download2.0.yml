@@ -101,17 +101,34 @@ jobs:
           pip install -r requirements_sheerwater.txt
 
       - name: download tahmo data
-        continue-on-error: false
-        run: |
-          yes | python get_tahmo_data.py --country Kenya,Ghana,Senegal,Ethiopia
+        uses: nick-fields/retry@v3
+        continue-on-error: True
+        with:
+          timeout_minutes: 60
+          max_attempts: 2
+          command: |
+            yes | python get_tahmo_data.py --country Kenya,Ghana,Senegal,Ethiopia
 
-      - name: download satellite data
-        continue-on-error: false
-        run: |
-          yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia
+      - name: download IMERG satellite data
+        uses: nick-fields/retry@v3
+        continue-on-error: True
+        with:
+          timeout_minutes: 60
+          max_attempts: 2
+          command: |
+            yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia --satellite imerg
+
+      - name: download CHIRPS satellite data
+        uses: nick-fields/retry@v3
+        continue-on-error: True
+        with:
+          timeout_minutes: 60
+          max_attempts: 2
+          command: |
+            yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia --satellite chirps
 
       - name: generate plots
-        continue-on-error: false
+        continue-on-error: true
         run: |
           yes | python plot_sat_vs_stations.py --country Kenya,Ghana,Senegal,Ethiopia
 
