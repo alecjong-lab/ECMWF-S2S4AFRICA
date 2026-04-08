@@ -29,34 +29,34 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+            #- name: Install dependencies
+            #  run: |
+            #    pip install -r requirements.txt
 
-      - name: Run download script
-        continue-on-error: true
-        run: |
-          python download_s2s.py
+            #- name: Run download script
+            #  continue-on-error: true
+            #  run: |
+            #    python download_s2s.py
 
-      - name: Generate plots
-        continue-on-error: true
-        run: |
-          python plot_s2s.py
+            #- name: Generate plots
+            #  continue-on-error: true
+            #  run: |
+            #    python plot_s2s.py
 
-      - name: perform downscaling
-        continue-on-error: true
-        run: |
-          python dowscale_dekade.py
+            #- name: perform downscaling
+            #  continue-on-error: true
+            #  run: |
+            #    python dowscale_dekade.py
 
-      - name: Save generated files in repo
-        continue-on-error: true
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add plots/
-          git add data/
-          git commit -m "Daily automated update" || echo "No changes to commit"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
+            #- name: Save generated files in repo
+            #  continue-on-error: true
+            #  run: |
+            #    git config user.name "github-actions[bot]"
+            #    git config user.email "github-actions[bot]@users.noreply.github.com"
+            #    git add plots/
+            #    git add data/
+            #    git commit -m "Daily automated update" || echo "No changes to commit"
+            #    git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
 
       
       - name: Install dependencies
@@ -65,21 +65,26 @@ jobs:
 
       # Setup a local nuthatch cache so that subsequent days are faster
       - name: Cache nuthatch data
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/.nuthatch/caches
-          key: nuthatch-${{ runner.os }}
+          key: nuthatch-
           restore-keys: |
             nuthatch-
 
-      - name: download tahmo data
-        uses: nick-fields/retry@v3
-        continue-on-error: True
+            #- name: download tahmo data
+            #  uses: nick-fields/retry@v3
+            #  continue-on-error: True
+            #  with:
+            #    timeout_minutes: 60
+            #    max_attempts: 2
+            #    command: |
+            #      yes | python get_tahmo_data.py --country Kenya,Ghana,Senegal,Ethiopia
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
         with:
-          timeout_minutes: 60
-          max_attempts: 2
-          command: |
-            yes | python get_tahmo_data.py --country Kenya,Ghana,Senegal,Ethiopia
+          limit-access-to-actor: true # Highly recommended for security
 
       - name: download IMERG satellite data
         uses: nick-fields/retry@v3
@@ -90,6 +95,11 @@ jobs:
           command: |
             yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia --satellite imerg
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true # Highly recommended for security
+
             #- name: download CHIRPS satellite data
             #  uses: nick-fields/retry@v3
             #  continue-on-error: True
@@ -98,6 +108,15 @@ jobs:
             #    max_attempts: 2
             #    command: |
             #      yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia --satellite chirps
+            #
+            
+      # SAve the nuthatch cache
+      - name: Cache nuthatch data
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.nuthatch/caches
+          key: nuthatch-${{ github.run_id }}
+     
 
       - name: generate plots
         continue-on-error: true
