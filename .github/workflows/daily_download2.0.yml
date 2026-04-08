@@ -113,8 +113,7 @@ jobs:
             private_plots/**/*.png
             private_data/**/*.csv
 
-jobs:
-  deploy:
+  email:
     strategy:
       matrix:
         include:
@@ -177,11 +176,11 @@ jobs:
           body: Attached are dekadal and weekly outlooks and historical station data related to the subseasonal forecast. You can also view the data (except for the station data) at ${{ github.server_url }}/${{ github.repository }}.
           reply_to: genevieve@rhizaresearch.org
           attachments: >
-            plots/${{ matirx.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/dekadal_precip.png, 
-            plots/${{ matirx.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip.png, 
-            plots/${{ matirx.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Kenya_dekadal.png, 
-            plots/${{ matirx.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Kenya_weekly.png, 
-            plots/${{ matirx.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/chirps_Kenya_dekadal.png, 
-            plots/${{ matirx.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/chirps_Kenya_weekly.png, 
-            private_plots/${{ matirx.country }}/${{ steps.date.outputs.date }}/*.png, 
-            private_data/station_data/${{ matirx.country }}/${{ steps.date.outputs.date }}/*.csv
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/dekadal_precip.png, 
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip.png, 
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Kenya_dekadal.png, 
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Kenya_weekly.png, 
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/chirps_Kenya_dekadal.png, 
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/chirps_Kenya_weekly.png, 
+            private_plots/${{ matrix.country }}/${{ steps.date.outputs.date }}/*.png, 
+            private_data/station_data/${{ matrix.country }}/${{ steps.date.outputs.date }}/*.csv
