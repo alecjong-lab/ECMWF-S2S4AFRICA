@@ -114,6 +114,7 @@ jobs:
             private_data/**/*.csv
 
   email:
+    needs: download
     strategy:
       matrix:
         include:
