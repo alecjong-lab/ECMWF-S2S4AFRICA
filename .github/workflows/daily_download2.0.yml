@@ -69,7 +69,7 @@ jobs:
         with:
           path: ~/.nuthatch/caches
           key: nuthatch-${{ runner.os }}
-           restore-keys: |
+          restore-keys: |
             nuthatch-
 
       - name: download tahmo data
