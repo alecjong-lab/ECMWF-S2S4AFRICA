@@ -69,8 +69,6 @@ jobs:
         with:
           path: ~/.nuthatch/caches
           key: nuthatch-
-          restore-keys: |
-            nuthatch-
 
             #- name: download tahmo data
             #  uses: nick-fields/retry@v3
