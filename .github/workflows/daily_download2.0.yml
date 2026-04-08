@@ -67,7 +67,7 @@ jobs:
       - name: Cache nuthatch data
         uses: actions/cache/restore@v4
         with:
-          path: ~/.nuthatch/caches
+          path: .nuthatch/caches
           key: nuthatch-
 
             #- name: download tahmo data
@@ -112,7 +112,7 @@ jobs:
       - name: Cache nuthatch data
         uses: actions/cache/save@v4
         with:
-          path: ~/.nuthatch/caches
+          path: .nuthatch/caches
           key: nuthatch-${{ github.run_id }}
      
 
