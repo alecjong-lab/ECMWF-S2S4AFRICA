@@ -120,35 +120,35 @@ jobs:
         include:
           - country: Kenya
             emails: >
-              josh@rhizaresearch.org
-              genevieve@rhizaresearch.org,
-              chriskngetich@gmail.com,
-              gacherujemimah@gmail.com,
-              mrforecasting@gmail.com,
-              koderaphillips@yahoo.com,
-              marykilavi@yahoo.com,
-              hwkimani1@gmail.com,
-              chrisfunk@ucsb.edu,
-              alec.jong@gmail.com,
-              uiyov@student.kit.edu,
-              sshukla@ucsb.edu 
+              josh@rhizaresearch.org,
+              #genevieve@rhizaresearch.org,
+              #chriskngetich@gmail.com,
+              #gacherujemimah@gmail.com,
+              #mrforecasting@gmail.com,
+              #koderaphillips@yahoo.com,
+              #marykilavi@yahoo.com,
+              #hwkimani1@gmail.com,
+              #chrisfunk@ucsb.edu,
+              #alec.jong@gmail.com,
+              #uiyov@student.kit.edu,
+              #sshukla@ucsb.edu 
           - country: Ghana
             emails: >
-              josh@rhizaresearch.org
-              genevieve@rhizaresearch.org,
-              C.M.Wainwright@leeds.ac.uk,
-              D.J.Parker@leeds.ac.uk
+              josh@rhizaresearch.org,
+              #genevieve@rhizaresearch.org,
+              #C.M.Wainwright@leeds.ac.uk,
+              #D.J.Parker@leeds.ac.uk
           - country: Senegal
             emails: >
-              josh@rhizaresearch.org
-              genevieve@rhizaresearch.org,
-              C.M.Wainwright@leeds.ac.uk,
-              D.J.Parker@leeds.ac.uk
+              josh@rhizaresearch.org,
+              #genevieve@rhizaresearch.org,
+              #C.M.Wainwright@leeds.ac.uk,
+              #D.J.Parker@leeds.ac.uk
           - country: Ethiopia
             emails: >
-              josh@rhizaresearch.org
-              genevieve@rhizaresearch.org,
-              katiekowal@uchicago.edu
+              josh@rhizaresearch.org,
+              #genevieve@rhizaresearch.org,
+              #katiekowal@uchicago.edu
     runs-on: ubuntu-latest
     steps:
       - name: Get current date
