@@ -34,7 +34,7 @@ if __name__ == "__main__":
         chirps_live_lag = 8 # CHIRPS prelim releases every dekad, and is up to 3 days behind
         chirps_lagged_now_dt = now_dt - timedelta(days=chirps_live_lag)
         chirps_start_time = (chirps_lagged_now_dt - timedelta(days=50)).strftime("%Y-%m-%d")
-        ds_chirps = chirps_raw_live(chirps_start_time, live_time, recompute=False, cache_mode='local_overwrite')
+        ds_chirps = chirps_raw_live(chirps_start_time, live_time, recompute=True, cache_mode='local_overwrite')
 
     # Clip the IMERG data to the countries
     for country in countries:
