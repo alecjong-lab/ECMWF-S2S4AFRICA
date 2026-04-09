@@ -29,83 +29,79 @@ jobs:
         with:
           python-version: "3.12"
 
-            #- name: Install dependencies
-            #  run: |
-            #    pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
 
-            #- name: Run download script
-            #  continue-on-error: true
-            #  run: |
-            #    python download_s2s.py
+      - name: Run download script
+        continue-on-error: true
+        run: |
+          python download_s2s.py
 
-            #- name: Generate plots
-            #  continue-on-error: true
-            #  run: |
-            #    python plot_s2s.py
+      - name: Generate plots
+        continue-on-error: true
+        run: |
+          python plot_s2s.py
 
-            #- name: perform downscaling
-            #  continue-on-error: true
-            #  run: |
-            #    python dowscale_dekade.py
+      - name: perform downscaling
+        continue-on-error: true
+        run: |
+          python dowscale_dekade.py
 
-            #- name: Save generated files in repo
-            #  continue-on-error: true
-            #  run: |
-            #    git config user.name "github-actions[bot]"
-            #    git config user.email "github-actions[bot]@users.noreply.github.com"
-            #    git add plots/
-            #    git add data/
-            #    git commit -m "Daily automated update" || echo "No changes to commit"
-            #    git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
+      - name: Save generated files in repo
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add plots/
+          git add data/
+          git commit -m "Daily automated update" || echo "No changes to commit"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
 
       
       - name: Install dependencies
         run: |
           pip install -r requirements_sheerwater.txt
 
-      # Setup a local nuthatch cache so that subsequent days are faster
       - name: Cache nuthatch data
         uses: actions/cache/restore@v4
         with:
           path: .nuthatch/caches
           key: nuthatch-
 
-            #- name: download tahmo data
-            #  uses: nick-fields/retry@v3
-            #  continue-on-error: True
-            #  with:
-            #    timeout_minutes: 60
-            #    max_attempts: 2
-            #    command: |
-            #      yes | python get_tahmo_data.py --country Kenya,Ghana,Senegal,Ethiopia
+      - name: download tahmo data
+        uses: nick-fields/retry@v3
+        continue-on-error: True
+        with:
+          timeout_minutes: 60
+          max_attempts: 2
+          command: |
+            yes | python get_tahmo_data.py --country Kenya,Ghana,Senegal,Ethiopia
 
       - name: download IMERG satellite data
         uses: nick-fields/retry@v3
         continue-on-error: True
         with:
-          timeout_minutes: 30
+          timeout_minutes: 20
           max_attempts: 2
           command: |
             yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia --satellite imerg
 
-            #- name: download CHIRPS satellite data
-            #  uses: nick-fields/retry@v3
-            #  continue-on-error: True
-            #  with:
-            #    timeout_minutes: 10
-            #    max_attempts: 2
-            #    command: |
-            #      yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia --satellite chirps
-            #
+      - name: download CHIRPS satellite data
+        uses: nick-fields/retry@v3
+        continue-on-error: True
+        with:
+          timeout_minutes: 20
+          max_attempts: 2
+          command: |
+            yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia --satellite chirps
             
-      # SAve the nuthatch cache
       - name: Cache nuthatch data
         uses: actions/cache/save@v4
         with:
           path: .nuthatch/caches
           key: nuthatch-${{ github.run_id }}
      
-
       - name: generate plots
         continue-on-error: true
         run: |
@@ -128,34 +124,34 @@ jobs:
           - country: Kenya
             emails: >
               josh@rhizaresearch.org,
-              #genevieve@rhizaresearch.org,
-              #chriskngetich@gmail.com,
-              #gacherujemimah@gmail.com,
-              #mrforecasting@gmail.com,
-              #koderaphillips@yahoo.com,
-              #marykilavi@yahoo.com,
-              #hwkimani1@gmail.com,
-              #chrisfunk@ucsb.edu,
-              #alec.jong@gmail.com,
-              #uiyov@student.kit.edu,
-              #sshukla@ucsb.edu 
+              genevieve@rhizaresearch.org,
+              chriskngetich@gmail.com,
+              gacherujemimah@gmail.com,
+              mrforecasting@gmail.com,
+              koderaphillips@yahoo.com,
+              marykilavi@yahoo.com,
+              hwkimani1@gmail.com,
+              chrisfunk@ucsb.edu,
+              alec.jong@gmail.com,
+              uiyov@student.kit.edu,
+              sshukla@ucsb.edu 
           - country: Ghana
             emails: >
               josh@rhizaresearch.org,
-              #genevieve@rhizaresearch.org,
-              #C.M.Wainwright@leeds.ac.uk,
-              #D.J.Parker@leeds.ac.uk
+              genevieve@rhizaresearch.org,
+              C.M.Wainwright@leeds.ac.uk,
+              D.J.Parker@leeds.ac.uk
           - country: Senegal
             emails: >
               josh@rhizaresearch.org,
-              #genevieve@rhizaresearch.org,
-              #C.M.Wainwright@leeds.ac.uk,
-              #D.J.Parker@leeds.ac.uk
+              genevieve@rhizaresearch.org,
+              C.M.Wainwright@leeds.ac.uk,
+              D.J.Parker@leeds.ac.uk
           - country: Ethiopia
             emails: >
               josh@rhizaresearch.org,
-              #genevieve@rhizaresearch.org,
-              #katiekowal@uchicago.edu
+              genevieve@rhizaresearch.org,
+              katiekowal@uchicago.edu
     runs-on: ubuntu-latest
     steps:
       - name: Get current date
