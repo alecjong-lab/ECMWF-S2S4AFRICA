@@ -131,7 +131,7 @@ for country in bboxes.keys():
 
         print(country)
 
-        fig=gef.panel_plot_variable(efi,variable='tp',forecast_timestep=efi.step.values,vmax=1,vmin=0.5,cmap=gef.cmap_efi,add_contour=sot.tp,contourlevels=[-0.3,0,1,2,5,8],contourcmap='k',fontsize=fs)
+        fig=gef.panel_plot_variable(efi,variable='tp',forecast_timestep=efi.step.values,vmax=1,vmin=0.5,cmap=gef.cmap_efi,add_contour=sot.tp,contourlevels=[0,1,2,5,8],contourcmap='k',fontsize=fs)
         plt.savefig(f'{weekly_path}/efi_sot_precip.png',bbox_inches='tight')
 
         quantiles=[75,50,25]
