@@ -1147,7 +1147,7 @@ def meteogram_double(ds,m_climate,lat,lon):
     wh=ds.sel(longitude=lon,latitude=lat,method="nearest")
     
     data2=m_climate.sel(longitude=lon,latitude=lat,method="nearest").tp.isel(time=slice(0,len(wh.step.values))).values.T
-    data = wh.tp.values.T
+    data = wh.tp.values
     # Compute ensemble mean
     ensemble_mean = np.mean(data, axis=0)
     if len(wh.step.values)<=6:
