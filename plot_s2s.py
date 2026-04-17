@@ -48,7 +48,7 @@ bboxes = {
     "Kenya": {"lat1": 7, "lon1": 32, "lat2": -6, "lon2": 43},
     "Zambia": {"lat1": -6, "lon1": 20, "lat2": -20, "lon2": 35},
     "Madagascar": {"lat1": -10, "lon1": 42, "lat2": -27, "lon2": 52},
-    "Angola": {"lat1": -5, "lon1": 12, "lat2": -18, "lon2": 24},
+    "Angola": {"lat1": -4, "lon1": 11.5, "lat2": -18.5, "lon2": 24.5},
     "Ghana": {"lat1": 12, "lon1": -4, "lat2": 4, "lon2": 2},
     "Senegal": {"lat1": 17, "lon1": -17.5, "lat2": 12, "lon2": -11},
     "Ethiopia": {"lat1": 16, "lon1": 32, "lat2": 2, "lon2": 49},
