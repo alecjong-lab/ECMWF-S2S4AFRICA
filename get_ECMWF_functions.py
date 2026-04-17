@@ -368,7 +368,6 @@ def diff_ds(ds,weeks):
     ds_diff=xr.concat(ds_list,dim='step')
     ds_diff.attrs=ds.attrs.copy()
     ds_diff.attrs['GRIB_name']='Weekly Change in Total Precipitation'
-    ds_
     return ds_diff
 
 def get_check_box_value(checkboxes, name):
