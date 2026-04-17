@@ -47,8 +47,8 @@ All plots are stored in the [`/plots`](./plots) folder, organised by country.
 | # | Type | Description |
 |---|------|-------------|
 | i | **Accumulated precipitation** | Weekly, dekadal, and monthly totals; includes change in weekly accumulated precipitation |
-| ii | **Exceedance percentages** | Fraction of ensemble members exceeding the 25th, 50th, or 75th climatological quantile |
-| iii | **Anomalies** | Forecast deviation from climatological percentiles |
+| ii | **Exceedance percentages** | Percentage of ensemble members exceeding the 25th, 50th, or 75th climatological quantile |
+| iii | **Anomalies** | Forecast deviation from climatological percentiles in mm |
 | iv | **Tercile probabilities** | Probability of the forecast falling in the below-normal, near-normal, or above-normal category |
 | v | **Meteograms** | Ensemble precipitation vs. climatology for the two most populated cities |
 | vi | **Extreme Forecast Index (EFI)** | Weekly EFI with Shift of Tails (SoT) as contours |
