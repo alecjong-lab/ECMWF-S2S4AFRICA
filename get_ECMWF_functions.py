@@ -17,6 +17,8 @@ from scipy.ndimage import gaussian_filter
 from scipy.ndimage import grey_opening, grey_closing
 from IPython.display import clear_output
 from matplotlib.colors import LinearSegmentedColormap
+import subprocess
+import requests
 
 colors = ["white","wheat","lightgreen", "green","lightblue", "blue","yellow","orange", "red","purple"]
 cmap = LinearSegmentedColormap.from_list("wgbrp", colors)
@@ -589,7 +591,9 @@ def ensemble_mean(ds,dim='number'):
                     ens_mean[var].attrs = ds[var].attrs.copy()
     return ens_mean
 
-def open_mclimate(daily_all_vars,folder_path=f'{os.getcwd()}/m-climate/T_pr/'):
+def open_mclimate(daily_all_vars,folder_path=f'{os.getcwd()}/m-climate/',var="T_pr"):
+
+    folder_path="{folder_path}/{var}/"
     # List all files
     files = os.listdir(folder_path)
     
@@ -621,12 +625,64 @@ def open_mclimate(daily_all_vars,folder_path=f'{os.getcwd()}/m-climate/T_pr/'):
     
     # Get the closest file
     closest_file = file_list[closest_index]
-    
+
     print(f"Model climatology starting on: {closest_file[10:20]}")
     
     #open climatology
     file= closest_file
     m_climate = xr.open_dataset(folder_path+file, engine="netcdf4",decode_timedelta=True)
+    
+    return m_climate.sortby('latitude',ascending=False)
+
+def list_github_folder(var,repo="alecjong-lab/ECMWF-S2S4AFRICA"):
+    url = f"https://api.github.com/repos/{repo}/contents/m-climate/{var}"
+    response = requests.get(url)
+    files = [item["name"] for item in response.json()]
+    return files
+
+def open_mclimate_colab(daily_all_vars,folder_path=f'{os.getcwd()}/m-climate/',var="T_pr"):
+
+    # List all files
+    files = list_github_folder(var)
+    
+    # Define a regex pattern to extract dates (assuming 'yiping_cd_YYYY-MM-DD.nc' format)
+    pattern = re.compile(r"m-climate_(\d{4})-(\d{2})-(\d{2})\.nc")
+    
+    # Extract month and day, ignoring year
+    file_dates = []
+    file_list = []
+    
+    for file in files:
+        match = pattern.search(file)
+        if match:
+            month, day = int(match.group(2)), int(match.group(3))
+            # Normalize all dates to the year 2000
+            date_obj = datetime(2000, month, day)
+            file_dates.append(date_obj)
+            file_list.append(file)  # Keep track of valid files
+    
+    # Convert file_dates to NumPy datetime64 for easier comparison
+    file_dates_np = np.array(file_dates, dtype="datetime64")
+    
+    # Specify the target date (only considering month and day)
+    target_date = daily_all_vars.time.values # Example target date
+    target_date_md = datetime(2000, target_date.astype("M8[D]").astype(object).month, target_date.astype("M8[D]").astype(object).day)
+    
+    # Find the index of the closest date
+    closest_index = np.argmin(np.abs(file_dates_np - np.datetime64(target_date_md)))
+    
+    # Get the closest file
+    closest_file = file_list[closest_index]
+    
+    os.makedirs(folder_path,exist_ok=True)
+    url = f"https://raw.githubusercontent.com/alecjong-lab/ECMWF-S2S4AFRICA/main/m-climate/{var}/{closest_file}"
+
+    if not os.path.exists(f"{folder_path}/{closest_file}"):
+        subprocess.run(["wget", "-q", url, "-O", f"{folder_path}/{closest_file}"])
+    print(f"Model climatology starting on: {closest_file[10:20]}")
+    
+    #open climatology
+    m_climate = xr.open_dataset(f"{folder_path}/{closest_file}", engine="netcdf4",decode_timedelta=True)
     
     return m_climate.sortby('latitude',ascending=False)
 
