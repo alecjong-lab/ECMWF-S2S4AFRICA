@@ -21,6 +21,9 @@ from matplotlib.colors import LinearSegmentedColormap
 colors = ["white","wheat","lightgreen", "green","lightblue", "blue","yellow","orange", "red","purple"]
 cmap = LinearSegmentedColormap.from_list("wgbrp", colors)
 
+colors = ["red","yellow","blue"]
+cmap_traffic = LinearSegmentedColormap.from_list("wgbrp", colors)
+
 from matplotlib.colors import LinearSegmentedColormap
 
 colors = ["white","#ffff00","#ffcc00", "#ff9900","#ff6600", "#ff3300","#ff0000"]
@@ -364,6 +367,8 @@ def diff_ds(ds,weeks):
         ds_list.append(diff)
     ds_diff=xr.concat(ds_list,dim='step')
     ds_diff.attrs=ds.attrs.copy()
+    ds_diff.attrs['GRIB_name']='Weekly Change in Total Precipitation'
+    ds_
     return ds_diff
 
 def get_check_box_value(checkboxes, name):
@@ -386,7 +391,6 @@ def generate_date_range(year, month,day):
     day=int(day)
     # Return the date range string
     return f"{year}-{month_number:02d}-{day:02d}"
-
 
 def edit_base_request(request,param,step,name,ensemble_mean=True):
     #update the base request with the things clicked on the button
@@ -745,7 +749,6 @@ def make_wind_df(ds, lon, lat, start_date, end_date,normed=False, norm_axis=None
     
     return wind_df
 
-
 def matplotlib_windrose(ds, lon, lat, start_date, end_date, fig,axis,i,num_partitions=4):
     """
     Creates a windrose plot for a specific week using Matplotlib.
@@ -1030,7 +1033,6 @@ def spagetti_plot(ds,variable,lat,lon):
 
     plt.tight_layout()
     
-
 def get_exceedance_percentage(ds,variable, threshold, comparison='None', dim="number"):
     """
     Returns the percentage of ensemble members (along `dim`) that meet a given condition.
