@@ -593,7 +593,7 @@ def ensemble_mean(ds,dim='number'):
 
 def open_mclimate(daily_all_vars,folder_path=f'{os.getcwd()}/m-climate/',var="T_pr"):
 
-    folder_path="{folder_path}/{var}/"
+    folder_path=f"{folder_path}/{var}/"
     # List all files
     files = os.listdir(folder_path)
     
