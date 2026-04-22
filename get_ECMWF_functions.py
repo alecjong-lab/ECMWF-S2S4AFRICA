@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import cfgrib
+import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import cartopy.crs as ccrs
@@ -982,8 +983,10 @@ def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax=
              
     return contour,lines
 
-def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=None,vmin=None,units=None,change=False,add_contour=None,contourlevels=None,contourcmap=None,contourwidths=None,fontsize=16):
+def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=None,vmin=None,units=None,change=False,add_contour=None,contourlevels=None,contourcmap=None,contourwidths=None,fontsize=16,level=None):
     ds=ds.sel(longitude=slice(lon1,lon2),latitude=slice(lat1,lat2))
+    if level is not None:
+        ds = ds.sel(level=level)
     #take ensemble mean before plotting if needed
     if 'number' in ds.dims:
         ds=ensemble_mean(ds)
@@ -1065,7 +1068,98 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
         cbar2 = fig.colorbar(lines, cax=cax2, orientation='horizontal')
         cbar2.set_label(add_contour.attrs['GRIB_name']+f"[{add_contour.attrs['units']}]")
     return fig
+
+def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,fontsize=15,level=None):
+    ds=ds.sel(longitude=slice(lon1,lon2),latitude=slice(lat1,lat2))
+    if level is not None:
+        ds = ds.sel(level=level)
+
+    # take ensemble mean before plotting if needed
+    if 'number' in ds.dims:
+        ds=ensemble_mean(ds)
+        #if isinstance(add_contour, (xr.DataArray, xr.Dataset)):
+        #    add_contour=ensemble_mean(add_contour)
         
+    ds=lon_convert(ds)
+
+    #if only a single step is selected, make sure rest of code still works
+    if 'step' not in ds.dims and 'step' in ds.coords:
+        ds = ds.expand_dims(step=[ds.step.values])
+    
+    #logic to check if there is only one forcast step or if there are more
+    steps = np.atleast_1d(forecast_timestep)  # Converts single value to an array
+    #logic to check how many columns should be made
+    num_steps = len(steps)
+    ncols = min(4, num_steps)  # Maximum 4 columns
+    nrows = int(np.ceil(num_steps / ncols))  # Compute needed rows
+    #logic to determine aspect ratio of chosen lat lon box and then adjust figsize accordingly
+    lat_min, lat_max = lon1, lon2
+    lon_min, lon_max = lat2, lat1
+
+    #calculate the figure size so that the chosen lat lon area does not change the look of the plot
+    single_width, single_height = compute_figsize_from_extent(
+        lon_min, lon_max, lat_min, lat_max
+    )
+
+    fig_width = single_width * ncols 
+    fig_height = single_height * nrows
+    fig, axes = plt.subplots(nrows, ncols, figsize=(fig_width, fig_height),sharex=True,sharey=True,subplot_kw={'projection': ccrs.PlateCarree()})
+    axes = np.array(axes).reshape(nrows, ncols)  # Ensure axes is 2D
+    axes = axes.flatten()  # Flatten for easy iteration
+
+    speeds = []
+
+    for step in ds["step"]:
+        ds_step = ds.sel(step=step)
+
+        u = ds_step[name_u].values
+        v = ds_step[name_v].values
+
+        speed = np.sqrt(u**2 + v**2)
+        speeds.append(speed)
+
+    vmin = np.nanmin([s.min() for s in speeds])
+    vmax = np.nanmax([s.max() for s in speeds])
+
+    norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+    
+    for i, step in enumerate(np.atleast_1d(forecast_timestep)):
+        ax = axes[i]
+
+        # plotting magic
+        if step == np.atleast_1d(ds.step)[0]:
+            start_time=ds.time
+            end_time=(ds.time+step)
+        else:
+            dt=ds.step.values[1]-ds.step.values[0]
+            start_time=ds.time+step-dt
+            end_time=ds.time+step
+
+        ax.set_title(f"{str(start_time.values)[:16]} until {str(end_time.values)[:16]}", fontsize=int(fontsize*0.8))
+            
+        ds_step = ds.sel(step=step)
+        speed = np.sqrt(ds_step[name_u]**2 + ds_step[name_v]**2)
+
+        gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle='--')
+        gl.top_labels = False
+        gl.right_labels = False
+        ax.coastlines('50m')
+        ax.add_feature(cfeature.BORDERS)
+        ax.set_extent([lon1, lon2, lat1, lat2], ccrs.PlateCarree())
+        q = ax.quiver(ds_step["longitude"], ds_step["latitude"], ds_step[name_u], ds_step[name_v], speed, transform=ccrs.PlateCarree(), norm=norm, cmap="viridis", regrid_shape=20)
+
+    #fig.tight_layout() 
+    for j in range(num_steps, len(axes)):
+        axes[j].set_visible(False) #delete extra empty plots
+
+    #manage the location of the colorbar
+    cbar_ax = fig.add_axes([0.15, -0.04 , 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
+    cbar = fig.colorbar(q, cax=cbar_ax, orientation='horizontal',fraction=10)
+    cbar.set_label(ds[name_u].GRIB_name+f", {ds_step[name_u].attrs.get("units", "")}")
+
+    return fig
+
+
 def spagetti_plot(ds,variable,lat,lon):
     data=ds[variable].sel(latitude=lat,longitude=lon,method='nearest')
     time=data.time+data.step

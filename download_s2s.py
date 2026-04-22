@@ -116,3 +116,87 @@ server.retrieve({
     "type": "cf",
     "target": target_file_cf_other_vars
 })
+
+target_file_cf_instantaneous = f"{path}/ECMWF_s2s_cf_instant_forecast_42days_7N-32E-6S-43E.grib"
+
+server.retrieve({
+    "class": "s2",
+    "dataset": "s2s",
+    "date": date_str,
+    "expver": "prod",
+    "model": "glob",
+    "origin": "ecmf",
+    "levtype" : "sfc",
+    "stream": "enfo",
+    "time": "00:00:00",
+    "area": "7/32/-6/43",
+    "param": "165/166",
+    "step": "0/to/1104/by/6",
+    "type": "cf",
+    "target": target_file_cf_instantaneous
+})
+
+
+target_file_pf_instantaneous = f"{path}/ECMWF_s2s_pf_instant_forecast_42days_7N-32E-6S-43E.grib"
+
+server.retrieve({
+    "class": "s2",
+    "dataset": "s2s",
+    "date": date_str,
+    "expver": "prod",
+    "model": "glob",
+    "origin": "ecmf",
+    "levtype" : "sfc",
+    "stream": "enfo",
+    "number": "1/to/100",
+    "time": "00:00:00",
+    "area": "7/32/-6/43",
+    "param": "165/166",
+    "step": "0/to/1104/by/6",
+    "type": "pf",
+    "target": target_file_pf_instantaneous
+})
+
+
+target_file_cf_levels = f"{path}/ECMWF_s2s_cf_levels_forecast_42days_7N-32E-6S-43E.grib"
+
+server.retrieve({
+    "class": "s2",
+    "dataset": "s2s",
+    "date": date_str,
+    "expver": "prod",
+    "model": "glob",
+    "origin": "ecmf",
+    "levelist" : "500/700",
+    "levtype" : "pl",
+    "stream": "enfo",
+    "time": "00:00:00",
+    "area": "7/32/-6/43",
+    "param": "131/132/135",
+    "step": "0/24/48/72/96/120/144/168/192/216/240/264/288/312/336/360/384/408/432/456/480/504/528/552/576/600/624/648/672/696/720/744/768/792/816/840/864/888/912/936/960/984/1008",
+    "type": "cf",
+    "target": target_file_cf_levels
+})
+
+
+target_file_pf_levels = f"{path}/ECMWF_s2s_pf_levels_forecast_42days_7N-32E-6S-43E.grib"
+
+server.retrieve({
+    "class": "s2",
+    "dataset": "s2s",
+    "date": date_str,
+    "expver": "prod",
+    "model": "glob",
+    "origin": "ecmf",
+    "levelist" : "500/700",
+    "levtype" : "pl",
+    "stream": "enfo",
+    "number": "1/to/100",
+    "time": "00:00:00",
+    "area": "7/32/-6/43",
+    "param": "131/132/135",
+    "step": "0/24/48/72/96/120/144/168/192/216/240/264/288/312/336/360/384/408/432/456/480/504/528/552/576/600/624/648/672/696/720/744/768/792/816/840/864/888/912/936/960/984/1008",
+    "type": "pf",
+    "target": target_file_pf_levels
+})
+

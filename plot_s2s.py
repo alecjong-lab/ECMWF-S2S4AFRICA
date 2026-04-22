@@ -10,21 +10,35 @@ from datetime import datetime, timedelta
 today = datetime.today()
 two_days_earlier = today - timedelta(days=2)
 date_str = two_days_earlier.strftime("%Y-%m-%d")
+prefix = "./"
 
-data_path_pf = f"data/{date_str}/ECMWF_s2s_pf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
-data_path_cf = f"data/{date_str}/ECMWF_s2s_cf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
-filelist_path = f"m-climate/*.nc"
+data_path_pf = f"{prefix}data/{date_str}/ECMWF_s2s_pf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
+data_path_cf = f"{prefix}data/{date_str}/ECMWF_s2s_cf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
+filelist_path = f"{prefix}m-climate/*.nc"
 
 pf=xr.open_dataset(data_path_pf,engine='cfgrib')
 cf=xr.open_dataset(data_path_cf,engine='cfgrib').assign_coords({'number':0})
 
 data=xr.concat([pf,cf],dim='number')
 
-pf_other_var=xr.open_dataset(f"data/{date_str}/ECMWF_s2s_pf_othervars_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
-cf_other_var=xr.open_dataset(f"data/{date_str}/ECMWF_s2s_cf_othervars_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
+pf_other_var=xr.open_dataset(f"{prefix}data/{date_str}/ECMWF_s2s_pf_othervars_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
+cf_other_var=xr.open_dataset(f"{prefix}data/{date_str}/ECMWF_s2s_cf_othervars_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
 
 data_other_var=xr.concat([pf_other_var,cf_other_var],dim='number')
 data_other_var_averaged_week=gef.week_mean(data_other_var)
+
+pf_instant = xr.open_dataset(f"{prefix}data/{date_str}/ECMWF_s2s_pf_instant_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
+cf_instant = xr.open_dataset(f"{prefix}data/{date_str}/ECMWF_s2s_cf_instant_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
+
+data_instant = xr.concat([pf_instant,cf_instant],dim='number')
+data_instant_averaged_week=gef.week_mean(data_instant)
+
+pf_levels = xr.open_dataset(f"{prefix}data/{date_str}/ECMWF_s2s_pf_levels_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
+cf_levels = xr.open_dataset(f"{prefix}data/{date_str}/ECMWF_s2s_cf_levels_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
+
+data_levels = xr.concat([pf_levels,cf_levels],dim='number')
+data_levels = data_levels.rename({"isobaricInhPa":"level"})
+data_levels_averaged_week=gef.week_mean(data_levels)
 
 steps=data.step.values*1e-9/3600
 steps=steps.astype('int')
@@ -38,9 +52,9 @@ data_monthly=data_weekly.isel(step=4)
 data_weekly=gef.acum_to_instant(data_weekly)
 data_dekade=gef.acum_to_instant(data_dekade)
 
-data_weekly.to_netcdf(f'data/{date_str}/data_weekly.nc')
-data_dekade.to_netcdf(f'data/{date_str}/data_dekade.nc')
-data_monthly.to_netcdf(f'data/{date_str}/data_monthly.nc')
+data_weekly.to_netcdf(f'{prefix}data/{date_str}/data_weekly.nc')
+data_dekade.to_netcdf(f'{prefix}data/{date_str}/data_dekade.nc')
+data_monthly.to_netcdf(f'{prefix}data/{date_str}/data_monthly.nc')
 
 bboxes = {
     "Namibia": {"lat1": -15, "lon1": 10, "lat2": -31, "lon2": 27},
@@ -123,6 +137,15 @@ for country in bboxes.keys():
 
         fig=gef.panel_plot_variable(data_other_var_averaged_week,variable='tcw',forecast_timestep=data_other_var_averaged_week.step.values,cmap='YlGnBu',fontsize=fs)
         plt.savefig(f'{weekly_path}/tcw.png',bbox_inches='tight')
+
+        fig=gef.panel_plot_variable(data_levels_averaged_week,variable='w',forecast_timestep=data_levels_averaged_week.step.values,cmap='YlGnBu',fontsize=fs,level=500)
+        plt.savefig(f'{weekly_path}/w_500.png',bbox_inches='tight')
+
+        fig=gef.quiver_plot_variable(data_instant_averaged_week,"u10","v10",data_instant_averaged_week["step"])
+        plt.savefig(f'{weekly_path}/quiver_u10_v10.png',bbox_inches='tight')
+
+        fig=gef.quiver_plot_variable(data_levels_averaged_week,"u","v",data_levels_averaged_week["step"],level=700)
+        plt.savefig(f'{weekly_path}/quiver_u_v_700_hPa.png',bbox_inches='tight')
 
     gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,fontsize=fs)
     plt.savefig(f'{weekly_path}/weekly_change_in_precip.png',bbox_inches='tight')
