@@ -1069,7 +1069,7 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
         cbar2.set_label(add_contour.attrs['GRIB_name']+f"[{add_contour.attrs['units']}]")
     return fig
 
-def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,fontsize=15,level=None):
+def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,fontsize=10,level=None):
     ds=ds.sel(longitude=slice(lon1,lon2),latitude=slice(lat1,lat2))
     if level is not None:
         ds = ds.sel(level=level)
@@ -1155,7 +1155,7 @@ def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,fontsize=15,level=No
     #manage the location of the colorbar
     cbar_ax = fig.add_axes([0.15, -0.04 , 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
     cbar = fig.colorbar(q, cax=cbar_ax, orientation='horizontal',fraction=10)
-    cbar.set_label(ds[name_u].GRIB_name+f", {ds_step[name_u].attrs.get("units", "")}")
+    cbar.set_label(ds[name_u].GRIB_name+" and "+ds[name_v].GRIB_name+f", {ds_step[name_u].attrs.get("units", "")}")
 
     return fig
 

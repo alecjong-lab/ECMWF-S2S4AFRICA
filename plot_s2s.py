@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 today = datetime.today()
 two_days_earlier = today - timedelta(days=2)
-date_str = two_days_earlier.strftime("%Y-%m-%d")
+date_str = "2026-04-05"#two_days_earlier.strftime("%Y-%m-%d")
 prefix = "./"
 
 data_path_pf = f"{prefix}data/{date_str}/ECMWF_s2s_pf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
