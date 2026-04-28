@@ -4,3 +4,4 @@ __pycache__/
 **/ecmwf_api_key.json
 private_data/
 private_plots/
+.vscode/

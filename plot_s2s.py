@@ -9,7 +9,8 @@ from datetime import datetime, timedelta
 
 today = datetime.today()
 two_days_earlier = today - timedelta(days=2)
-date_str = "2026-04-05"#two_days_earlier.strftime("%Y-%m-%d")
+date_str = two_days_earlier.strftime("%Y-%m-%d")
+
 prefix = "./"
 
 data_path_pf = f"{prefix}data/{date_str}/ECMWF_s2s_pf_precip_forecast_weekly-and-dekade_23N-20W-37S-59E.grib"
@@ -66,7 +67,7 @@ bboxes = {
     "Ghana": {"lat1": 12, "lon1": -4, "lat2": 4, "lon2": 2},
     "Senegal": {"lat1": 17, "lon1": -17.5, "lat2": 12, "lon2": -11},
     "Ethiopia": {"lat1": 16, "lon1": 32, "lat2": 2, "lon2": 49},
- }
+}
 
 m_climate_big = gef.open_mclimate(data_weekly)
 
