@@ -25,22 +25,6 @@ data=xr.concat([pf,cf],dim='number')
 pf_other_var=xr.open_dataset(f"{prefix}data/{date_str}/ECMWF_s2s_pf_othervars_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
 cf_other_var=xr.open_dataset(f"{prefix}data/{date_str}/ECMWF_s2s_cf_othervars_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
 
-data_other_var=xr.concat([pf_other_var,cf_other_var],dim='number')
-data_other_var_averaged_week=gef.week_mean(data_other_var)
-
-pf_instant = xr.open_dataset(f"{prefix}data/{date_str}/ECMWF_s2s_pf_instant_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
-cf_instant = xr.open_dataset(f"{prefix}data/{date_str}/ECMWF_s2s_cf_instant_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
-
-data_instant = xr.concat([pf_instant,cf_instant],dim='number')
-data_instant_averaged_week=gef.week_mean(data_instant)
-
-pf_levels = xr.open_dataset(f"{prefix}data/{date_str}/ECMWF_s2s_pf_levels_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
-cf_levels = xr.open_dataset(f"{prefix}data/{date_str}/ECMWF_s2s_cf_levels_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
-
-data_levels = xr.concat([pf_levels,cf_levels],dim='number')
-data_levels = data_levels.rename({"isobaricInhPa":"level"})
-data_levels_averaged_week=gef.week_mean(data_levels)
-
 steps=data.step.values*1e-9/3600
 steps=steps.astype('int')
 dekade = [data.step.values[i] for i in np.where(steps%240==0)[0]]
@@ -56,6 +40,18 @@ data_dekade=gef.acum_to_instant(data_dekade)
 data_weekly.to_netcdf(f'{prefix}data/{date_str}/data_weekly.nc')
 data_dekade.to_netcdf(f'{prefix}data/{date_str}/data_dekade.nc')
 data_monthly.to_netcdf(f'{prefix}data/{date_str}/data_monthly.nc')
+
+dailyvars=gef.open_forecast(date_str,'dailyvars')
+Tminmax=gef.open_forecast(date_str,'Tminmax')
+wind10=gef.open_forecast(date_str,'10wind')
+wind500=gef.open_forecast(date_str,'500wind')
+wind700=gef.open_forecast(date_str,'700wind')
+
+week_dailyvars=gef.week_mean(dailyvars)
+week_6hTminmax=gef.week_mean(gef.day_mean_6h_accum(Tminmax,['mx2t6', 'mn2t6']))
+week_wind10=gef.week_mean(gef.day_mean(wind10))
+week_wind500=gef.week_mean(wind500.assign_coords(step=[stepp + 86400000000000 for stepp in wind500.step.values ])).rename({"isobaricInhPa":"level"})
+week_wind700=gef.week_mean(wind700.assign_coords(step=[stepp + 86400000000000 for stepp in wind500.step.values ])).rename({"isobaricInhPa":"level"})
 
 bboxes = {
     "Namibia": {"lat1": -15, "lon1": 10, "lat2": -31, "lon2": 27},
@@ -94,6 +90,7 @@ for country in bboxes.keys():
 
     m_climate=m_climate_big.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
 
+
     if country=='Madagascar':
         fs=12
     else:
@@ -121,6 +118,9 @@ for country in bboxes.keys():
     fig=gef.panel_plot_variable(ds_to_plot_dekade,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
     plt.savefig(f'{dekade_path}/dekadal_precip.png',bbox_inches='tight')
 
+    gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,fontsize=fs)
+    plt.savefig(f'{weekly_path}/weekly_change_in_precip.png',bbox_inches='tight')
+
     if country=='Kenya':
         exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot_dekade,'tp',20,comparison='greater')
         fig=gef.panel_plot_variable(exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
@@ -130,26 +130,41 @@ for country in bboxes.keys():
         fig=gef.panel_plot_variable(exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
         plt.savefig(f'{dekade_path}/chance_higherthan_25mm.png',bbox_inches='tight')
 
-        fig=gef.panel_plot_variable(gef.convert_to_celcius(data_other_var_averaged_week,'t2m'),variable='t2m',forecast_timestep=data_other_var_averaged_week.step.values,cmap='rainbow',fontsize=fs)
+        #--------------temp-----------------------------------------------------------------------------------------------------------------------------------------------------
+
+        fig=gef.panel_plot_variable(gef.convert_to_celcius(week_dailyvars,'t2m'),variable='t2m',forecast_timestep=week_dailyvars.step.values,cmap='rainbow',fontsize=fs)
         plt.savefig(f'{weekly_path}/t2m.png',bbox_inches='tight')
 
-        fig=gef.panel_plot_variable(data_other_var_averaged_week,variable='cape',forecast_timestep=data_other_var_averaged_week.step.values,cmap='jet',fontsize=fs)
+        vmaxt6h=gef.convert_to_celcius(week_6hTminmax,'mx2t6').mean('number').mx2t6.max()
+        vmint6h=gef.convert_to_celcius(week_6hTminmax,'mn2t6').mean('number').mn2t6.min()
+
+        week_6hTminmax.mx2t6.attrs['GRIB_name']='Weekly mean maximum temperature at 2 metres'
+        week_6hTminmax.mn2t6.attrs['GRIB_name']='Weekly mean minimum temperature at 2 metres'
+
+        fig=gef.panel_plot_variable(gef.convert_to_celcius(week_6hTminmax,'mx2t6'),variable='mx2t6',forecast_timestep=week_6hTminmax.step.values,cmap='rainbow',fontsize=fs,vmax=vmaxt6h,vmin=vmint6h)
+        plt.savefig(f'{weekly_path}/max_temp.png',bbox_inches='tight')
+
+        fig=gef.panel_plot_variable(gef.convert_to_celcius(week_6hTminmax,'mn2t6'),variable='mn2t6',forecast_timestep=week_6hTminmax.step.values,cmap='rainbow',fontsize=fs,vmax=vmaxt6h,vmin=vmint6h)
+        plt.savefig(f'{weekly_path}/min_temp.png',bbox_inches='tight')
+
+        #----------------------------cape--------------------------------------------------------------------------------------------------------------------------------------
+        
+        fig=gef.panel_plot_variable(week_dailyvars,variable='cape',forecast_timestep=week_dailyvars.step.values,cmap='jet',fontsize=fs)
         plt.savefig(f'{weekly_path}/cape.png',bbox_inches='tight')
 
-        fig=gef.panel_plot_variable(data_other_var_averaged_week,variable='tcw',forecast_timestep=data_other_var_averaged_week.step.values,cmap='YlGnBu',fontsize=fs)
+        #------------winds--------------------------------------------------------------------------------------------------------------------------------------------------------
+        fig=gef.panel_plot_variable(week_dailyvars,variable='tcw',forecast_timestep=week_dailyvars.step.values,cmap='YlGnBu',fontsize=fs)
         plt.savefig(f'{weekly_path}/tcw.png',bbox_inches='tight')
 
-        fig=gef.panel_plot_variable(data_levels_averaged_week,variable='w',forecast_timestep=data_levels_averaged_week.step.values,cmap='YlGnBu',fontsize=fs,level=500)
+        fig=gef.panel_plot_variable(week_wind500,variable='w',forecast_timestep=week_wind500.step.values,cmap='seismic',fontsize=fs)
         plt.savefig(f'{weekly_path}/w_500.png',bbox_inches='tight')
-
-        fig=gef.quiver_plot_variable(data_instant_averaged_week,"u10","v10",data_instant_averaged_week["step"])
+        
+        fig=gef.quiver_plot_variable(week_wind10,"u10","v10",week_wind10["step"],cmap='YlGn')
         plt.savefig(f'{weekly_path}/quiver_u10_v10.png',bbox_inches='tight')
 
-        fig=gef.quiver_plot_variable(data_levels_averaged_week,"u","v",data_levels_averaged_week["step"],level=700)
+        fig=gef.quiver_plot_variable(week_wind700,"u","v",week_wind700["step"],cmap='YlGn')
         plt.savefig(f'{weekly_path}/quiver_u_v_700_hPa.png',bbox_inches='tight')
-
-    gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='seismic',change=True,fontsize=fs)
-    plt.savefig(f'{weekly_path}/weekly_change_in_precip.png',bbox_inches='tight')
+        #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     if country!="Senegal":
 

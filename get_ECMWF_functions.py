@@ -38,6 +38,11 @@ lat2=-29.5
 lon1=11
 lon2=29
 
+def open_forecast(date_str,name):
+    pf_daily_var=xr.open_dataset(f"data/{date_str}/ECMWF_s2s_pf_{name}_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
+    cf_daily_var=xr.open_dataset(f"data/{date_str}/ECMWF_s2s_cf_{name}_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
+    return xr.concat([pf_daily_var,cf_daily_var],dim='number')
+
 def rank_upscale_and_align(
     source_da,
     target_da,
@@ -1048,7 +1053,7 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
     fig.tight_layout() 
     cbar_ax = fig.add_axes([0.15, -0.04 , 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
     cbar = fig.colorbar(contour, cax=cbar_ax, orientation='horizontal',fraction=5)
-    cbar.set_label(ds[variable].GRIB_name+f'[{units}]')
+    cbar.set_label(ds[variable].GRIB_name+f' [{units}]')
 
     #manage the location of the colorbar
     if lines!=None:
@@ -1069,7 +1074,7 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
         cbar2.set_label(add_contour.attrs['GRIB_name']+f"[{add_contour.attrs['units']}]")
     return fig
 
-def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,fontsize=10,level=None):
+def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,cmap='virdis',level=None,fontsize=13):
     ds=ds.sel(longitude=slice(lon1,lon2),latitude=slice(lat1,lat2))
     if level is not None:
         ds = ds.sel(level=level)
@@ -1122,7 +1127,7 @@ def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,fontsize=10,level=No
     vmax = np.nanmax([s.max() for s in speeds])
 
     norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
-    
+
     for i, step in enumerate(np.atleast_1d(forecast_timestep)):
         ax = axes[i]
 
@@ -1140,25 +1145,26 @@ def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,fontsize=10,level=No
         ds_step = ds.sel(step=step)
         speed = np.sqrt(ds_step[name_u]**2 + ds_step[name_v]**2)
 
-        gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle='--')
+        gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0, linestyle='--')
         gl.top_labels = False
         gl.right_labels = False
-        ax.coastlines('50m')
+        ax.coastlines()
         ax.add_feature(cfeature.BORDERS)
         ax.set_extent([lon1, lon2, lat1, lat2], ccrs.PlateCarree())
-        q = ax.quiver(ds_step["longitude"], ds_step["latitude"], ds_step[name_u], ds_step[name_v], speed, transform=ccrs.PlateCarree(), norm=norm, cmap="viridis", regrid_shape=20)
+        q=ax.pcolormesh(ds_step["longitude"], ds_step["latitude"],speed,transform=ccrs.PlateCarree(),cmap=cmap)
+        ax.quiver(ds_step["longitude"], ds_step["latitude"], ds_step[name_u], ds_step[name_v], transform=ccrs.PlateCarree(), norm=norm,scale=40,regrid_shape=10)
+
 
     #fig.tight_layout() 
     for j in range(num_steps, len(axes)):
         axes[j].set_visible(False) #delete extra empty plots
 
     #manage the location of the colorbar
-    cbar_ax = fig.add_axes([0.15, -0.04 , 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
+    cbar_ax = fig.add_axes([0.15, 0.05 , 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
     cbar = fig.colorbar(q, cax=cbar_ax, orientation='horizontal',fraction=10)
     cbar.set_label(ds[name_u].GRIB_name+" and "+ds[name_v].GRIB_name+f", {ds_step[name_u].attrs.get("units", "")}")
 
     return fig
-
 
 def spagetti_plot(ds,variable,lat,lon):
     data=ds[variable].sel(latitude=lat,longitude=lon,method='nearest')
@@ -1222,9 +1228,8 @@ def get_exceedance_percentage(ds,variable, threshold, comparison='None', dim="nu
 
     return percentage.to_dataset()  
 
-def chance_to_exceed_mclimate(ds,quantile,m_climate):
+def chance_to_exceed_mclimate(ds,quantile,m_climate,var='tp'):
     hold=[]    
-    var='tp'
     for i,forecast_timestep in enumerate(ds.step.values):
         m_climate_interp = m_climate.isel(time=i).isel(quantile=quantile)
         comparison = ds[var].sel(step=forecast_timestep)>m_climate_interp[var]
@@ -1257,14 +1262,13 @@ def anomaly_from_mclimate(ds,quantile,m_climate,var='tp'):
     anom_clim=anom_clim.assign_coords(time=ds.time)
     return anom_clim
 
-def tercile_from_mclimate(ds,var,category_choice,m_climate):
-    ds = ds.sel(longitude=m_climate.longitude, method="nearest")    
+def tercile_from_mclimate(ds,category_choice,m_climate,var='tp'):
     hold=[]
 
     for i,forecast_timestep in enumerate(ds.step.values):
         
-        lowerbound = m_climate.isel(time=i).isel(quantile=33).tp
-        higherbound = m_climate.isel(time=i).isel(quantile=67).tp
+        lowerbound = m_climate.isel(time=i).isel(quantile=33)[var]
+        higherbound = m_climate.isel(time=i).isel(quantile=67)[var]
     
         forecast=ds[var].sel(step=forecast_timestep)
     
@@ -1294,12 +1298,12 @@ def tercile_from_mclimate(ds,var,category_choice,m_climate):
     tercile_clim=tercile_clim.assign_coords(time=ds.time)
     return tercile_clim
 
-def meteogram_double(ds,m_climate,lat,lon):
+def meteogram_double(ds,m_climate,lat,lon,cityname,var='tp'):
     wh=ds.sel(longitude=lon,latitude=lat,method="nearest")
-    
-    data2=m_climate.sel(longitude=lon,latitude=lat,method="nearest").tp.isel(time=slice(0,len(wh.step.values))).values.T
-    data = wh.tp.values
-    # Compute ensemble mean
+    m_climate=m_climate.sortby('latitude',ascending=False)
+    data2=m_climate.sel(longitude=lon,latitude=lat,method="nearest")[var].isel(time=slice(0,len(wh.step.values))).values.T
+    data = wh[var].values
+    # Compute ensemble meanSS
     ensemble_mean = np.mean(data, axis=0)
     if len(wh.step.values)<=6:
         time_steps = np.arange(0,len(wh.step.values))
@@ -1381,7 +1385,7 @@ def meteogram_double(ds,m_climate,lat,lon):
            capprops=dict(color="black", linewidth=1),label='climatology')
     # Plot ensemble mean
 
-    climate=m_climate.sel(longitude=lon,latitude=lat,method="nearest").tp
+    climate=m_climate.sel(longitude=lon,latitude=lat,method="nearest")[var]
     climate=climate.isel(time=slice(0,len(wh.step.values)))
     plt.fill_between(time_steps, climate.isel(quantile=10), climate.isel(quantile=25), color='gray', alpha=0.3)  # 10th to 25th
     plt.fill_between(time_steps, climate.isel(quantile=50), climate.isel(quantile=75), color='gray', alpha=0.5)  # 25th to 50th
@@ -1393,7 +1397,7 @@ def meteogram_double(ds,m_climate,lat,lon):
     ax.set_xticklabels([f"T+{t+1} week" for t in time_steps])
     ax.set_xlabel("Forecast Time Step")
     ax.set_ylabel("Precipitation (mm/day)")
-    ax.set_title(f"Meteogram: Box-and-Whisker Plot compared to climatology for lat: {m_climate.sel(longitude=lon,latitude=lat,method='nearest').tp.isel(time=slice(0,len(wh.step.values))).latitude.values} lon: {m_climate.sel(longitude=lon,latitude=lat,method='nearest').tp.isel(time=slice(0,len(wh.step.values))).longitude.values}");
+    ax.set_title(f"Meteogram for gridbox closest to {cityname} ({m_climate.sel(longitude=lon,latitude=lat,method='nearest')[var].isel(time=slice(0,len(wh.step.values))).latitude.values} lon: {m_climate.sel(longitude=lon,latitude=lat,method='nearest')[var].isel(time=slice(0,len(wh.step.values))).longitude.values})");
     ax.grid(True, linestyle="--", alpha=0.6)
     ax.legend()
     return ax
