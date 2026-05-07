@@ -1146,16 +1146,24 @@ def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,fontsize=10,level=No
         ax.coastlines('50m')
         ax.add_feature(cfeature.BORDERS)
         ax.set_extent([lon1, lon2, lat1, lat2], ccrs.PlateCarree())
-        q = ax.quiver(ds_step["longitude"], ds_step["latitude"], ds_step[name_u], ds_step[name_v], speed, transform=ccrs.PlateCarree(), norm=norm, cmap="viridis", regrid_shape=20)
+        q = ax.quiver(ds_step["longitude"], ds_step["latitude"], ds_step[name_u], ds_step[name_v], transform=ccrs.PlateCarree(), norm=norm, regrid_shape=20) #speed, cmap="viridis",
 
     #fig.tight_layout() 
     for j in range(num_steps, len(axes)):
         axes[j].set_visible(False) #delete extra empty plots
 
+    # add a quiverkey
+    ax_key = fig.add_axes([0.15, -0.04 , 0.7, 0.01+ 0.02/nrows])
+    ax_key.axis("off")
+    qk = matplotlib.quiver.QuiverKey(q,X=-.2,Y=-.3,U=5,label='5 m/s',coordinates='axes')
+    qk2 = matplotlib.quiver.QuiverKey(q,X=0,Y=-.3,U=10,label='10 m/s',coordinates='axes')
+    ax_key.add_artist(qk)
+    ax_key.add_artist(qk2)
+
     #manage the location of the colorbar
-    cbar_ax = fig.add_axes([0.15, -0.04 , 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
-    cbar = fig.colorbar(q, cax=cbar_ax, orientation='horizontal',fraction=10)
-    cbar.set_label(ds[name_u].GRIB_name+" and "+ds[name_v].GRIB_name+f", {ds_step[name_u].attrs.get("units", "")}")
+    #cbar_ax = fig.add_axes([0.15, -0.04 , 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
+    #cbar = fig.colorbar(q, cax=cbar_ax, orientation='horizontal',fraction=10)
+    #cbar.set_label(ds[name_u].GRIB_name+" and "+ds[name_v].GRIB_name+f", {ds_step[name_u].attrs.get("units", "")}")
 
     return fig
 
