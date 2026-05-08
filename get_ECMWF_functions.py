@@ -38,6 +38,17 @@ lat2=-29.5
 lon1=11
 lon2=29
 
+def windspeed(ds,u_name,v_name):
+    """
+    function to calculate windspeed from and add to a xarray dataset containing u and v components
+    """
+    ds_speed=xr.merge([ds,np.sqrt(ds[u_name]**2+ds[v_name]**2).to_dataset(name='speed')])
+    for wind in [u_name,v_name]:
+        ds_speed[wind].attrs=ds[wind].attrs
+    ds_speed['speed'].attrs=ds[wind].attrs
+    ds_speed.speed.attrs['GRIB_name']='wind speed'
+    return ds_speed
+
 def open_forecast(date_str,name):
     pf_daily_var=xr.open_dataset(f"data/{date_str}/ECMWF_s2s_pf_{name}_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
     cf_daily_var=xr.open_dataset(f"data/{date_str}/ECMWF_s2s_cf_{name}_forecast_42days_7N-32E-6S-43E.grib",engine='cfgrib')
@@ -320,22 +331,53 @@ def acum_to_instant(data):
     return diff_data
 
 def day_mean_6h_accum(temp_data,variable):
-    #function to calculate the day mean of 6 hour temperature variables
-    if int(len(np.atleast_1d(temp_data.step.values))/4)>1: 
-        arrr=[]
-        for i in range(int(len(temp_data.step)/4)):
-            brudi=temp_data[variable].isel(step=slice(0+i*4,4*(i+1))).max(dim='step')
-            brudi=brudi.assign_coords(step=temp_data.isel(step=4*(i+1)-1).step)
-            arrr.append(brudi)
-        temp_day=xr.concat(arrr,dim='step')
-        if len(variable)>1:
-            for i in variable:
-                temp_day[i].attrs=temp_data[i].attrs.copy()
+    #function to calculate the day maximmum or mimimum of 6 hour temperature variables
+    if 'mx2t6' in temp_data.keys():
+        if int(len(np.atleast_1d(temp_data.step.values))/4)>1: 
+            arrr=[]
+            for i in range(int(len(temp_data.step)/4)):
+                brudi=temp_data[variable].isel(step=slice(0+i*4,4*(i+1))).max(dim='step')
+                brudi=brudi.assign_coords(step=temp_data.isel(step=4*(i+1)-1).step)
+                arrr.append(brudi)
+            temp_day_max=xr.concat(arrr,dim='step')
+            if len(variable)>1:
+                for i in variable:
+                    temp_day_max[i].attrs=temp_data[i].attrs.copy()
+            else:
+                temp_day_max.attrs=temp_data[variable].attrs.copy()
         else:
-            temp_day.attrs=temp_data[variable].attrs.copy()
+            raise ValueError(f'⚠️The dataset contains less than 1 day of data⚠️')
+        
+    if 'mn2t6' in temp_data.keys():
+        if int(len(np.atleast_1d(temp_data.step.values))/4)>1: 
+            arrr=[]
+            for i in range(int(len(temp_data.step)/4)):
+                brudi=temp_data[variable].isel(step=slice(0+i*4,4*(i+1))).min(dim='step')
+                brudi=brudi.assign_coords(step=temp_data.isel(step=4*(i+1)-1).step)
+                arrr.append(brudi)
+            temp_day_min=xr.concat(arrr,dim='step')
+            if len(variable)>1:
+                for i in variable:
+                    temp_day_min[i].attrs=temp_data[i].attrs.copy()
+            else:
+                temp_day_min.attrs=temp_data[variable].attrs.copy()
+        else:
+            raise ValueError(f'⚠️The dataset contains less than 1 day of data⚠️')
+        
+    has_max = 'mx2t6' in temp_data
+    has_min = 'mn2t6' in temp_data
+
+    if has_max and has_min:
+        temp_day = xr.merge([temp_day_max.mx2t6,
+                            temp_day_min.mn2t6])
         return temp_day
-    else:
-        raise ValueError(f'⚠️The dataset contains less than 1 day of data⚠️')
+
+    elif has_max:
+        return temp_day_max.mx2t6.to_dataset()
+
+    elif has_min:
+        return temp_day_min.mn2t6.to_dataset()
+
         
 def week_mean(ds):
     #"calculate weekly mean"
@@ -1074,7 +1116,7 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
         cbar2.set_label(add_contour.attrs['GRIB_name']+f"[{add_contour.attrs['units']}]")
     return fig
 
-def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,cmap='virdis',level=None,fontsize=13):
+def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,cmap='virdis',level=None,fontsize=13,scale=40):
     ds=ds.sel(longitude=slice(lon1,lon2),latitude=slice(lat1,lat2))
     if level is not None:
         ds = ds.sel(level=level)
@@ -1112,22 +1154,18 @@ def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,cmap='virdis',level=
     axes = np.array(axes).reshape(nrows, ncols)  # Ensure axes is 2D
     axes = axes.flatten()  # Flatten for easy iteration
 
-    speeds = []
-
-    for step in ds["step"]:
-        ds_step = ds.sel(step=step)
-
-        u = ds_step[name_u].values
-        v = ds_step[name_v].values
-
-        speed = np.sqrt(u**2 + v**2)
-        speeds.append(speed)
-
-    vmin = np.nanmin([s.min() for s in speeds])
-    vmax = np.nanmax([s.max() for s in speeds])
+    speeds=ds.speed
+    vmax=speeds.max()
+    vmin=speeds.min()
 
     norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
 
+    if vmax>0 and vmin<0:
+        ranges=[np.abs(vmax),np.abs(vmin)]
+        limit_index=np.argmax(ranges)
+        vmax=ranges[limit_index]
+        vmin=-ranges[limit_index]
+            
     for i, step in enumerate(np.atleast_1d(forecast_timestep)):
         ax = axes[i]
 
@@ -1143,7 +1181,7 @@ def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,cmap='virdis',level=
         ax.set_title(f"{str(start_time.values)[:16]} until {str(end_time.values)[:16]}", fontsize=int(fontsize*0.8))
             
         ds_step = ds.sel(step=step)
-        speed = np.sqrt(ds_step[name_u]**2 + ds_step[name_v]**2)
+        speed = speeds.sel(step=step)
 
         gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0, linestyle='--')
         gl.top_labels = False
@@ -1151,18 +1189,45 @@ def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,cmap='virdis',level=
         ax.coastlines()
         ax.add_feature(cfeature.BORDERS)
         ax.set_extent([lon1, lon2, lat1, lat2], ccrs.PlateCarree())
-        q=ax.pcolormesh(ds_step["longitude"], ds_step["latitude"],speed,transform=ccrs.PlateCarree(),cmap=cmap)
-        ax.quiver(ds_step["longitude"], ds_step["latitude"], ds_step[name_u], ds_step[name_v], transform=ccrs.PlateCarree(), norm=norm,scale=40,regrid_shape=10)
-
+        q=ax.pcolormesh(ds_step["longitude"], ds_step["latitude"],speed,transform=ccrs.PlateCarree(),cmap=cmap,vmin=vmin,vmax=vmax)
+        quiv=ax.quiver(ds_step["longitude"], ds_step["latitude"], ds_step[name_u], ds_step[name_v], transform=ccrs.PlateCarree(), norm=norm,scale=scale,regrid_shape=10)
 
     #fig.tight_layout() 
     for j in range(num_steps, len(axes)):
         axes[j].set_visible(False) #delete extra empty plots
 
+    last_ax = fig.axes[num_steps-1]  # or whichever subplot you want to align with
+    pos = last_ax.get_position()  # returns Bbox in figure coordinates
+
+    # Place ax_key just to the right of it
+    pad = 0.01  # gap between subplot and key
+    key_width = 0.08
+
+    ax_key = fig.add_axes([
+        pos.x1 + pad,           # left edge: just right of last subplot
+        pos.y0,                 # bottom: aligned with last subplot
+        key_width,              # width
+        pos.height * 0.3        # height: fraction of subplot height
+    ])
+
+    ax_key.axis("off")
+
+    if scale==40:
+        qk  = matplotlib.quiver.QuiverKey(quiv, X=1.15, Y=0.55, U=5,  label='5 m/s',  coordinates='axes', labelpos='E')
+        qk2 = matplotlib.quiver.QuiverKey(quiv, X=1.27, Y=0.45, U=10, label='10 m/s', coordinates='axes', labelpos='E')
+    else:
+        qk  = matplotlib.quiver.QuiverKey(quiv, X=1.40, Y=0.55, U=5,  label='5 m/s',  coordinates='axes', labelpos='E')
+        qk2 = matplotlib.quiver.QuiverKey(quiv, X=1.52, Y=0.45, U=10, label='10 m/s', coordinates='axes', labelpos='E')
+    ax_key.add_artist(qk)
+    ax_key.add_artist(qk2)
+
     #manage the location of the colorbar
     cbar_ax = fig.add_axes([0.15, 0.05 , 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
     cbar = fig.colorbar(q, cax=cbar_ax, orientation='horizontal',fraction=10)
-    cbar.set_label(ds[name_u].GRIB_name+" and "+ds[name_v].GRIB_name+f", {ds_step[name_u].attrs.get("units", "")}")
+    title="Wind speed (m s**1)"
+    if 'Anomaly' in ds[name_v].GRIB_name:
+        title='Wind speed anomaly (m s**1)'
+    cbar.set_label(title)
 
     return fig
 
@@ -1300,24 +1365,19 @@ def tercile_from_mclimate(ds,category_choice,m_climate,var='tp'):
 
 def meteogram_double(ds,m_climate,lat,lon,cityname,var='tp'):
     wh=ds.sel(longitude=lon,latitude=lat,method="nearest")
-    m_climate=m_climate.sortby('latitude',ascending=False)
-    data2=m_climate.sel(longitude=lon,latitude=lat,method="nearest")[var].isel(time=slice(0,len(wh.step.values))).values.T
-    data = wh[var].values
+    data2=m_climate.sel(longitude=lon,latitude=lat,method="nearest")[var].isel(time=slice(0,len(wh.step.values)))
+    data = wh[var]
     # Compute ensemble meanSS
-    ensemble_mean = np.mean(data, axis=0)
-    if len(wh.step.values)<=6:
-        time_steps = np.arange(0,len(wh.step.values))
-    else:
-        time_steps = np.arange(0,6)
-        ensemble_mean=ensemble_mean[0:6]
+    time_steps = np.arange(0,len(wh.step.values))
 
     # Transpose the data to get a list of arrays for each time step
-    data_list = [data[:, i] for i in range(len(time_steps))]  # Each time step has an array
+    data_list = [data.isel(step=i) for i in range(len(time_steps))]  # Each time step has an array
+    climate_list= [data2.isel(time=i) for i in range(len(time_steps))]
     
     # Create the figure
     fig, ax = plt.subplots(figsize=(10, 5))
-
-    # Compute custom percentiles
+    #create innner boxes forecast
+    # # Compute custom percentiles
     def custom_box_stats(values):
         """Returns a dictionary with ECMWF-style boxplot percentiles."""
         return {
@@ -1329,7 +1389,7 @@ def meteogram_double(ds,m_climate,lat,lon,cityname,var='tp'):
             "fliers": []  # No outliers
         }
         # Create boxplot statistics for each time step
-    box_stats = [custom_box_stats(data[:, i]) for i in range(len(time_steps))]
+    box_stats = [custom_box_stats(data_list[i]) for i in range(len(time_steps))]
 
     # Custom box plot using ECMWF-style percentiles
     adjusted_positions = np.arange(len(time_steps)) - 0.2
@@ -1339,8 +1399,9 @@ def meteogram_double(ds,m_climate,lat,lon,cityname,var='tp'):
            whiskerprops=dict(color="black", linewidth=1),  # Whiskers
            capprops=dict(color="gray", linewidth=1,alpha=0))  # Caps
 
-        # Create boxplot statistics for each time step
-    box_stats = [custom_box_stats(data2[:, i]) for i in range(len(time_steps))]
+    #create innner boxes climate
+
+    box_stats = [custom_box_stats(climate_list[i]) for i in range(len(time_steps))]
 
     # Custom box plot using ECMWF-style percentiles
     adjusted_positions = np.arange(len(time_steps)) + 0.2
@@ -1350,6 +1411,8 @@ def meteogram_double(ds,m_climate,lat,lon,cityname,var='tp'):
            whiskerprops=dict(color="black", linewidth=1),  # Whiskers
            capprops=dict(color="gray", linewidth=1,alpha=0))  # Caps
     
+    #create outer boxes forecast
+
     # Compute custom percentiles
     def custom_box_stats(values):
         """Returns a dictionary with ECMWF-style boxplot percentiles."""
@@ -1363,7 +1426,8 @@ def meteogram_double(ds,m_climate,lat,lon,cityname,var='tp'):
         }
     
     # Create boxplot statistics for each time step
-    box_stats = [custom_box_stats(data[:, i]) for i in range(len(time_steps))]
+    box_stats = [custom_box_stats(data_list[i]) for i in range(len(time_steps))]
+
 
     adjusted_positions = np.arange(len(time_steps)) - 0.2
     #Custom box plot using ECMWF-style percentiles
@@ -1373,8 +1437,9 @@ def meteogram_double(ds,m_climate,lat,lon,cityname,var='tp'):
            whiskerprops=dict(color="gray", linewidth=2),  # Whiskers
            capprops=dict(color="black", linewidth=1),label='forecast')
 
-      # Create boxplot statistics for each time step
-    box_stats = [custom_box_stats(data2[:, i]) for i in range(len(time_steps))]
+    #create outer boxes climate
+
+    box_stats = [custom_box_stats(climate_list[i]) for i in range(len(time_steps))]
 
     adjusted_positions = np.arange(len(time_steps)) + 0.2
     #Custom box plot using ECMWF-style percentiles
@@ -1383,8 +1448,8 @@ def meteogram_double(ds,m_climate,lat,lon,cityname,var='tp'):
            medianprops=dict(color="black", linewidth=1.5),  # Median line
            whiskerprops=dict(color="gray", linewidth=2),  # Whiskers
            capprops=dict(color="black", linewidth=1),label='climatology')
-    # Plot ensemble mean
 
+    #plot climatology as shading
     climate=m_climate.sel(longitude=lon,latitude=lat,method="nearest")[var]
     climate=climate.isel(time=slice(0,len(wh.step.values)))
     plt.fill_between(time_steps, climate.isel(quantile=10), climate.isel(quantile=25), color='gray', alpha=0.3)  # 10th to 25th
@@ -1396,8 +1461,81 @@ def meteogram_double(ds,m_climate,lat,lon,cityname,var='tp'):
     ax.set_xticks(time_steps)
     ax.set_xticklabels([f"T+{t+1} week" for t in time_steps])
     ax.set_xlabel("Forecast Time Step")
-    ax.set_ylabel("Precipitation (mm/day)")
-    ax.set_title(f"Meteogram for gridbox closest to {cityname} ({m_climate.sel(longitude=lon,latitude=lat,method='nearest')[var].isel(time=slice(0,len(wh.step.values))).latitude.values} lon: {m_climate.sel(longitude=lon,latitude=lat,method='nearest')[var].isel(time=slice(0,len(wh.step.values))).longitude.values})");
+    ax.set_ylabel(ds[var].GRIB_name+f' ({ds[var].units})')
+    ax.set_title(f"Meteogram for gridcell closest to {cityname} (lat:{m_climate.sel(longitude=lon,latitude=lat,method='nearest')[var].isel(time=slice(0,len(wh.step.values))).latitude.values} lon: {m_climate.sel(longitude=lon,latitude=lat,method='nearest')[var].isel(time=slice(0,len(wh.step.values))).longitude.values})");
     ax.grid(True, linestyle="--", alpha=0.6)
     ax.legend()
     return ax
+
+def ensemble_plots(ds_to_plot,m_climate,var,save_path,country,fontsize,major_cities,quantiles=[75,50,25]):
+    os.makedirs(save_path, exist_ok=True)
+    for quantile in quantiles:
+        chance_to_exceed=chance_to_exceed_mclimate(ds_to_plot,quantile=quantile,m_climate=m_climate,var=var)
+        panel_plot_variable(chance_to_exceed,var,chance_to_exceed.step.values,cmap='Blues',fontsize=fontsize)
+        plt.savefig(f'{save_path}/{quantile}th_percentile_exedance_precip.png',bbox_inches='tight')
+        plt.close()
+
+        if 'temperature' in ds_to_plot[var].long_name and 'dew' not in ds_to_plot[var].long_name:
+            cmap='RdBu_r'
+        else:
+            cmap='RdBu'
+            
+        anom_clim=anomaly_from_mclimate(ds_to_plot,quantile=quantile,m_climate=m_climate,var=var)
+        if float(anom_clim[var].min().values)>0:
+            vmin=-float(anom_clim[var].max().values)
+        else:
+            vmin=None
+        if float(anom_clim[var].max().values)<0:
+            vmax=-float(anom_clim[var].min().values)
+        else:
+            vmax=None
+            
+        panel_plot_variable(anom_clim,var,anom_clim.step.values,cmap=cmap,fontsize=fontsize,vmax=vmax,vmin=vmin)
+        plt.savefig(f'{save_path}/anomaly_from_{quantile}th.png',bbox_inches='tight')
+        plt.close()
+
+    tercil_cats=['near-normal','below-normal','above-normal']
+    
+    for cat in tercil_cats:
+        tercile_clim=tercile_from_mclimate(ds_to_plot,category_choice=cat,m_climate=m_climate,var=var)
+        panel_plot_variable(tercile_clim,var,tercile_clim.step.values,cmap='rainbow',fontsize=fontsize)
+        plt.savefig(f'{save_path}/chance_of_{cat}.png',bbox_inches='tight')
+        plt.close()
+    
+    for i in range(2):
+        latf,lonf=major_cities[country][i][0],major_cities[country][i][1]
+        meteogram_double(ds_to_plot,m_climate,lat=latf,lon=lonf,var=var,cityname=major_cities[country][2][i])
+        plt.savefig(f'{save_path}/meteogram_{major_cities[country][2][i]}.png',bbox_inches='tight')
+        plt.close()
+
+def ensemble_plots_quiver(ds_to_plot,m_climate,var,u_name,v_name,save_path,country,fontsize,major_cities,quantiles=[75,50,25]):
+    os.makedirs(save_path, exist_ok=True)
+    for quantile in quantiles:
+        chance_to_exceed=chance_to_exceed_mclimate(ds_to_plot,quantile=quantile,m_climate=m_climate,var=var)
+        panel_plot_variable(chance_to_exceed,var,chance_to_exceed.step.values,cmap='Blues',fontsize=fontsize)
+        plt.savefig(f'{save_path}/{quantile}th_percentile_exedance_{var}.png',bbox_inches='tight')
+        plt.close()
+
+        hold=[]
+        for wind in [u_name,v_name,'speed']:
+            hold.append(anomaly_from_mclimate(ds_to_plot,quantile=quantile,m_climate=m_climate,var=wind))
+        hold[-1]=hold[-1]*np.nan
+        anom=xr.merge(hold)
+        
+        fig=quiver_plot_variable(anom,u_name,v_name,ds_to_plot["step"],cmap='PiYG',scale=20,fontsize=fontsize)
+        plt.savefig(f'{save_path}/anomaly_from_{quantile}th.png',bbox_inches='tight')
+        plt.close()
+
+    tercil_cats=['near-normal','below-normal','above-normal']
+    
+    for cat in tercil_cats:
+        tercile_clim=tercile_from_mclimate(ds_to_plot,category_choice=cat,m_climate=m_climate,var=var)
+        panel_plot_variable(tercile_clim,var,tercile_clim.step.values,cmap='rainbow',fontsize=fontsize)
+        plt.savefig(f'{save_path}/chance_of_{cat}_{var}.png',bbox_inches='tight')
+        plt.close()
+    
+    for i in range(2):
+        latf,lonf=major_cities[country][i][0],major_cities[country][i][1]
+        meteogram_double(ds_to_plot,m_climate,lat=latf,lon=lonf,var=var,cityname=major_cities[country][2][i])
+        plt.savefig(f'{save_path}/meteogram_{major_cities[country][2][i]}_{var}.png',bbox_inches='tight')
+        plt.close()
