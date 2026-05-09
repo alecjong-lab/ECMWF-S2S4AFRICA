@@ -146,6 +146,13 @@ for country in bboxes.keys():
                 ds_to_plot_var=week_dailyvars
                 mclim_var=mclim
 
+            ds_to_plot_var=ds_to_plot_var.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
+            gef.ensemble_plots(ds_to_plot=ds_to_plot_var,m_climate=mclim_var,var=var,save_path=save_path,country='Kenya',fontsize=fs,major_cities=major_cities)
+
+            fig=gef.panel_plot_variable(ds_to_plot_var,variable=var,forecast_timestep=ds_to_plot_var.step.values,cmap=cmaps[i],fontsize=fs)
+            plt.savefig(f'{save_path}/{var}.png',bbox_inches='tight')
+            plt.close()
+
         ds_to_plot_var=ds_to_plot_var.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
         gef.ensemble_plots(ds_to_plot=ds_to_plot_var,m_climate=mclim_var,var=var,save_path=save_path,country='Kenya',fontsize=fs,major_cities=major_cities)
         #------------winds 500hPa--------------------------------------------------------------------------------------------------------------------------------------------------------
