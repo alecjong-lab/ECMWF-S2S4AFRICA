@@ -1,0 +1,60 @@
+name: Move old data to drive
+
+permissions:
+  contents: write
+
+on:
+  # schedule:
+  #   - cron: "16 00 * * *" # every day at 00:16 UTC
+  workflow_dispatch:
+
+jobs:
+  movefiles:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install rclone
+        run: curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+
+      - name: Move old data to Google Drive
+        run: |
+          # Get cutoff date (12 days ago)
+          CUTOFF=$(date -d "1 days ago" +%Y-%m-%d)
+          echo "Moving data older than $CUTOFF"
+
+          # Process Data/date/files
+          for date_dir in data/*/; do
+            date=$(basename "$date_dir")
+            if [[ "$date" < "$CUTOFF" ]]; then
+              echo "Moving $date_dir"
+              rclone copy "$date_dir" "gdrive:S2S_data/data/$date/" --progress
+              rm -rf "$date_dir"
+            fi
+          done
+
+          # Process plots/country/date/files
+          for country_dir in plots/*/; do
+            for date_dir in "$country_dir"*/; do
+              date=$(basename "$date_dir")
+              if [[ "$date" < "$CUTOFF" ]]; then
+                echo "Moving $date_dir"
+                rclone copy "$date_dir" "gdrive:S2S_data/plots/$(basename $country_dir)/$date/" --progress
+                rm -rf "$date_dir"
+              fi
+            done
+          done
+
+      - name: Commit removed files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "chore: move data older than 12 days to Drive"
+          git push

@@ -1,0 +1,18 @@
+ecmwf-api-client
+numpy
+xarray
+matplotlib
+cartopy
+cfgrib
+pandas
+netCDF4
+scipy
+bottleneck
+geopandas
+rioxarray
+ipython
+sheerwater==0.2.10
+python-dateutil
+scikit-spatial
+shapely
+tahmo @ git+https://github.com/rhiza-research/tahmo-api
