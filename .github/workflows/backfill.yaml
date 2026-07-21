@@ -1,0 +1,91 @@
+name: Backfill Artifact Index (one-time, no GCP auth needed)
+
+# Manually triggered. Lists bucket contents via the public JSON API (works
+# because both buckets have public read access) so no GCP credentials are
+# needed for this workflow — it only writes back to this repo.
+on:
+  workflow_dispatch:
+    inputs:
+      top_level_max:
+        description: "Max entries to keep in each top-level ARTIFACTS.md"
+        default: "30"
+        required: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: List objects in africa-forecasting-data (public API, paginated)
+        run: |
+          bucket="africa-forecasting-data"
+          page_token=""
+          > africa_uploaded_files.txt
+          while : ; do
+            url="https://storage.googleapis.com/storage/v1/b/${bucket}/o?maxResults=1000"
+            if [ -n "$page_token" ]; then
+              url="${url}&pageToken=${page_token}"
+            fi
+            response=$(curl -s "$url")
+            echo "$response" | jq -r '.items[]?.name' >> africa_uploaded_files.txt
+            page_token=$(echo "$response" | jq -r '.nextPageToken // empty')
+            if [ -z "$page_token" ]; then
+              break
+            fi
+          done
+          echo "Found $(wc -l < africa_uploaded_files.txt) objects in ${bucket}"
+
+      - name: List objects in kenya-forecasting-data (public API, paginated)
+        run: |
+          bucket="kenya-forecasting-data"
+          page_token=""
+          > kenya_uploaded_files.txt
+          while : ; do
+            url="https://storage.googleapis.com/storage/v1/b/${bucket}/o?maxResults=1000"
+            if [ -n "$page_token" ]; then
+              url="${url}&pageToken=${page_token}"
+            fi
+            response=$(curl -s "$url")
+            echo "$response" | jq -r '.items[]?.name' >> kenya_uploaded_files.txt
+            page_token=$(echo "$response" | jq -r '.nextPageToken // empty')
+            if [ -z "$page_token" ]; then
+              break
+            fi
+          done
+          echo "Found $(wc -l < kenya_uploaded_files.txt) objects in ${bucket}"
+
+      - name: Generate index for africa-forecasting-data
+        run: |
+          python generate_artifact_index.py \
+            --bucket africa-forecasting-data \
+            --repo-root . \
+            --uploaded-list africa_uploaded_files.txt \
+            --top-level-file ARTIFACTS.md \
+            --top-level-max "${{ inputs.top_level_max }}"
+
+      - name: Generate index for kenya-forecasting-data
+        run: |
+          python generate_artifact_index.py \
+            --bucket kenya-forecasting-data \
+            --repo-root . \
+            --uploaded-list kenya_uploaded_files.txt \
+            --top-level-file KENYA_ARTIFACTS.md \
+            --top-level-max "${{ inputs.top_level_max }}"
+
+      - name: Show what will be committed
+        run: |
+          git status
+          git diff --stat
+
+      - name: Commit index files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- '*/index.md' ARTIFACTS.md KENYA_ARTIFACTS.md
+          git commit -m "Backfill artifact index for existing bucket contents" || echo "Nothing to commit"
+          git push
