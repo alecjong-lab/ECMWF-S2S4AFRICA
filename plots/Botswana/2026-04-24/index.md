@@ -1,14 +1,20 @@
 # Botswana — 2026-04-24
 
-## dekadal
+## Dekadal
+
+### Precipitation
 
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-04-24/dekadal/dekadal_precip.png)
 
-## monthly
+## Monthly
+
+### Precipitation
 
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-04-24/monthly/monthly_precip.png)
 
-## weekly
+## Other
+
+### weekly
 
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-04-24/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-04-24/weekly/50th_percentile_exedance_precip.png)

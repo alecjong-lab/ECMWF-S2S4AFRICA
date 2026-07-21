@@ -1,14 +1,20 @@
 # Ethiopia — 2026-05-21
 
-## dekadal
+## Dekadal
+
+### Precipitation
 
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-21/dekadal/dekadal_precip.png)
 
-## monthly
+## Monthly
+
+### Precipitation
 
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-21/monthly/monthly_precip.png)
 
-## weekly
+## Other
+
+### weekly
 
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-21/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-21/weekly/50th_percentile_exedance_precip.png)

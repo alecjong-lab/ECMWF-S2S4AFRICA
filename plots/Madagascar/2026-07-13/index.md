@@ -1,14 +1,20 @@
 # Madagascar — 2026-07-13
 
-## dekadal
+## Dekadal
+
+### Precipitation
 
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-07-13/dekadal/dekadal_precip.png)
 
-## monthly
+## Monthly
+
+### Precipitation
 
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-07-13/monthly/monthly_precip.png)
 
-## weekly
+## Other
+
+### weekly
 
 - [25th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-07-13/weekly/25th_percentile_exedance.png)
 - [50th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-07-13/weekly/50th_percentile_exedance.png)
