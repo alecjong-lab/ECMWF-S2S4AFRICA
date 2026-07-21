@@ -1,20 +1,8 @@
 # Namibia — 2026-01-01
 
-## Dekadal
+## Weekly
 
 ### Precipitation
-
-- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-01-01/dekadal/dekadal_precip.png)
-
-## Monthly
-
-### Precipitation
-
-- [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-01-01/monthly/monthly_precip.png)
-
-## Other
-
-### weekly
 
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-01-01/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-01-01/weekly/50th_percentile_exedance_precip.png)
@@ -29,3 +17,15 @@
 - [meteogram_Windhoek.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-01-01/weekly/meteogram_Windhoek.png)
 - [weekly_change_in_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-01-01/weekly/weekly_change_in_precip.png)
 - [weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-01-01/weekly/weekly_precip.png)
+
+## Dekadal
+
+### Precipitation
+
+- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-01-01/dekadal/dekadal_precip.png)
+
+## Monthly
+
+### Precipitation
+
+- [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-01-01/monthly/monthly_precip.png)

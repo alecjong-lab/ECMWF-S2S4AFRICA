@@ -1,20 +1,8 @@
 # Ghana — 2026-05-29
 
-## Dekadal
+## Weekly
 
 ### Precipitation
-
-- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-05-29/dekadal/dekadal_precip.png)
-
-## Monthly
-
-### Precipitation
-
-- [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-05-29/monthly/monthly_precip.png)
-
-## Other
-
-### weekly
 
 - [25th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-05-29/weekly/25th_percentile_exedance.png)
 - [50th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-05-29/weekly/50th_percentile_exedance.png)
@@ -30,3 +18,15 @@
 - [weekly_medium_range_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-05-29/weekly/weekly_medium_range_precip.png)
 - [weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-05-29/weekly/weekly_precip.png)
 - [weekly_precip_downscaled.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-05-29/weekly/weekly_precip_downscaled.png)
+
+## Dekadal
+
+### Precipitation
+
+- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-05-29/dekadal/dekadal_precip.png)
+
+## Monthly
+
+### Precipitation
+
+- [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-05-29/monthly/monthly_precip.png)

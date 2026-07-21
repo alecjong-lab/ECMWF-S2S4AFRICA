@@ -1,14 +1,8 @@
 # Kenya — 2026-02-23
 
-## Dekadal
+## Weekly
 
 ### Precipitation
-
-- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-02-23/dekadal/dekadal_precip.png)
-
-## Other
-
-### weekly
 
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-02-23/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-02-23/weekly/50th_percentile_exedance_precip.png)
@@ -23,3 +17,9 @@
 - [meteogram_Nairobi.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-02-23/weekly/meteogram_Nairobi.png)
 - [weekly_change_in_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-02-23/weekly/weekly_change_in_precip.png)
 - [weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-02-23/weekly/weekly_precip.png)
+
+## Dekadal
+
+### Precipitation
+
+- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-02-23/dekadal/dekadal_precip.png)

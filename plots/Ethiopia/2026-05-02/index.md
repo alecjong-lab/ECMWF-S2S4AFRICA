@@ -1,20 +1,8 @@
 # Ethiopia — 2026-05-02
 
-## Dekadal
+## Weekly
 
 ### Precipitation
-
-- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-02/dekadal/dekadal_precip.png)
-
-## Monthly
-
-### Precipitation
-
-- [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-02/monthly/monthly_precip.png)
-
-## Other
-
-### weekly
 
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-02/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-02/weekly/50th_percentile_exedance_precip.png)
@@ -30,3 +18,15 @@
 - [meteogram_Dire Dawa.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-02/weekly/meteogram_Dire Dawa.png)
 - [weekly_change_in_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-02/weekly/weekly_change_in_precip.png)
 - [weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-02/weekly/weekly_precip.png)
+
+## Dekadal
+
+### Precipitation
+
+- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-02/dekadal/dekadal_precip.png)
+
+## Monthly
+
+### Precipitation
+
+- [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-05-02/monthly/monthly_precip.png)

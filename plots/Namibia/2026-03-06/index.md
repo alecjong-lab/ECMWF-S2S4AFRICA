@@ -1,14 +1,8 @@
 # Namibia — 2026-03-06
 
-## Dekadal
+## Weekly
 
 ### Precipitation
-
-- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-03-06/dekadal/dekadal_precip.png)
-
-## Other
-
-### weekly
 
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-03-06/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-03-06/weekly/50th_percentile_exedance_precip.png)
@@ -23,3 +17,9 @@
 - [meteogram_Windhoek.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-03-06/weekly/meteogram_Windhoek.png)
 - [weekly_change_in_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-03-06/weekly/weekly_change_in_precip.png)
 - [weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-03-06/weekly/weekly_precip.png)
+
+## Dekadal
+
+### Precipitation
+
+- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-03-06/dekadal/dekadal_precip.png)

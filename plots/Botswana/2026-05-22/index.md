@@ -1,20 +1,8 @@
 # Botswana — 2026-05-22
 
-## Dekadal
+## Weekly
 
 ### Precipitation
-
-- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-05-22/dekadal/dekadal_precip.png)
-
-## Monthly
-
-### Precipitation
-
-- [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-05-22/monthly/monthly_precip.png)
-
-## Other
-
-### weekly
 
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-05-22/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-05-22/weekly/50th_percentile_exedance_precip.png)
@@ -30,3 +18,15 @@
 - [meteogram_Gaborone.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-05-22/weekly/meteogram_Gaborone.png)
 - [weekly_change_in_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-05-22/weekly/weekly_change_in_precip.png)
 - [weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-05-22/weekly/weekly_precip.png)
+
+## Dekadal
+
+### Precipitation
+
+- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-05-22/dekadal/dekadal_precip.png)
+
+## Monthly
+
+### Precipitation
+
+- [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-05-22/monthly/monthly_precip.png)

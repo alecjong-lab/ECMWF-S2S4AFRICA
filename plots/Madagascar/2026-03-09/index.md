@@ -1,20 +1,8 @@
 # Madagascar — 2026-03-09
 
-## Dekadal
+## Weekly
 
 ### Precipitation
-
-- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-03-09/dekadal/dekadal_precip.png)
-
-## Monthly
-
-### Precipitation
-
-- [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-03-09/monthly/monthly_precip.png)
-
-## Other
-
-### weekly
 
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-03-09/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-03-09/weekly/50th_percentile_exedance_precip.png)
@@ -29,3 +17,15 @@
 - [meteogram_Toamasina.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-03-09/weekly/meteogram_Toamasina.png)
 - [weekly_change_in_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-03-09/weekly/weekly_change_in_precip.png)
 - [weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-03-09/weekly/weekly_precip.png)
+
+## Dekadal
+
+### Precipitation
+
+- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-03-09/dekadal/dekadal_precip.png)
+
+## Monthly
+
+### Precipitation
+
+- [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Madagascar/2026-03-09/monthly/monthly_precip.png)

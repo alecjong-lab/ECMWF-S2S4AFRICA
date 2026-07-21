@@ -1,22 +1,8 @@
 # Kenya — 2026-04-05
 
-## Dekadal
+## Weekly
 
 ### Precipitation
-
-- [chance_higherthan_20mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/dekadal/chance_higherthan_20mm.png)
-- [chance_higherthan_25mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/dekadal/chance_higherthan_25mm.png)
-- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/dekadal/dekadal_precip.png)
-
-## Monthly
-
-### Precipitation
-
-- [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/monthly/monthly_precip.png)
-
-## Other
-
-### weekly
 
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/weekly/50th_percentile_exedance_precip.png)
@@ -39,3 +25,17 @@
 - [w_500.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/weekly/w_500.png)
 - [weekly_change_in_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/weekly/weekly_change_in_precip.png)
 - [weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/weekly/weekly_precip.png)
+
+## Dekadal
+
+### Precipitation
+
+- [chance_higherthan_20mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/dekadal/chance_higherthan_20mm.png)
+- [chance_higherthan_25mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/dekadal/chance_higherthan_25mm.png)
+- [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/dekadal/dekadal_precip.png)
+
+## Monthly
+
+### Precipitation
+
+- [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-04-05/monthly/monthly_precip.png)
