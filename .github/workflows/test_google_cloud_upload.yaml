@@ -21,21 +21,26 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Install rclone
-        run: curl https://rclone.org/install.sh | sudo bash
-
-      - name: Configure rclone
-        run: |
-          mkdir -p ~/.config/rclone
-          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
-
       - name: Create test file
         run: echo "test write from GH Actions at $(date -u)" > test-write.txt
 
-      - name: Upload test file
-        run: rclone copy test-write.txt gs://africa-forecasting-data/_test/
+      - name: Copy file
+        run: gsutil cp test-write.txt gs://africa-forecasting-data/_test/
 
       - name: Verify and clean up
         run: |
-          rclone ls gs://africa-forecasting-data/_test/
-          rclone delete gs://africa-forecasting-data/_test/test-write.txt
+          gsutil ls gs://africa-forecasting-data/_test/
+          gsutil rm gs://africa-forecasting-data/_test/test-write.txt
+
+          #- name: Install rclone
+          #  run: curl https://rclone.org/install.sh | sudo bash
+
+          #- name: Configure rclone
+          #  run: |
+          #    mkdir -p ~/.config/rclone
+          #    echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+
+
+          #- name: Upload test file
+          #  run: rclone copy test-write.txt gs://africa-forecasting-data/_test/
+
