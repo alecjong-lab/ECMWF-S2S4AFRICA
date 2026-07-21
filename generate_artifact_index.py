@@ -3,7 +3,7 @@
 Generate lightweight markdown index files mirroring the bucket's folder
 structure, plus a top-level ARTIFACTS.md with the most recent entries.
 
-Run after uploading files to the bucket in the GH Actions workflow.
+Run this AFTER uploading files to the bucket in the GH Actions workflow.
 It expects the list of uploaded object paths (relative to the bucket root,
 e.g. "data/kenya/2026-07-09/ECMWF_....grib") as input, either from a file
 or stdin, one path per line.
@@ -40,19 +40,62 @@ def public_url(bucket: str, object_path: str) -> str:
     return f"https://storage.googleapis.com/{bucket}/{object_path}"
 
 
-def extract_date_and_group(object_path: str):
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# Label used for plot files that sit directly in the date folder (no
+# variable subfolder) — this is the main/default variable for that category.
+DEFAULT_PLOT_VARIABLE = "Precipitation"
+
+
+def parse_object_path(object_path: str):
     """
-    Expects paths like: data/kenya/2026-07-09/filename.grib
-                     or: plots/ghana/2026-07-14/filename.png
-    Returns (top_category, country, date_str) or None if it doesn't match.
+    Handles two layouts:
+
+      data/<date>/filename                          (domain-wide, no country)
+      plots/<country>/<date>/filename                (main variable, e.g. precip)
+      plots/<country>/<date>/<variable>/filename     (specific variable subfolder)
+
+    Returns a dict: {category, country, date, variable, object_path}
+    or None if the path doesn't match either layout. `country` and
+    `variable` may be None.
     """
     parts = Path(object_path).parts
-    if len(parts) < 4:
+    if not parts:
         return None
-    top_category, country, date_str = parts[0], parts[1], parts[2]
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_str):
-        return None
-    return top_category, country, date_str
+
+    category = parts[0]
+
+    if category == "data":
+        # data/<date>/filename...
+        if len(parts) < 3 or not DATE_RE.match(parts[1]):
+            return None
+        return {
+            "category": category,
+            "country": None,
+            "date": parts[1],
+            "variable": None,
+            "object_path": object_path,
+        }
+
+    if category == "plots":
+        # plots/<country>/<date>/[<variable>/]filename...
+        if len(parts) < 4 or not DATE_RE.match(parts[2]):
+            return None
+        country = parts[1]
+        date_str = parts[2]
+        if len(parts) == 4:
+            variable = DEFAULT_PLOT_VARIABLE
+        else:
+            variable = parts[3]
+        return {
+            "category": category,
+            "country": country,
+            "date": date_str,
+            "variable": variable,
+            "object_path": object_path,
+        }
+
+    return None
 
 
 def main():
@@ -62,29 +105,55 @@ def main():
     with open(args.uploaded_list) as f:
         object_paths = [line.strip() for line in f if line.strip()]
 
-    # Group files by (top_category, country, date)
+    # Group files by (category, country, date)
     groups = defaultdict(list)
     for obj_path in object_paths:
-        parsed = extract_date_and_group(obj_path)
+        parsed = parse_object_path(obj_path)
         if parsed is None:
             print(f"Skipping unrecognized path format: {obj_path}")
             continue
-        groups[parsed].append(obj_path)
+        key = (parsed["category"], parsed["country"], parsed["date"])
+        groups[key].append(parsed)
 
     # Write per-folder index.md files
-    for (top_category, country, date_str), files in groups.items():
-        folder = repo_root / top_category / country / date_str
+    for (category, country, date_str), entries in groups.items():
+        folder = repo_root / category
+        if country:
+            folder = folder / country
+        folder = folder / date_str
         folder.mkdir(parents=True, exist_ok=True)
         index_path = folder / "index.md"
 
-        lines = [f"# {country.capitalize()} — {date_str}\n"]
-        for obj_path in sorted(files):
-            fname = Path(obj_path).name
-            lines.append(f"- [{fname}]({public_url(args.bucket, obj_path)})")
-        index_path.write_text("\n".join(lines) + "\n")
+        title = f"{country.capitalize()} — {date_str}" if country else f"Domain-wide — {date_str}"
+        lines = [f"# {title}\n"]
+
+        if category == "plots":
+            # Group entries under a heading per variable, with the default
+            # (precip) section first, then the rest alphabetically.
+            by_variable = defaultdict(list)
+            for e in entries:
+                by_variable[e["variable"]].append(e["object_path"])
+
+            variable_order = sorted(
+                by_variable.keys(),
+                key=lambda v: (v != DEFAULT_PLOT_VARIABLE, v.lower()),
+            )
+            for variable in variable_order:
+                lines.append(f"## {variable}\n")
+                for obj_path in sorted(by_variable[variable]):
+                    fname = Path(obj_path).name
+                    lines.append(f"- [{fname}]({public_url(args.bucket, obj_path)})")
+                lines.append("")
+        else:
+            # data/ category: no variable subfolders, just list everything.
+            for e in sorted(entries, key=lambda x: x["object_path"]):
+                fname = Path(e["object_path"]).name
+                lines.append(f"- [{fname}]({public_url(args.bucket, e['object_path'])})")
+
+        index_path.write_text("\n".join(lines).rstrip() + "\n")
         print(f"Wrote {index_path}")
 
-    # Update top-level ARTIFACTS.md: one entry per (top_category, country, date),
+    # Update top-level ARTIFACTS.md: one entry per (category, country, date),
     # newest first, capped at top_level_max, linking to the folder's index.md on GitHub
     # (not the bucket directly, since index.md is the human-friendly entry point)
     top_level_path = repo_root / args.top_level_file
@@ -93,9 +162,14 @@ def main():
         existing_lines = top_level_path.read_text().splitlines()
 
     new_entries = []
-    for (top_category, country, date_str) in sorted(groups.keys(), key=lambda k: k[2], reverse=True):
-        rel_path = f"{top_category}/{country}/{date_str}/index.md"
-        new_entries.append(f"- [{country.capitalize()} {top_category} — {date_str}]({rel_path})")
+    for (category, country, date_str) in sorted(groups.keys(), key=lambda k: k[2], reverse=True):
+        if country:
+            rel_path = f"{category}/{country}/{date_str}/index.md"
+            label = f"{country.capitalize()} {category} — {date_str}"
+        else:
+            rel_path = f"{category}/{date_str}/index.md"
+            label = f"Domain-wide {category} — {date_str}"
+        new_entries.append(f"- [{label}]({rel_path})")
 
     # Preserve a header if present, then merge new entries on top of old ones,
     # de-duplicate, and cap the list length.
