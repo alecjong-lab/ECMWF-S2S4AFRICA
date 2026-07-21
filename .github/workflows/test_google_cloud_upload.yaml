@@ -7,6 +7,17 @@ jobs:
   test-write:
     runs-on: ubuntu-latest
     steps:
+      - name: Auth to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
+          service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
+          export_environment_variables: true
+ 
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
       - name: Install rclone
         run: curl https://rclone.org/install.sh | sudo bash
 
@@ -19,9 +30,9 @@ jobs:
         run: echo "test write from GH Actions at $(date -u)" > test-write.txt
 
       - name: Upload test file
-        run: rclone copy test-write.txt gcs:africa-forecasting-data/_test/
+        run: rclone copy test-write.txt gs://africa-forecasting-data/_test/
 
       - name: Verify and clean up
         run: |
-          rclone ls gcs:africa-forecasting-data/_test/
-          rclone delete gcs:africa-forecasting-data/_test/test-write.txt
+          rclone ls gs://africa-forecasting-data/_test/
+          rclone delete gs://africa-forecasting-data/_test/test-write.txt
