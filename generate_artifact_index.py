@@ -46,18 +46,39 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # variable subfolder) — this is the main/default variable for that category.
 DEFAULT_PLOT_VARIABLE = "Precipitation"
 
+# Recognized timespan folder names (case-insensitive) and their display
+# order in the generated markdown.
+TIMESPAN_DISPLAY = {
+    "daily": "Daily",
+    "dekadal": "Dekadal",
+    "monthly": "Monthly",
+}
+TIMESPAN_ORDER = list(TIMESPAN_DISPLAY.keys())
+# Label used when a plot path has no recognized timespan folder (legacy
+# paths from before the timespan level was introduced).
+NO_TIMESPAN_LABEL = "Other"
+
 
 def parse_object_path(object_path: str):
     """
-    Handles two layouts:
+    Handles:
 
-      data/<date>/filename                          (domain-wide, no country)
-      plots/<country>/<date>/filename                (main variable, e.g. precip)
-      plots/<country>/<date>/<variable>/filename     (specific variable subfolder)
+      data/<date>/filename
+          (domain-wide, no country)
 
-    Returns a dict: {category, country, date, variable, object_path}
-    or None if the path doesn't match either layout. `country` and
-    `variable` may be None.
+      plots/<country>/<date>/<timespan>/filename
+      plots/<country>/<date>/<timespan>/<variable>/filename
+          (timespan is one of "daily", "dekadal", "monthly", case-insensitive;
+           variable folder is optional — files directly under the timespan
+           folder are treated as the default/main variable, e.g. precip)
+
+      plots/<country>/<date>/filename
+      plots/<country>/<date>/<variable>/filename
+          (legacy paths with no timespan folder, still supported)
+
+    Returns a dict: {category, country, date, timespan, variable, object_path}
+    or None if the path doesn't match any known layout. `country`, `timespan`,
+    and `variable` may be None.
     """
     parts = Path(object_path).parts
     if not parts:
@@ -73,24 +94,40 @@ def parse_object_path(object_path: str):
             "category": category,
             "country": None,
             "date": parts[1],
+            "timespan": None,
             "variable": None,
             "object_path": object_path,
         }
 
     if category == "plots":
-        # plots/<country>/<date>/[<variable>/]filename...
+        # plots/<country>/<date>/...
         if len(parts) < 4 or not DATE_RE.match(parts[2]):
             return None
         country = parts[1]
         date_str = parts[2]
-        if len(parts) == 4:
-            variable = DEFAULT_PLOT_VARIABLE
+
+        remainder = parts[3:-1]  # folder levels between date and the filename
+        timespan = None
+        variable = None
+
+        if remainder and remainder[0].lower() in TIMESPAN_DISPLAY:
+            timespan = remainder[0].lower()
+            if len(remainder) >= 2:
+                variable = remainder[1]
+            else:
+                variable = DEFAULT_PLOT_VARIABLE
+        elif remainder:
+            # Legacy layout: no timespan folder, first remaining part is variable
+            variable = remainder[0]
         else:
-            variable = parts[3]
+            # File sits directly in the date folder: no timespan, no variable
+            variable = DEFAULT_PLOT_VARIABLE
+
         return {
             "category": category,
             "country": country,
             "date": date_str,
+            "timespan": timespan,
             "variable": variable,
             "object_path": object_path,
         }
@@ -128,24 +165,36 @@ def main():
         lines = [f"# {title}\n"]
 
         if category == "plots":
-            # Group entries under a heading per variable, with the default
-            # (precip) section first, then the rest alphabetically.
-            by_variable = defaultdict(list)
+            # Group entries by timespan, then by variable within each timespan.
+            by_timespan = defaultdict(lambda: defaultdict(list))
             for e in entries:
-                by_variable[e["variable"]].append(e["object_path"])
+                timespan_key = e["timespan"] or NO_TIMESPAN_LABEL
+                by_timespan[timespan_key][e["variable"]].append(e["object_path"])
 
-            variable_order = sorted(
-                by_variable.keys(),
-                key=lambda v: (v != DEFAULT_PLOT_VARIABLE, v.lower()),
-            )
-            for variable in variable_order:
-                lines.append(f"## {variable}\n")
-                for obj_path in sorted(by_variable[variable]):
-                    fname = Path(obj_path).name
-                    lines.append(f"- [{fname}]({public_url(args.bucket, obj_path)})")
-                lines.append("")
+            def timespan_sort_key(t):
+                if t in TIMESPAN_ORDER:
+                    return (0, TIMESPAN_ORDER.index(t))
+                return (1, t)  # NO_TIMESPAN_LABEL (or anything unrecognized) sorts last
+
+            timespan_order_present = sorted(by_timespan.keys(), key=timespan_sort_key)
+
+            for timespan_key in timespan_order_present:
+                timespan_label = TIMESPAN_DISPLAY.get(timespan_key, timespan_key)
+                lines.append(f"## {timespan_label}\n")
+
+                by_variable = by_timespan[timespan_key]
+                variable_order = sorted(
+                    by_variable.keys(),
+                    key=lambda v: (v != DEFAULT_PLOT_VARIABLE, v.lower()),
+                )
+                for variable in variable_order:
+                    lines.append(f"### {variable}\n")
+                    for obj_path in sorted(by_variable[variable]):
+                        fname = Path(obj_path).name
+                        lines.append(f"- [{fname}]({public_url(args.bucket, obj_path)})")
+                    lines.append("")
         else:
-            # data/ category: no variable subfolders, just list everything.
+            # data/ category: no variable/timespan subfolders, just list everything.
             for e in sorted(entries, key=lambda x: x["object_path"]):
                 fname = Path(e["object_path"]).name
                 lines.append(f"- [{fname}]({public_url(args.bucket, e['object_path'])})")
