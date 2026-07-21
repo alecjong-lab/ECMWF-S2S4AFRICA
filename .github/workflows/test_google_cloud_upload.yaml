@@ -1,0 +1,27 @@
+name: Test GCS Bucket Write Access (rclone)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-write:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install rclone
+        run: curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+
+      - name: Create test file
+        run: echo "test write from GH Actions at $(date -u)" > test-write.txt
+
+      - name: Upload test file
+        run: rclone copy test-write.txt gcs:africa-forecasting-data/_test/
+
+      - name: Verify and clean up
+        run: |
+          rclone ls gcs:africa-forecasting-data/_test/
+          rclone delete gcs:africa-forecasting-data/_test/test-write.txt
