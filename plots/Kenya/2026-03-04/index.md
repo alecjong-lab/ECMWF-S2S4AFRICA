@@ -1,8 +1,13 @@
 # Kenya — 2026-03-04
 
+## dekadal
+
 - [chance_higherthan_20mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-03-04/dekadal/chance_higherthan_20mm.png)
 - [chance_higherthan_25mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-03-04/dekadal/chance_higherthan_25mm.png)
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-03-04/dekadal/dekadal_precip.png)
+
+## weekly
+
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-03-04/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-03-04/weekly/50th_percentile_exedance_precip.png)
 - [75th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-03-04/weekly/75th_percentile_exedance_precip.png)

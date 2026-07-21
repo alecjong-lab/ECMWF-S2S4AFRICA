@@ -1,7 +1,15 @@
 # Botswana — 2026-03-15
 
+## dekadal
+
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-03-15/dekadal/dekadal_precip.png)
+
+## monthly
+
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-03-15/monthly/monthly_precip.png)
+
+## weekly
+
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-03-15/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-03-15/weekly/50th_percentile_exedance_precip.png)
 - [75th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Botswana/2026-03-15/weekly/75th_percentile_exedance_precip.png)

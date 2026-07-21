@@ -1,9 +1,17 @@
 # Ethiopia — 2026-06-21
 
+## dekadal
+
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-06-21/dekadal/dekadal_precip.png)
 - [dekadal_precip_downscaled.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-06-21/dekadal/dekadal_precip_downscaled.png)
 - [dekadal_precip_downscaled_anomaly.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-06-21/dekadal/dekadal_precip_downscaled_anomaly.png)
+
+## monthly
+
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-06-21/monthly/monthly_precip.png)
+
+## weekly
+
 - [25th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-06-21/weekly/25th_percentile_exedance.png)
 - [50th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-06-21/weekly/50th_percentile_exedance.png)
 - [75th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-06-21/weekly/75th_percentile_exedance.png)

@@ -1,7 +1,15 @@
 # Angola — 2026-04-11
 
+## dekadal
+
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Angola/2026-04-11/dekadal/dekadal_precip.png)
+
+## monthly
+
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Angola/2026-04-11/monthly/monthly_precip.png)
+
+## weekly
+
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Angola/2026-04-11/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Angola/2026-04-11/weekly/50th_percentile_exedance_precip.png)
 - [75th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Angola/2026-04-11/weekly/75th_percentile_exedance_precip.png)

@@ -1,7 +1,15 @@
 # Ghana — 2026-07-13
 
+## dekadal
+
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-07-13/dekadal/dekadal_precip.png)
+
+## monthly
+
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-07-13/monthly/monthly_precip.png)
+
+## weekly
+
 - [25th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-07-13/weekly/25th_percentile_exedance.png)
 - [50th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-07-13/weekly/50th_percentile_exedance.png)
 - [75th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-07-13/weekly/75th_percentile_exedance.png)

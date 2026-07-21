@@ -1,5 +1,6 @@
 # Recent Artifacts
 
+- [Domain-wide data — 2026-07-18](data/2026-07-18/index.md)
 - [Angola plots — 2026-07-18](plots/Angola/2026-07-18/index.md)
 - [Botswana plots — 2026-07-18](plots/Botswana/2026-07-18/index.md)
 - [Ethiopia plots — 2026-07-18](plots/Ethiopia/2026-07-18/index.md)
@@ -11,6 +12,7 @@
 - [Namibia plots — 2026-07-18](plots/Namibia/2026-07-18/index.md)
 - [Senegal plots — 2026-07-18](plots/Senegal/2026-07-18/index.md)
 - [Zambia plots — 2026-07-18](plots/Zambia/2026-07-18/index.md)
+- [Domain-wide data — 2026-07-17](data/2026-07-17/index.md)
 - [Angola plots — 2026-07-17](plots/Angola/2026-07-17/index.md)
 - [Botswana plots — 2026-07-17](plots/Botswana/2026-07-17/index.md)
 - [Ethiopia plots — 2026-07-17](plots/Ethiopia/2026-07-17/index.md)
@@ -22,11 +24,9 @@
 - [Namibia plots — 2026-07-17](plots/Namibia/2026-07-17/index.md)
 - [Senegal plots — 2026-07-17](plots/Senegal/2026-07-17/index.md)
 - [Zambia plots — 2026-07-17](plots/Zambia/2026-07-17/index.md)
+- [Domain-wide data — 2026-07-16](data/2026-07-16/index.md)
 - [Angola plots — 2026-07-16](plots/Angola/2026-07-16/index.md)
 - [Botswana plots — 2026-07-16](plots/Botswana/2026-07-16/index.md)
 - [Ethiopia plots — 2026-07-16](plots/Ethiopia/2026-07-16/index.md)
 - [Ghana plots — 2026-07-16](plots/Ghana/2026-07-16/index.md)
 - [Great_horn plots — 2026-07-16](plots/Great_Horn/2026-07-16/index.md)
-- [Kenya plots — 2026-07-16](plots/Kenya/2026-07-16/index.md)
-- [Madagascar plots — 2026-07-16](plots/Madagascar/2026-07-16/index.md)
-- [Malawi plots — 2026-07-16](plots/Malawi/2026-07-16/index.md)

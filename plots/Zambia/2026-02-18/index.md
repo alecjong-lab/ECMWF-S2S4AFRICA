@@ -1,6 +1,11 @@
 # Zambia — 2026-02-18
 
+## dekadal
+
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Zambia/2026-02-18/dekadal/dekadal_precip.png)
+
+## weekly
+
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Zambia/2026-02-18/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Zambia/2026-02-18/weekly/50th_percentile_exedance_precip.png)
 - [75th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Zambia/2026-02-18/weekly/75th_percentile_exedance_precip.png)

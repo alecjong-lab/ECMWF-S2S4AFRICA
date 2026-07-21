@@ -1,7 +1,15 @@
 # Great_horn — 2026-07-07
 
+## dekadal
+
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Great_Horn/2026-07-07/dekadal/dekadal_precip.png)
+
+## monthly
+
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Great_Horn/2026-07-07/monthly/monthly_precip.png)
+
+## weekly
+
 - [25th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Great_Horn/2026-07-07/weekly/25th_percentile_exedance.png)
 - [50th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Great_Horn/2026-07-07/weekly/50th_percentile_exedance.png)
 - [75th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Great_Horn/2026-07-07/weekly/75th_percentile_exedance.png)

@@ -1,6 +1,11 @@
 # Namibia — 2026-02-19
 
+## dekadal
+
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-02-19/dekadal/dekadal_precip.png)
+
+## weekly
+
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-02-19/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-02-19/weekly/50th_percentile_exedance_precip.png)
 - [75th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-02-19/weekly/75th_percentile_exedance_precip.png)
