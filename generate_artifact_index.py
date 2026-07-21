@@ -49,7 +49,7 @@ DEFAULT_PLOT_VARIABLE = "Precipitation"
 # Recognized timespan folder names (case-insensitive) and their display
 # order in the generated markdown.
 TIMESPAN_DISPLAY = {
-    "daily": "Daily",
+    "weekly": "Weekly",
     "dekadal": "Dekadal",
     "monthly": "Monthly",
 }
@@ -68,7 +68,7 @@ def parse_object_path(object_path: str):
 
       plots/<country>/<date>/<timespan>/filename
       plots/<country>/<date>/<timespan>/<variable>/filename
-          (timespan is one of "daily", "dekadal", "monthly", case-insensitive;
+          (timespan is one of "weekly", "dekadal", "monthly", case-insensitive;
            variable folder is optional — files directly under the timespan
            folder are treated as the default/main variable, e.g. precip)
 
