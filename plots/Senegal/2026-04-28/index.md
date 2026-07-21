@@ -1,14 +1,20 @@
 # Senegal — 2026-04-28
 
-## dekadal
+## Dekadal
+
+### Precipitation
 
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Senegal/2026-04-28/dekadal/dekadal_precip.png)
 
-## monthly
+## Monthly
+
+### Precipitation
 
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Senegal/2026-04-28/monthly/monthly_precip.png)
 
-## weekly
+## Other
+
+### weekly
 
 - [weekly_change_in_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Senegal/2026-04-28/weekly/weekly_change_in_precip.png)
 - [weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Senegal/2026-04-28/weekly/weekly_precip.png)

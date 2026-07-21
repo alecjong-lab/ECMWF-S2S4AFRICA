@@ -1,6 +1,8 @@
 # Angola — 2026-01-03
 
-## weekly
+## Other
+
+### weekly
 
 - [meteogram_Huambo.png](https://storage.googleapis.com/africa-forecasting-data/plots/Angola/2026-01-03/weekly/meteogram_Huambo.png)
 - [meteogram_Luanda.png](https://storage.googleapis.com/africa-forecasting-data/plots/Angola/2026-01-03/weekly/meteogram_Luanda.png)

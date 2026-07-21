@@ -1,16 +1,22 @@
 # Kenya — 2026-06-15
 
-## dekadal
+## Dekadal
+
+### Precipitation
 
 - [chance_higherthan_20mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-06-15/dekadal/chance_higherthan_20mm.png)
 - [chance_higherthan_25mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-06-15/dekadal/chance_higherthan_25mm.png)
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-06-15/dekadal/dekadal_precip.png)
 
-## monthly
+## Monthly
+
+### Precipitation
 
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-06-15/monthly/monthly_precip.png)
 
-## weekly
+## Other
+
+### weekly
 
 - [10m-wind_vectors.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-06-15/weekly/10m-wind/10m-wind_vectors.png)
 - [25th_percentile_exedance_u10.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-06-15/weekly/10m-wind/25th_percentile_exedance_u10.png)

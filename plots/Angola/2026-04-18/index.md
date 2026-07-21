@@ -1,14 +1,20 @@
 # Angola — 2026-04-18
 
-## dekadal
+## Dekadal
+
+### Precipitation
 
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Angola/2026-04-18/dekadal/dekadal_precip.png)
 
-## monthly
+## Monthly
+
+### Precipitation
 
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Angola/2026-04-18/monthly/monthly_precip.png)
 
-## weekly
+## Other
+
+### weekly
 
 - [25th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Angola/2026-04-18/weekly/25th_percentile_exedance_precip.png)
 - [50th_percentile_exedance_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Angola/2026-04-18/weekly/50th_percentile_exedance_precip.png)
