@@ -5,8 +5,8 @@ permissions:
   id-token: write
 
 on:
-  #schedule:
-   # - cron: "16 00 * * *" # every day at 00:16 UTC
+  schedule:
+   - cron: "16 00 * * *" # every day at 00:16 UTC
   workflow_dispatch:
 
 jobs:
