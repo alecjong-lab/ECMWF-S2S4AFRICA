@@ -41,6 +41,48 @@ lat2=-29.5
 lon1=11
 lon2=29
 
+import xarray as xr
+import os
+
+
+def combine_to_zarr(data_path, filename, zarr_name):
+    """
+    Combine ECMWF control + perturbed forecasts and save as zarr
+    """
+
+    pf_path = f"{data_path}/{filename.format(ftype='perturbed_forecast')}"
+    cf_path = f"{data_path}/{filename.format(ftype='control_forecast')}"
+
+    print(f"Opening {pf_path}")
+    pf = xr.open_dataset(pf_path, engine="cfgrib")
+
+    print(f"Opening {cf_path}")
+    cf = xr.open_dataset(cf_path, engine="cfgrib")
+
+    # Control run gets ensemble member 0
+    cf = cf.assign_coords(number=0).expand_dims("number")
+
+    # Combine control + perturbed ensemble
+    combined = xr.concat(
+        [cf, pf],
+        dim="number"
+    )
+
+    # Save
+    zarr_path = f"{data_path}/{zarr_name}.zarr"
+
+    print(f"Writing {zarr_path}")
+    combined.to_zarr(
+        zarr_path,
+        mode="w",
+        consolidated=True
+    )
+
+    pf.close()
+    cf.close()
+
+    return zarr_path
+
 def windspeed(ds,u_name,v_name):
     """
     function to calculate windspeed from and add to a xarray dataset containing u and v components

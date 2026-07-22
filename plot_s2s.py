@@ -12,19 +12,13 @@ today = datetime.today()
 two_days_earlier = today - timedelta(days=2)
 date_str = two_days_earlier.strftime("%Y-%m-%d")
 
-# prefix = "C:\\Users\\alecj\\Bureaublad\\ECMWF-S2S4AFRICA\\" 
+#prefix = "C:\\Users\\alecj\\Bureaublad\\ECMWF-S2S4AFRICA\\" 
 prefix=os.environ["MAIN_PATH"]
 data_path=f'{prefix}/data/{date_str}'
 
 #-----precip extended range---------------------------------------------------------------------------------------#
-data_path_pf = f"{data_path}/ECMWF_s2s_perturbed_forecast_precip_46days_23N-20W-37S-59E.grib"
-data_path_cf = f"{data_path}/ECMWF_s2s_control_forecast_precip_46days_23N-20W-37S-59E.grib"
-filelist_path = f"{data_path}/m-climate/*.nc"
 
-pf=xr.open_dataset(data_path_pf,engine='cfgrib')
-cf=xr.open_dataset(data_path_cf,engine='cfgrib').assign_coords({'number':0})
-
-data=xr.concat([pf,cf],dim='number')
+data=xr.open_zarr(f'{data_path}/ECMWF_s2s_precip_{date_str}.zarr',consolidated=True).compute()
 
 steps=data.step.values*1e-9/3600
 steps=steps.astype('int')
@@ -53,15 +47,15 @@ ensemble_stats_tp=gef.ensemble_data(data_weekly_cut_to_mclimate,m_climate_big,'t
 
 
 # #-----precip medium range---------------------------------------------------------------------------------------#
-data_weekly_medium=xr.open_dataset(f'{data_path}/medium_range_precip.nc')
+data_weekly_medium=xr.open_zarr(f'{data_path}/medium_range_precip.zarr',consolidated=True).compute()
 
 
 # # #------other vars-----------------------------------------------------------------------------------------#
-dailyvars=gef.open_forecast(date_str,'CAPE_tcw_t2m_d2m_RH',data_path)
-Tminmax=gef.open_forecast(date_str,'Tminmax',data_path)
-wind10=gef.open_forecast(date_str,'10wind',data_path)
-wind500=gef.open_forecast(date_str,'500wind',data_path)
-wind700=gef.open_forecast(date_str,'700wind',data_path)
+dailyvars=xr.open_zarr(f'{data_path}/ECMWF_s2s_daily_vars{date_str}.zarr',consolidated=True).compute()
+Tminmax=xr.open_zarr(f'{data_path}/ECMWF_s2s_Tminmax_{date_str}.zarr',consolidated=True).compute()
+wind10=xr.open_zarr(f'{data_path}/ECMWF_s2s_10wind_{date_str}.zarr',consolidated=True).compute()
+wind500=xr.open_zarr(f'{data_path}/ECMWF_s2s_500wind_{date_str}.zarr',consolidated=True).compute()
+wind700=xr.open_zarr(f'{data_path}/ECMWF_s2s_700wind_{date_str}.zarr',consolidated=True).compute()
 
 week_dailyvars=gef.week_mean(dailyvars)
 week_6hTminmax=gef.week_mean(gef.day_mean_6h_accum(Tminmax,['mx2t6', 'mn2t6']))

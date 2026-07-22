@@ -17,3 +17,5 @@ cdsapi
 ecmwf-opendata
 regionmask
 google-genai
+zarr
+gcsfs
