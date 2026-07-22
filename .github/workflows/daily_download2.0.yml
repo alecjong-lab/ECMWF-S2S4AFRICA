@@ -48,7 +48,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run download script
-        continue-on-error: false
+        continue-on-error: true
         working-directory: main_repo
         run: |
           python download_s2s.py
@@ -56,7 +56,7 @@ jobs:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
 
       - name: Generate plots
-        continue-on-error: false
+        continue-on-error: true
         working-directory: main_repo
         run: |
           python plot_s2s.py
@@ -68,7 +68,7 @@ jobs:
           AI_ACTIVE: 'True'
 
       - name: Perform downscaling
-        continue-on-error: false
+        continue-on-error: true
         working-directory: main_repo
         run: |
           python dowscale_dekade.py
@@ -79,7 +79,7 @@ jobs:
       # ── Convert NetCDF → JSON and update catalog ─────────────────
       - name: Convert NetCDF and update catalog
         working-directory: website_branch
-        continue-on-error: false
+        continue-on-error: true
         env:
           NCDF_DIR:       ncdf_data
           OUTPUT_DIR:     data/weekly
@@ -112,7 +112,7 @@ jobs:
       # main_repo/plots already follows plots/<country>/<date>/<timespan>/[<variable>/]filename,
       # so this is a straight recursive copy — no reorganizing needed.
       - name: Upload plots to GCS
-        continue-on-error: false
+        continue-on-error: true
         working-directory: main_repo
         run: |
           if [ -d plots ]; then
@@ -128,7 +128,7 @@ jobs:
       # recursively. Currently a no-op until download_s2s.py is switched to
       # emit .zarr instead of NetCDF — safe to leave in either way.
       - name: Upload zarr data to GCS
-        continue-on-error: false
+        continue-on-error: true
         working-directory: main_repo
         run: |
           > ../uploaded_data.txt
@@ -145,7 +145,7 @@ jobs:
 
       # ── Generate markdown index for everything just uploaded ─────
       - name: Generate markdown index
-        continue-on-error: false
+        continue-on-error: true
         run: |
           cat uploaded_plots.txt uploaded_data.txt > uploaded_files.txt
           python main_repo/generate_artifact_index.py \
@@ -161,7 +161,7 @@ jobs:
       # get pushed, using -f since data/ or plots/ may still be in .gitignore
       # from before this migration.
       - name: Commit artifact index to main branch
-        continue-on-error: false
+        continue-on-error: true
         run: |
           cd main_repo
           git config user.name  "github-actions[bot]"

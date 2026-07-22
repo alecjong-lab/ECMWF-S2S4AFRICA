@@ -51,7 +51,7 @@ data_weekly_medium=xr.open_zarr(f'{data_path}/medium_range_precip.zarr',consolid
 
 
 # # #------other vars-----------------------------------------------------------------------------------------#
-dailyvars=xr.open_zarr(f'{data_path}/ECMWF_s2s_daily_vars{date_str}.zarr',consolidated=True).compute()
+dailyvars=xr.open_zarr(f'{data_path}/ECMWF_s2s_daily_vars_{date_str}.zarr',consolidated=True).compute()
 Tminmax=xr.open_zarr(f'{data_path}/ECMWF_s2s_Tminmax_{date_str}.zarr',consolidated=True).compute()
 wind10=xr.open_zarr(f'{data_path}/ECMWF_s2s_10wind_{date_str}.zarr',consolidated=True).compute()
 wind500=xr.open_zarr(f'{data_path}/ECMWF_s2s_500wind_{date_str}.zarr',consolidated=True).compute()
