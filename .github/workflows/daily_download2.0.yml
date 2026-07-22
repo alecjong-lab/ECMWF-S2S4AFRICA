@@ -132,15 +132,15 @@ jobs:
         working-directory: main_repo
         run: |
           > ../uploaded_data.txt
-          if [ -d "$OUTPUT_DIR" ]; then
-            find "$OUTPUT_DIR" -type d -iname "*.zarr" | while read -r zarr_path; do
-              rel_path="${zarr_path#"$OUTPUT_DIR"/}"
+          if [ -d "data" ]; then
+            find "data" -type d -iname "*.zarr" | while read -r zarr_path; do
+              rel_path="${zarr_path#"data"/}"
               echo "Uploading $zarr_path -> gs://${BUCKET}/data/${rel_path}"
               gcloud storage cp -r "$zarr_path" "gs://${BUCKET}/data/${rel_path}"
               find "$zarr_path" -type f | sed "s#^#data/${rel_path%/*}/#" >> ../uploaded_data.txt
             done
           else
-            echo "No $OUTPUT_DIR directory found, skipping."
+            echo "No data directory found, skipping."
           fi
 
       # ── Generate markdown index for everything just uploaded ─────
@@ -350,17 +350,20 @@ jobs:
           to: ${{ matrix.emails }}
           from: "${{ matrix.country }} Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            The dekadal and weekly outlooks for ${{ matrix.country }} related to the
-            subseasonal forecast are now available at:
-            https://storage.googleapis.com/africa-forecasting-data/plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/index.md
-
-            Or browse the full archive at
-            https://console.cloud.google.com/storage/browser/africa-forecasting-data
-
-            Attached are station-based comparison plots and historical station data.
-
+            Attached are dekadal and weekly outlooks and historical station data related
+            to the subseasonal forecast. You can also browse the full archive (except for
+            the station data) at https://console.cloud.google.com/storage/browser/africa-forecasting-data .
+ 
             ${{ steps.summary.outputs.body || '' }}
           reply_to: genevieve@rhizaresearch.org
           attachments: >
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/dekadal_precip.png,
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip.png,
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip_downscaled_clipped.png,
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_medium_range_precip.png,
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Kenya_dekadal.png,
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Kenya_weekly.png,
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/chirps_Kenya_dekadal.png,
+            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/chirps_Kenya_weekly.png,
             private_plots/${{ matrix.country }}/${{ steps.date.outputs.date }}/*.png,
             private_data/station_data/${{ matrix.country }}/${{ steps.date.outputs.date }}/*.csv
