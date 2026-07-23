@@ -40,11 +40,23 @@ def public_url(bucket: str, object_path: str) -> str:
     return f"https://storage.googleapis.com/{bucket}/{object_path}"
 
 
+def console_folder_url(bucket: str, folder_path: str) -> str:
+    """Link to a browsable folder listing in the GCS console (not a direct
+    object URL, since a folder has no single object to link to)."""
+    return f"https://console.cloud.google.com/storage/browser/{bucket}/{folder_path}"
+
+
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # Label used for plot files that sit directly in the date folder (no
 # variable subfolder) — this is the main/default variable for that category.
 DEFAULT_PLOT_VARIABLE = "Precipitation"
+
+# Folder name (case-insensitive) that holds per-county precipitation cutouts.
+# These get collapsed into a single folder link under Precipitation instead
+# of listing every county's file individually.
+COUNTY_FOLDER_NAME = "counties"
+COUNTY_LINK_LABEL = "County-level precipitation maps"
 
 # Recognized timespan folder names (case-insensitive) and their display
 # order in the generated markdown.
@@ -59,11 +71,25 @@ TIMESPAN_ORDER = list(TIMESPAN_DISPLAY.keys())
 NO_TIMESPAN_LABEL = "Other"
 
 
+def find_zarr_store_path(parts):
+    """
+    Zarr stores are directories full of many small chunk files. If any
+    segment of `parts` ends in ".zarr", the whole entry represents one
+    logical dataset — return the path up to and including that segment.
+    Otherwise return None.
+    """
+    for i, p in enumerate(parts):
+        if p.lower().endswith(".zarr"):
+            return "/".join(parts[: i + 1])
+    return None
+
+
 def parse_object_path(object_path: str):
     """
     Handles:
 
       data/<date>/filename
+      data/<date>/.../<name>.zarr/...           (collapsed to one entry)
           (domain-wide, no country)
 
       plots/<country>/<date>/<timespan>/filename
@@ -72,13 +98,20 @@ def parse_object_path(object_path: str):
            variable folder is optional — files directly under the timespan
            folder are treated as the default/main variable, e.g. precip)
 
+      plots/<country>/<date>/<timespan>/counties/filename
+      plots/<country>/<date>/<timespan>/counties/<county_name>/filename
+          (per-county precipitation cutouts — collapsed to a single folder
+           link under Precipitation rather than listed file-by-file)
+
       plots/<country>/<date>/filename
       plots/<country>/<date>/<variable>/filename
+      plots/<country>/<date>/counties/...
           (legacy paths with no timespan folder, still supported)
 
-    Returns a dict: {category, country, date, timespan, variable, object_path}
-    or None if the path doesn't match any known layout. `country`, `timespan`,
-    and `variable` may be None.
+    Returns a dict: {category, country, date, timespan, variable,
+    county_folder, zarr_store, object_path} or None if the path doesn't
+    match any known layout. `country`, `timespan`, `county_folder`, and
+    `zarr_store` may be None.
     """
     parts = Path(object_path).parts
     if not parts:
@@ -96,6 +129,8 @@ def parse_object_path(object_path: str):
             "date": parts[1],
             "timespan": None,
             "variable": None,
+            "county_folder": None,
+            "zarr_store": find_zarr_store_path(parts),
             "object_path": object_path,
         }
 
@@ -109,18 +144,26 @@ def parse_object_path(object_path: str):
         remainder = parts[3:-1]  # folder levels between date and the filename
         timespan = None
         variable = None
+        county_folder = None
 
+        timespan_consumed = 0
         if remainder and remainder[0].lower() in TIMESPAN_DISPLAY:
             timespan = remainder[0].lower()
-            if len(remainder) >= 2:
-                variable = remainder[1]
-            else:
-                variable = DEFAULT_PLOT_VARIABLE
-        elif remainder:
-            # Legacy layout: no timespan folder, first remaining part is variable
-            variable = remainder[0]
+            timespan_consumed = 1
+
+        rest = remainder[timespan_consumed:]
+
+        if rest and rest[0].lower() == COUNTY_FOLDER_NAME:
+            # Everything from "counties" onward collapses to one folder link,
+            # filed under the default (precipitation) variable.
+            variable = DEFAULT_PLOT_VARIABLE
+            county_index_abs = 3 + timespan_consumed  # index of "counties" in `parts`
+            county_folder = "/".join(parts[: county_index_abs + 1])
+        elif rest:
+            # Legacy/variable subfolder layout
+            variable = rest[0]
         else:
-            # File sits directly in the date folder: no timespan, no variable
+            # File sits directly in the timespan (or date) folder: default variable
             variable = DEFAULT_PLOT_VARIABLE
 
         return {
@@ -129,6 +172,8 @@ def parse_object_path(object_path: str):
             "date": date_str,
             "timespan": timespan,
             "variable": variable,
+            "county_folder": county_folder,
+            "zarr_store": find_zarr_store_path(parts),
             "object_path": object_path,
         }
 
@@ -166,38 +211,76 @@ def main():
 
         if category == "plots":
             # Group entries by timespan, then by variable within each timespan.
+            # County-cutout entries are tracked separately per timespan so they
+            # collapse into a single link instead of one bullet per file.
             by_timespan = defaultdict(lambda: defaultdict(list))
+            county_folders_by_timespan = defaultdict(set)
+
             for e in entries:
                 timespan_key = e["timespan"] or NO_TIMESPAN_LABEL
-                by_timespan[timespan_key][e["variable"]].append(e["object_path"])
+                if e["county_folder"]:
+                    county_folders_by_timespan[timespan_key].add(e["county_folder"])
+                else:
+                    by_timespan[timespan_key][e["variable"]].append(e["object_path"])
 
             def timespan_sort_key(t):
                 if t in TIMESPAN_ORDER:
                     return (0, TIMESPAN_ORDER.index(t))
                 return (1, t)  # NO_TIMESPAN_LABEL (or anything unrecognized) sorts last
 
-            timespan_order_present = sorted(by_timespan.keys(), key=timespan_sort_key)
+            all_timespans_present = set(by_timespan.keys()) | set(county_folders_by_timespan.keys())
+            timespan_order_present = sorted(all_timespans_present, key=timespan_sort_key)
 
             for timespan_key in timespan_order_present:
                 timespan_label = TIMESPAN_DISPLAY.get(timespan_key, timespan_key)
                 lines.append(f"## {timespan_label}\n")
 
-                by_variable = by_timespan[timespan_key]
+                by_variable = by_timespan.get(timespan_key, {})
                 variable_order = sorted(
                     by_variable.keys(),
                     key=lambda v: (v != DEFAULT_PLOT_VARIABLE, v.lower()),
                 )
+                # Make sure Precipitation shows up even if its only content
+                # is a county-folder link with no direct files.
+                county_folders = county_folders_by_timespan.get(timespan_key, set())
+                if county_folders and DEFAULT_PLOT_VARIABLE not in variable_order:
+                    variable_order = [DEFAULT_PLOT_VARIABLE] + variable_order
+
                 for variable in variable_order:
                     lines.append(f"### {variable}\n")
-                    for obj_path in sorted(by_variable[variable]):
+                    for obj_path in sorted(by_variable.get(variable, [])):
                         fname = Path(obj_path).name
                         lines.append(f"- [{fname}]({public_url(args.bucket, obj_path)})")
+                    if variable == DEFAULT_PLOT_VARIABLE:
+                        for folder_path in sorted(county_folders):
+                            lines.append(
+                                f"- [{COUNTY_LINK_LABEL}]"
+                                f"({console_folder_url(args.bucket, folder_path)})"
+                            )
                     lines.append("")
         else:
-            # data/ category: no variable/timespan subfolders, just list everything.
-            for e in sorted(entries, key=lambda x: x["object_path"]):
+            # data/ category: zarr stores collapse to one link each (a store
+            # is a directory of many small chunk files, not one object);
+            # any other file types are still listed individually.
+            zarr_stores = set()
+            plain_files = []
+            for e in entries:
+                if e["zarr_store"]:
+                    zarr_stores.add(e["zarr_store"])
+                else:
+                    plain_files.append(e)
+
+            for e in sorted(plain_files, key=lambda x: x["object_path"]):
                 fname = Path(e["object_path"]).name
                 lines.append(f"- [{fname}]({public_url(args.bucket, e['object_path'])})")
+
+            for store_path in sorted(zarr_stores):
+                store_name = Path(store_path).name
+                lines.append(
+                    f"- **{store_name}** — "
+                    f"[browse]({console_folder_url(args.bucket, store_path)}) · "
+                    f"`gs://{args.bucket}/{store_path}`"
+                )
 
         index_path.write_text("\n".join(lines).rstrip() + "\n")
         print(f"Wrote {index_path}")

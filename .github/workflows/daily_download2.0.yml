@@ -5,8 +5,8 @@ permissions:
   id-token: write
 
 on:
-  schedule:
-   - cron: "16 00 * * *" # every day at 00:16 UTC
+  #schedule:
+   # - cron: "16 00 * * *" # every day at 00:16 UTC
   workflow_dispatch:
 
 jobs:
@@ -98,6 +98,7 @@ jobs:
 
       # ── Authenticate to Google Cloud (Workload Identity Federation) ──
       - name: Auth to Google Cloud
+        continue-on-error: true
         uses: google-github-actions/auth@v2
         with:
           token_format: 'access_token'
@@ -106,6 +107,7 @@ jobs:
           export_environment_variables: true
 
       - name: Setup gcloud
+        continue-on-error: true
         uses: google-github-actions/setup-gcloud@v2
 
       # ── Upload public plots to the bucket ─────────────────────────
@@ -132,15 +134,17 @@ jobs:
         working-directory: main_repo
         run: |
           > ../uploaded_data.txt
-          if [ -d "data" ]; then
-            find "data" -type d -iname "*.zarr" | while read -r zarr_path; do
-              rel_path="${zarr_path#"data"/}"
+          if [ -d "$OUTPUT_DIR" ]; then
+            find "$OUTPUT_DIR" -type d -iname "*.zarr" | while read -r zarr_path; do
+              rel_path="${zarr_path#"$OUTPUT_DIR"/}"
               echo "Uploading $zarr_path -> gs://${BUCKET}/data/${rel_path}"
               gcloud storage cp -r "$zarr_path" "gs://${BUCKET}/data/${rel_path}"
-              find "$zarr_path" -type f | sed "s#^#data/${rel_path%/*}/#" >> ../uploaded_data.txt
+              # Record ONE line for the whole store, not each internal chunk file —
+              # generate_artifact_index.py collapses on ".zarr" to a single folder link.
+              echo "data/${rel_path}" >> ../uploaded_data.txt
             done
           else
-            echo "No data directory found, skipping."
+            echo "No $OUTPUT_DIR directory found, skipping."
           fi
 
       # ── Generate markdown index for everything just uploaded ─────
@@ -172,25 +176,23 @@ jobs:
           git diff --cached --quiet || git commit -m "Update artifact index [$(date -u +'%Y-%m-%d %H:%M UTC')]"
           git push origin main
 
-     # ── Commit website branch (ncdf data + catalog JSON) ─────────
+      # ── Commit website branch (ncdf data + catalog JSON) ─────────
       - name: Commit website data and catalog
         continue-on-error: true
         run: |
           cd website_branch
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add data/
-
+          git add .
           if git diff --cached --quiet; then
             echo "No changes to commit on website branch."
           else
-            git commit -m "chore: update ncdf data [$(date -u +'%Y-%m-%d %H:%M UTC')]"
+            git commit -m "chore: update ncdf data and catalog [$(date -u +'%Y-%m-%d %H:%M UTC')]"
             git push origin website
           fi
 
-            - name: Remove website worktree
-              run: rm -rf website_branch
+      - name: Remove website worktree
+        run: rm -rf website_branch
 
       # ── Sheerwater / TAHMO / satellite data ──────────────────────
       - name: Install sheerwater dependencies
@@ -246,13 +248,19 @@ jobs:
         run: |
           yes | python plot_sat_vs_stations.py --country Kenya,Ghana,Senegal,Ethiopia
 
-      # Only private (station-derived) plots/data need to travel to the email
-      # job now — public forecast plots are already in the bucket.
       - name: Upload files as artifact
         uses: actions/upload-artifact@v4
         with:
           name: s2s_data
           path: |
+            main_repo/plots/*/*/dekadal/dekadal_precip.png
+            main_repo/plots/*/*/weekly/weekly_precip.png
+            main_repo/plots/*/*/weekly/weekly_precip_downscaled_clipped.png
+            main_repo/plots/*/*/weekly/weekly_medium_range_precip.png
+            # main_repo/plots/*/*/dekadal/imerg_*_dekadal.png
+            # main_repo/plots/*/*/weekly/imerg_*_weekly.png
+            # main_repo/plots/*/*/dekadal/chirps_*_dekadal.png
+            # main_repo/plots/*/*/weekly/chirps_*_weekly.png
             main_repo/private_plots/**/*.png
             main_repo/private_data/**/*.csv
             main_repo/prompts/*.txt
@@ -353,7 +361,7 @@ jobs:
             Attached are dekadal and weekly outlooks and historical station data related
             to the subseasonal forecast. You can also browse the full archive (except for
             the station data) at https://console.cloud.google.com/storage/browser/africa-forecasting-data .
- 
+
             ${{ steps.summary.outputs.body || '' }}
           reply_to: genevieve@rhizaresearch.org
           attachments: >
@@ -361,9 +369,9 @@ jobs:
             plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip.png,
             plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip_downscaled_clipped.png,
             plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_medium_range_precip.png,
-            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Kenya_dekadal.png,
-            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Kenya_weekly.png,
-            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/chirps_Kenya_dekadal.png,
-            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/chirps_Kenya_weekly.png,
+            # plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Kenya_dekadal.png,
+            # plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Kenya_weekly.png,
+            # plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/chirps_Kenya_dekadal.png,
+            # plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/chirps_Kenya_weekly.png,
             private_plots/${{ matrix.country }}/${{ steps.date.outputs.date }}/*.png,
             private_data/station_data/${{ matrix.country }}/${{ steps.date.outputs.date }}/*.csv
