@@ -11,7 +11,7 @@ else:
     today = datetime.today()
     two_days_earlier = today - timedelta(days=2)
     date_str = two_days_earlier.strftime("%Y-%m-%d")
-    
+
 print(f"Downloading data for: {date_str}")
 
 path=f'data/{date_str}/'
@@ -243,44 +243,47 @@ gef.combine_to_zarr(
     f"ECMWF_s2s_500wind_{date_str}"
 )
 
-#download medium range precip
-client = Client("ecmwf", beta=False)
+try:
+    #download medium range precip
+    client = Client("ecmwf", beta=False)
 
-filename1 = f'{path}/medium-tp-{date_str}-mean-pf_big.grib'
-filename2 = f'{path}/medium-tp-{date_str}-mean-cf_big.grib'
+    filename1 = f'{path}/medium-tp-{date_str}-mean-pf_big.grib'
+    filename2 = f'{path}/medium-tp-{date_str}-mean-cf_big.grib'
 
-client.retrieve(
-    date=date_str,
-    time=0,
-    step=[0,168,336],
-    stream="enfo",
-    type="pf",
-    levtype="sfc",
-    param=['tp'],
-    target=filename1,
-)
+    client.retrieve(
+        date=date_str,
+        time=0,
+        step=[0,168,336],
+        stream="enfo",
+        type="pf",
+        levtype="sfc",
+        param=['tp'],
+        target=filename1,
+    )
 
-client.retrieve(
-    date=date_str,
-    time=0,
-    step=[0,168,336],
-    stream="oper",
-    type="fc",
-    levtype="sfc",
-    param=['tp'],
-    target=filename2
-)
+    client.retrieve(
+        date=date_str,
+        time=0,
+        step=[0,168,336],
+        stream="oper",
+        type="fc",
+        levtype="sfc",
+        param=['tp'],
+        target=filename2
+    )
 
-data_medium_pf=xr.open_dataset(filename1,engine='cfgrib').sel(longitude=slice(bounding_box[1],bounding_box[3]),latitude=slice(bounding_box[0],bounding_box[2]))
-data_medium_cf=xr.open_dataset(filename2,engine='cfgrib').assign_coords({'number':0}).sel(longitude=slice(bounding_box[1],bounding_box[3]),latitude=slice(bounding_box[0],bounding_box[2]))
-data_medium=xr.concat([data_medium_pf,data_medium_cf],dim='number')
-data_weekly_medium=data_medium.diff('step')*1000
-data_weekly_medium.tp.attrs=data_medium_pf.tp.attrs
-data_weekly_medium.tp.attrs['units']='mm'
+    data_medium_pf=xr.open_dataset(filename1,engine='cfgrib').sel(longitude=slice(bounding_box[1],bounding_box[3]),latitude=slice(bounding_box[0],bounding_box[2]))
+    data_medium_cf=xr.open_dataset(filename2,engine='cfgrib').assign_coords({'number':0}).sel(longitude=slice(bounding_box[1],bounding_box[3]),latitude=slice(bounding_box[0],bounding_box[2]))
+    data_medium=xr.concat([data_medium_pf,data_medium_cf],dim='number')
+    data_weekly_medium=data_medium.diff('step')*1000
+    data_weekly_medium.tp.attrs=data_medium_pf.tp.attrs
+    data_weekly_medium.tp.attrs['units']='mm'
 
-data_weekly_medium.to_zarr(f'{path}/medium_range_precip.zarr')
+    data_weekly_medium.to_zarr(f'{path}/medium_range_precip.zarr')
 
-os.remove(filename1)
-os.remove(filename1+'.5b7b6.idx')
-os.remove(filename2)
-os.remove(filename2+'.5b7b6.idx')
+    os.remove(filename1)
+    os.remove(filename1+'.5b7b6.idx')
+    os.remove(filename2)
+    os.remove(filename2+'.5b7b6.idx')
+except:
+    print('medium range is unavailable')
