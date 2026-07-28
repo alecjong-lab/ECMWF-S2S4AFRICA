@@ -3,6 +3,7 @@
 # requires-python = ">=3.12,<3.13"
 # dependencies = [
 #   "cftime",
+#   "dask",
 #   "dynamical-catalog==0.5.0",
 #   "xarray",
 #   "zarr",
