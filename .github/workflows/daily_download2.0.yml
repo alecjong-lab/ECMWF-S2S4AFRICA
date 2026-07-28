@@ -16,7 +16,7 @@ jobs:
       DATA_BRANCH: main
       WEBSITE_BRANCH: website
       DATA_DIR: website_data
-      OUTPUT_DIR: ncdf_data
+      OUTPUT_DIR: data
       BUCKET: africa-forecasting-data
       CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
       TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}

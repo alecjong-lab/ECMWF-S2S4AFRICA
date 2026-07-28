@@ -20,7 +20,6 @@ prefix=os.environ["MAIN_PATH"]
 data_path=f'{prefix}/data/{date_str}'
 
 #-----precip extended range---------------------------------------------------------------------------------------#
-
 data=xr.open_zarr(f'{data_path}/ECMWF_s2s_precip_{date_str}.zarr',consolidated=True).compute()
 
 steps=data.step.values*1e-9/3600
@@ -48,13 +47,13 @@ data_weekly_cut_to_mclimate=data_weekly.sel(longitude=slice(m_climate_big.longit
 ensemble_stats_tp=gef.ensemble_data(data_weekly_cut_to_mclimate,m_climate_big,'tp',quantiles=[75,50,25])
 # ensemble_stats_tp_month=gef.ensemble_data(data_weekly_cut_to_mclimate.isel(step=slice(None,3)).sum('step'),m_climate_big.isel(step=slice(None,3)).sum('step'),'tp',quantiles=[75,50,25])
 
-# #-----precip medium range---------------------------------------------------------------------------------------#
+#-----precip medium range---------------------------------------------------------------------------------------#
 try:
     data_weekly_medium=xr.open_zarr(f'{data_path}/medium_range_precip.zarr',consolidated=True).compute()
 except:
     medium_range=False
 
-# # #------other vars-----------------------------------------------------------------------------------------#
+#------other vars-----------------------------------------------------------------------------------------#
 dailyvars=xr.open_zarr(f'{data_path}/ECMWF_s2s_daily_vars_{date_str}.zarr',consolidated=True).compute()
 Tminmax=xr.open_zarr(f'{data_path}/ECMWF_s2s_Tminmax_{date_str}.zarr',consolidated=True).compute()
 wind10=xr.open_zarr(f'{data_path}/ECMWF_s2s_10wind_{date_str}.zarr',consolidated=True).compute()

@@ -64,7 +64,6 @@ for ftype in ['perturbed_forecast','control_forecast']:
         f"{path}/{precip_file.format(ftype=ftype)}"
     )
 
-
     # ========================================================
     # DAILY VARIABLES
     # ========================================================
@@ -103,7 +102,6 @@ for ftype in ['perturbed_forecast','control_forecast']:
         f"{path}/{daily_file.format(ftype=ftype)}"
     )
 
-
     # ========================================================
     # 10m WIND
     # ========================================================
@@ -128,7 +126,6 @@ for ftype in ['perturbed_forecast','control_forecast']:
         f"{path}/{wind10_file.format(ftype=ftype)}"
     )
 
-
     # ========================================================
     # Tmin / Tmax
     # ========================================================
@@ -152,7 +149,6 @@ for ftype in ['perturbed_forecast','control_forecast']:
     ).download(
         f"{path}/{Tminmax_file.format(ftype=ftype)}"
     )
-
 
     # ========================================================
     # 700 hPa WIND
@@ -179,7 +175,6 @@ for ftype in ['perturbed_forecast','control_forecast']:
         f"{path}/{wind700_file.format(ftype=ftype)}"
     )
 
-
     # ========================================================
     # 500 hPa VERTICAL VELOCITY
     # ========================================================
@@ -201,7 +196,6 @@ for ftype in ['perturbed_forecast','control_forecast']:
     ).download(
         f"{path}/{wind500_file.format(ftype=ftype)}"
     )
-
 
 # ============================================================
 # CREATE ZARR FILES AFTER BOTH FORECAST TYPES EXIST
