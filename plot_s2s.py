@@ -50,6 +50,7 @@ ensemble_stats_tp=gef.ensemble_data(data_weekly_cut_to_mclimate,m_climate_big,'t
 #-----precip medium range---------------------------------------------------------------------------------------#
 try:
     data_weekly_medium=xr.open_zarr(f'{data_path}/medium_range_precip.zarr',consolidated=True).compute()
+    medium_range=True
 except:
     medium_range=False
 
