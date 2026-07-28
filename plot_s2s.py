@@ -369,7 +369,7 @@ if os.environ["AI_ACTIVE"]=='True':
     user_prompt = f"""
     Forecast date: {date_str}
     Country: Kenya
-    Month: {two_days_earlier.strftime("%B")}
+    Month: {date_str[5:7]}
     Zone statistics (6-week forecast):
     {gef.format_prompt_data(promt_unformat)}
     """
