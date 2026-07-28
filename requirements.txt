@@ -20,3 +20,4 @@ google-genai
 zarr
 gcsfs
 dynamical_catalog
+uv 
