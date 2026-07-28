@@ -7,6 +7,7 @@ shapely
 cfgrib
 pandas
 netCDF4
+dask
 scipy
 bottleneck
 geopandas
@@ -20,5 +21,4 @@ google-genai
 zarr
 gcsfs
 dynamical_catalog
-uv 
-dask 
+uv  
