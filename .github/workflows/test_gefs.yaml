@@ -1,0 +1,82 @@
+name: GEFS Download
+
+permissions:
+  contents: write
+  id-token: write
+
+on:
+  workflow_dispatch:
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    env:
+      DATA_BRANCH: main
+      WEBSITE_BRANCH: website
+      DATA_DIR: website_data
+      OUTPUT_DIR: data
+      BUCKET: africa-forecasting-data
+      CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
+      TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
+      TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
+      EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+      EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main_repo
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: main_repo
+        run: |
+          pip install -r requirements.txt
+
+      - name: Fetch forecast
+        run: |
+          uv run fetch_dynamical.py \
+            --dataset noaa-gfs-forecast \
+            --date latest \
+            --bbox 22.5 -21 -34.5 55.5 \
+            --variable temperature_2m \
+            --output ./data/2026-07-26/africa.zarr      
+
+# ── Authenticate to Google Cloud (Workload Identity Federation) ──
+      - name: Auth to Google Cloud
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
+          service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
+          export_environment_variables: true
+
+      - name: Setup gcloud
+        continue-on-error: true
+        uses: google-github-actions/setup-gcloud@v2
+
+      # ── Upload only .zarr stores to the data/ folder ──────────────
+      - name: Upload zarr data to GCS
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          > ../uploaded_data.txt
+          if [ -d "$OUTPUT_DIR" ]; then
+            find "$OUTPUT_DIR" -type d -iname "*.zarr" | while read -r zarr_path; do
+              rel_path="${zarr_path#"$OUTPUT_DIR"/}"
+              echo "Uploading $zarr_path -> gs://${BUCKET}/data/${rel_path}"
+              gcloud storage cp -r "$zarr_path" "gs://${BUCKET}/data/${rel_path}"
+              # Record ONE line for the whole store, not each internal chunk file —
+              # generate_artifact_index.py collapses on ".zarr" to a single folder link.
+              echo "data/${rel_path}" >> ../uploaded_data.txt
+            done
+          else
+            echo "No $OUTPUT_DIR directory found, skipping."
+          fi

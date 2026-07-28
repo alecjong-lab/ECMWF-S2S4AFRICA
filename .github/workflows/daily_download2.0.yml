@@ -111,18 +111,12 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       # ── Upload public plots to the bucket ─────────────────────────
-      # main_repo/plots already follows plots/<country>/<date>/<timespan>/[<variable>/]filename,
-      # so this is a straight recursive copy — no reorganizing needed.
       - name: Upload plots to GCS
         continue-on-error: true
         working-directory: main_repo
         run: |
           if [ -d plots ]; then
-            gcloud storage cp -r plots "gs://${BUCKET}/"
-            # Exclude index.md — these are our own previously-committed markdown
-            # index files sitting in the checked-out plots/ tree, not actual
-            # plot artifacts. Including them causes the indexer to re-index its
-            # own output (collapsing everything into "Other" / "Precipitation").
+            gcloud storage rsync -r plots "gs://${BUCKET}/plots" --exclude='.*index\.md$'
             find plots -type f ! -name "index.md" > ../uploaded_plots.txt
           else
             echo "No plots directory found, skipping."
@@ -130,9 +124,6 @@ jobs:
           fi
 
       # ── Upload only .zarr stores to the data/ folder ──────────────
-      # Zarr stores are directories, not single files, so each one is copied
-      # recursively. Currently a no-op until download_s2s.py is switched to
-      # emit .zarr instead of NetCDF — safe to leave in either way.
       - name: Upload zarr data to GCS
         continue-on-error: true
         working-directory: main_repo
@@ -164,10 +155,6 @@ jobs:
             --top-level-max 30
 
       # ── Commit only the generated index files to main ────────────
-      # Raw plots/data are no longer committed to git at all — they live in
-      # the bucket now. Only the small index.md / ARTIFACTS.md pointer files
-      # get pushed, using -f since data/ or plots/ may still be in .gitignore
-      # from before this migration.
       - name: Commit artifact index to main branch
         continue-on-error: true
         run: |
