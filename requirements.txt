@@ -21,3 +21,4 @@ zarr
 gcsfs
 dynamical_catalog
 uv 
+dask 
