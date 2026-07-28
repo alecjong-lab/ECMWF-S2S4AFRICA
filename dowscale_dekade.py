@@ -21,9 +21,12 @@ def set_lat_lon(ds):
     gef.lon2=lon2
     return(lat1,lat2,lon1,lon2)
 
-today = datetime.today()
-two_days_earlier = today - timedelta(days=2)
-date_str = two_days_earlier.strftime("%Y-%m-%d")
+if "DATE_STR" in os.environ:
+    date_str=os.environ["DATE_STR"]
+else:
+    today = datetime.today()
+    two_days_earlier = today - timedelta(days=2)
+    date_str = two_days_earlier.strftime("%Y-%m-%d")
 
 data_dekade=xr.open_dataset(f'data/{date_str}/data_dekade.nc')
 month=int(data_dekade.time.dt.month.values)

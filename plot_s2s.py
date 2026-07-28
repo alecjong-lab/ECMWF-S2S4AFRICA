@@ -8,9 +8,12 @@ import os
 from datetime import datetime, timedelta
 import geopandas as gpd
 
-today = datetime.today()
-two_days_earlier = today - timedelta(days=2)
-date_str = two_days_earlier.strftime("%Y-%m-%d")
+if "DATE_STR" in os.environ:
+    date_str=os.environ["DATE_STR"]
+else:
+    today = datetime.today()
+    two_days_earlier = today - timedelta(days=2)
+    date_str = two_days_earlier.strftime("%Y-%m-%d")
 
 #prefix = "C:\\Users\\alecj\\Bureaublad\\ECMWF-S2S4AFRICA\\" 
 prefix=os.environ["MAIN_PATH"]
@@ -45,10 +48,8 @@ data_weekly_cut_to_mclimate=data_weekly.sel(longitude=slice(m_climate_big.longit
 ensemble_stats_tp=gef.ensemble_data(data_weekly_cut_to_mclimate,m_climate_big,'tp',quantiles=[75,50,25])
 # ensemble_stats_tp_month=gef.ensemble_data(data_weekly_cut_to_mclimate.isel(step=slice(None,3)).sum('step'),m_climate_big.isel(step=slice(None,3)).sum('step'),'tp',quantiles=[75,50,25])
 
-
 # #-----precip medium range---------------------------------------------------------------------------------------#
 data_weekly_medium=xr.open_zarr(f'{data_path}/medium_range_precip.zarr',consolidated=True).compute()
-
 
 # # #------other vars-----------------------------------------------------------------------------------------#
 dailyvars=xr.open_zarr(f'{data_path}/ECMWF_s2s_daily_vars_{date_str}.zarr',consolidated=True).compute()

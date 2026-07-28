@@ -5,12 +5,13 @@ from ecmwf.opendata import Client
 import xarray as xr
 import get_ECMWF_functions as gef
 
-# ---------------------------
-# Compute the date two days earlier
-# ---------------------------
-today = datetime.today()
-two_days_earlier = today - timedelta(days=2)
-date_str = two_days_earlier.strftime("%Y-%m-%d")
+if "DATE_STR" in os.environ:
+    date_str=os.environ["DATE_STR"]
+else:
+    today = datetime.today()
+    two_days_earlier = today - timedelta(days=2)
+    date_str = two_days_earlier.strftime("%Y-%m-%d")
+    
 print(f"Downloading data for: {date_str}")
 
 path=f'data/{date_str}/'

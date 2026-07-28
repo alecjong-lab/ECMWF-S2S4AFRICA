@@ -5,8 +5,8 @@ permissions:
   id-token: write
 
 on:
-  #schedule:
-   # - cron: "16 00 * * *" # every day at 00:16 UTC
+  schedule:
+   - cron: "16 00 * * *" # every day at 00:16 UTC
   workflow_dispatch:
 
 jobs:
@@ -119,7 +119,11 @@ jobs:
         run: |
           if [ -d plots ]; then
             gcloud storage cp -r plots "gs://${BUCKET}/"
-            find plots -type f > ../uploaded_plots.txt
+            # Exclude index.md — these are our own previously-committed markdown
+            # index files sitting in the checked-out plots/ tree, not actual
+            # plot artifacts. Including them causes the indexer to re-index its
+            # own output (collapsing everything into "Other" / "Precipitation").
+            find plots -type f ! -name "index.md" > ../uploaded_plots.txt
           else
             echo "No plots directory found, skipping."
             > ../uploaded_plots.txt
@@ -347,7 +351,23 @@ jobs:
               out.write('\nFORECAST_END\n')
             "
 
+      - name: Check required plots exist
+        id: check_plots
+        run: |
+          country="${{ matrix.country }}"
+          date="${{ steps.ecmwf_date.outputs.date }}"
+          dekadal="plots/${country}/${date}/dekadal/dekadal_precip.png"
+          weekly="plots/${country}/${date}/weekly/weekly_precip.png"
+
+          if [ -f "$dekadal" ] && [ -f "$weekly" ]; then
+            echo "plots_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "plots_ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Missing required plots for ${country} on ${date} — skipping email. dekadal_precip.png present: $( [ -f "$dekadal" ] && echo yes || echo no ); weekly_precip.png present: $( [ -f "$weekly" ] && echo yes || echo no )"
+          fi
+
       - name: Email out generated plots for ${{ matrix.country }}
+        if: steps.check_plots.outputs.plots_ok == 'true'
         uses: dawidd6/action-send-mail@v16
         with:
           server_address: smtp.resend.com

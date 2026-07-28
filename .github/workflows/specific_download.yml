@@ -1,0 +1,201 @@
+name: Specific date ECMWF Download
+
+permissions:
+  contents: write
+  id-token: write
+
+on:
+  workflow_dispatch:
+    inputs:
+        date_str:
+          description: "date_str"
+          required: True
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    env:
+      DATA_BRANCH: main
+      WEBSITE_BRANCH: website
+      DATA_DIR: website_data
+      OUTPUT_DIR: ncdf_data
+      BUCKET: africa-forecasting-data
+      CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
+      TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
+      TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
+      EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
+      EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main_repo
+
+      - name: Check out website branch
+        uses: actions/checkout@v4
+        with:
+          ref: website
+          path: website_branch
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: main_repo
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run download script
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python download_s2s.py
+        env:
+          BOUNDING_BOX: "22.5,-21,-34.5,55.5"
+          DATE_STR: "${{ inputs.date_str }}"
+
+      - name: Generate plots
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python plot_s2s.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          WEBSITE_PATH: ${{ github.workspace }}/website_branch/
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY}}
+          COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"
+          AI_ACTIVE: 'True'
+          DATE_STR: "${{ inputs.date_str }}"
+
+      - name: Perform downscaling
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python dowscale_dekade.py
+        env:
+          DEKADE_COUNTRIES: "Kenya,Great_Horn,Ethiopia"
+          WEEK_COUNTRIES: "Kenya,Ghana"
+          DATE_STR: "${{ inputs.date_str }}"
+
+      # ── Convert NetCDF → JSON and update catalog ─────────────────
+      - name: Convert NetCDF and update catalog
+        working-directory: website_branch
+        continue-on-error: true
+        env:
+          NCDF_DIR:       ncdf_data
+          OUTPUT_DIR:     data/weekly
+          CATALOG_PATH:   data/weekly/catalog.json
+          VARIABLES:      "temp,precip,u10,v10,w500,u700,v700,tcw,cape,d2m,mn2t6,mx2t6"
+          N_WEEKS:        "6"
+          KEEP_FORECASTS: "5"
+        run: |
+          python scripts/nc_to_json_and_catalog.py \
+            --ncdf-dir    "${{ env.NCDF_DIR }}" \
+            --output-dir  "${{ env.OUTPUT_DIR }}" \
+            --catalog     "${{ env.CATALOG_PATH }}" \
+            --variables   "${{ env.VARIABLES }}" \
+            --n-weeks     "${{ env.N_WEEKS }}" \
+            --keep        "${{ env.KEEP_FORECASTS }}"
+
+      # ── Authenticate to Google Cloud (Workload Identity Federation) ──
+      - name: Auth to Google Cloud
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
+          service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
+          export_environment_variables: true
+
+      - name: Setup gcloud
+        continue-on-error: true
+        uses: google-github-actions/setup-gcloud@v2
+
+      # ── Upload public plots to the bucket ─────────────────────────
+      # main_repo/plots already follows plots/<country>/<date>/<timespan>/[<variable>/]filename,
+      # so this is a straight recursive copy — no reorganizing needed.
+      - name: Upload plots to GCS
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          if [ -d plots ]; then
+            gcloud storage cp -r plots "gs://${BUCKET}/"
+            # Exclude index.md — these are our own previously-committed markdown
+            # index files sitting in the checked-out plots/ tree, not actual
+            # plot artifacts. Including them causes the indexer to re-index its
+            # own output (collapsing everything into "Other" / "Precipitation").
+            find plots -type f ! -name "index.md" > ../uploaded_plots.txt
+          else
+            echo "No plots directory found, skipping."
+            > ../uploaded_plots.txt
+          fi
+
+      # ── Upload only .zarr stores to the data/ folder ──────────────
+      # Zarr stores are directories, not single files, so each one is copied
+      # recursively. Currently a no-op until download_s2s.py is switched to
+      # emit .zarr instead of NetCDF — safe to leave in either way.
+      - name: Upload zarr data to GCS
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          > ../uploaded_data.txt
+          if [ -d "$OUTPUT_DIR" ]; then
+            find "$OUTPUT_DIR" -type d -iname "*.zarr" | while read -r zarr_path; do
+              rel_path="${zarr_path#"$OUTPUT_DIR"/}"
+              echo "Uploading $zarr_path -> gs://${BUCKET}/data/${rel_path}"
+              gcloud storage cp -r "$zarr_path" "gs://${BUCKET}/data/${rel_path}"
+              # Record ONE line for the whole store, not each internal chunk file —
+              # generate_artifact_index.py collapses on ".zarr" to a single folder link.
+              echo "data/${rel_path}" >> ../uploaded_data.txt
+            done
+          else
+            echo "No $OUTPUT_DIR directory found, skipping."
+          fi
+
+      # ── Generate markdown index for everything just uploaded ─────
+      - name: Generate markdown index
+        continue-on-error: true
+        run: |
+          cat uploaded_plots.txt uploaded_data.txt > uploaded_files.txt
+          python main_repo/generate_artifact_index.py \
+            --bucket "${BUCKET}" \
+            --repo-root main_repo \
+            --uploaded-list uploaded_files.txt \
+            --top-level-file ARTIFACTS.md \
+            --top-level-max 30
+
+      # ── Commit only the generated index files to main ────────────
+      # Raw plots/data are no longer committed to git at all — they live in
+      # the bucket now. Only the small index.md / ARTIFACTS.md pointer files
+      # get pushed, using -f since data/ or plots/ may still be in .gitignore
+      # from before this migration.
+      - name: Commit artifact index to main branch
+        continue-on-error: true
+        run: |
+          cd main_repo
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f -A -- '**/index.md' ARTIFACTS.md
+          git status
+          git diff --cached --stat
+          git diff --cached --quiet || git commit -m "Update artifact index [$(date -u +'%Y-%m-%d %H:%M UTC')]"
+          git push origin main
+
+      # ── Commit website branch (ncdf data + catalog JSON) ─────────
+      - name: Commit website data and catalog
+        continue-on-error: true
+        run: |
+          cd website_branch
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No changes to commit on website branch."
+          else
+            git commit -m "chore: update ncdf data and catalog [$(date -u +'%Y-%m-%d %H:%M UTC')]"
+            git push origin website
+          fi
