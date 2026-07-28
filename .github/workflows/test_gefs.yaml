@@ -46,7 +46,7 @@ jobs:
             --date latest \
             --bbox 22.5 -21 -34.5 55.5 \
             --variable temperature_2m \
-            --output ./data/2026-07-26/africa.zarr      
+            --output ./data/2026-07-26/gefs_africa.zarr      
 
 # ── Authenticate to Google Cloud (Workload Identity Federation) ──
       - name: Auth to Google Cloud
