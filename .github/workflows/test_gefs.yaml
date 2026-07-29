@@ -47,7 +47,7 @@ jobs:
             --date latest \
             --countries "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"\
             --variable precipitation_surface \
-            --output ./data/2026-07-27/      
+            --output ./data/2026-07-27/gefs/     
 
 # ── Authenticate to Google Cloud (Workload Identity Federation) ──
       - name: Auth to Google Cloud

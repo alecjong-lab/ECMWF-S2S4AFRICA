@@ -38,6 +38,7 @@ import re
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
+import xarray as xr
 
 import numpy as np
 
@@ -82,6 +83,97 @@ class DataError(Exception):
 
 def np_to_date(val) -> date:
     return np.datetime64(val, "D").astype(date)
+
+def precip_step_to_daily(
+    ds: xr.Dataset,
+    var: str = "precipitation_surface",
+    lead_dim: str = "step",
+    hours_per_day: float = 24.0,
+) -> xr.Dataset:
+    """
+    Aggregate a step-averaged precipitation rate variable, defined on an
+    irregular (e.g. 3-hourly then 6-hourly) `lead_time` axis, into
+    forecast-day totals and forecast-day mean rates.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Must contain `var` with dimension `lead_dim`, plus whatever other
+        dims (ensemble_member, latitude, longitude, ...). `lead_dim`
+        coordinate can be either a timedelta64 coordinate or a plain
+        numeric-hours coordinate.
+    var : str
+        Name of the precipitation rate variable (mm/s == kg m-2 s-1).
+    lead_dim : str
+        Name of the forecast lead-time dimension.
+    hours_per_day : float
+        Length of a "day" bucket in hours (24 by default).
+
+    Returns
+    -------
+    xr.Dataset with:
+        precipitation_daily_accum_mm : total precip (mm) accumulated
+            during each forecast day, for each day the forecast covers.
+        precipitation_daily_mean_rate : time-weighted mean rate (mm/s)
+            during each forecast day (== accum_mm / seconds_covered).
+        forecast_day : coordinate, 1 = (0, 24h], 2 = (24h, 48h], ...
+    """
+    da = ds[var]
+    lead_time = ds[lead_dim]
+
+    # --- lead time as plain hours -----------------------------------
+    if np.issubdtype(lead_time.dtype, np.timedelta64):
+        lead_hours = (lead_time.values / np.timedelta64(1, "h")).astype(float)
+    else:
+        lead_hours = lead_time.values.astype(float)
+
+    if not np.all(np.diff(lead_hours) > 0):
+        raise ValueError(f"{lead_dim} must be strictly increasing")
+
+    # --- width (hours) of the interval each step is an average over --
+    step_width_h = np.empty_like(lead_hours)
+    step_width_h[0] = 0.0          # lead_time=0: no preceding interval
+    step_width_h[1:] = np.diff(lead_hours)
+
+    # --- assign each step's interval to a forecast day ----------------
+    # step i's interval is (lead_hours[i-1], lead_hours[i]]; day n covers
+    # (hours_per_day*(n-1), hours_per_day*n]
+    day_index = np.ceil(lead_hours / hours_per_day).astype(int)
+    day_index[0] = 0  # sentinel for the lead_time=0 point -> dropped later
+
+    step_width_da = xr.DataArray(step_width_h, dims=lead_dim,
+                                  coords={lead_dim: lead_time})
+    day_da = xr.DataArray(day_index, dims=lead_dim,
+                           coords={lead_dim: lead_time})
+
+    step_width_s = step_width_da * 3600          # seconds
+    step_accum_mm = da * step_width_s              # mm depth this step    
+    tmp = xr.Dataset({"accum_mm": step_accum_mm, "width_s": step_width_s})
+    tmp = tmp.assign_coords(forecast_day=day_da)
+
+    daily_sums = tmp.groupby("forecast_day").sum(dim=lead_dim, skipna=True)
+    daily_accum_mm = daily_sums["accum_mm"]
+    daily_width_s = daily_sums["width_s"]
+
+    # drop the lead_time=0 sentinel bucket (forecast_day == 0)
+    keep = daily_accum_mm["forecast_day"] > 0
+    daily_accum_mm = daily_accum_mm.sel(forecast_day=keep)
+    daily_width_s = daily_width_s.sel(forecast_day=keep)
+
+    daily_mean_rate = (daily_accum_mm / daily_width_s).where(daily_width_s > 0)
+
+    out = xr.Dataset(
+        {
+            "tp": daily_accum_mm,
+        }
+    )
+    out["tp"].attrs = {
+        "units": "mm",
+        "long_name": "Total precipitation",
+    }
+
+    out=out.assign_coords({'forecast_day':np.array([np.timedelta64(int(i * 86400000000000), 'ns') for i in out.forecast_day])}).rename({"forecast_day":"step"})
+    return out
 
 
 def parse_token(token: str, latest_fn=None) -> date:
@@ -308,6 +400,8 @@ def fetch(dataset, date_arg, start_arg, end_arg, countries, variable, output):
 
         out_path = output_dir / f"gefs_{key.lower()}.zarr"
         print(f"  {key}: writing {out_path}", file=sys.stderr)
+        if variable=="precipitation_surface":
+            country_ds=precip_step_to_daily(country_ds)
         country_ds.to_zarr(out_path, mode="w")
 
     print("Done.", file=sys.stderr)
