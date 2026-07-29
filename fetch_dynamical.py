@@ -400,7 +400,7 @@ def fetch(dataset, date_arg, start_arg, end_arg, countries, variable, output):
 
         out_path = output_dir / f"gefs_{key.lower()}.zarr"
         print(f"  {key}: writing {out_path}", file=sys.stderr)
-        print('variable')
+        print(variable)
         if variable=="precipitation_surface":
             print("test_succes",'variable')
             country_ds=precip_step_to_daily(country_ds)
