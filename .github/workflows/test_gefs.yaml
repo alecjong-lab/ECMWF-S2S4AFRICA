@@ -40,14 +40,13 @@ jobs:
           pip install -r requirements.txt
 
       - name: Fetch forecast
-        working-directory: main_repo
         run: |
           uv run fetch_dynamical.py \
-            --dataset noaa-gefs-forecast-35-day \
+            --dataset noaa-gefs-forecast-35-day\
             --date latest \
-            --bbox 6 33 -5 42 \
+            --countries "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"\
             --variable precipitation_surface \
-            --output ./data/2026-07-27/gefs_Kenya.zarr      
+            --output ./data/2026-07-27/      
 
 # ── Authenticate to Google Cloud (Workload Identity Federation) ──
       - name: Auth to Google Cloud
