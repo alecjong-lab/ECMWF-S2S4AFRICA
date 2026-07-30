@@ -55,6 +55,20 @@ jobs:
         env:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
 
+      - name: Get ECMWF lagged date
+        id: ecmwf_date
+        run: echo "date=$(date -d '2 days ago' +'%Y-%m-%d')" >> $GITHUB_OUTPUT          
+
+      - name: Fetch forecast
+        working-directory: main_repo
+        run: |
+          uv run fetch_dynamical.py \
+            --dataset noaa-gefs-forecast-35-day\
+            --date latest \
+            --countries "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"\
+            --variable precipitation_surface \
+            --output ./data/${{ steps.ecmwf_date.outputs.date }}/gefs/  
+
       - name: Generate plots
         continue-on-error: true
         working-directory: main_repo
@@ -66,6 +80,15 @@ jobs:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY}}
           COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"
           AI_ACTIVE: 'True'
+
+      - name: Generate GEFS plots
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python plot_gefs.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"
 
       - name: Perform downscaling
         continue-on-error: true

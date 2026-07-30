@@ -371,17 +371,83 @@ def day_mean(ds):
         d_mean[i].attrs=ds[i].attrs.copy()
     return d_mean
 
-def acum_to_instant(data):
-    #funtion to turn accumulated data into daily/ weekly values 
-    diff_data = xr.DataArray(
-        data.isel(step=slice(1,None)).tp.values - data.isel(step=slice(0,len(data.step)-1)).tp.values,
-        coords={'latitude':data.latitude,'longitude':data.longitude,'step': data.step[1:],'time':data.time,'valid_time':data.valid_time[1:]},  # new step coordinate
-        dims=data.dims
-    ).clip(min=0)
-    diff_data=diff_data.to_dataset(name='tp')
-    diff_data.tp.attrs=data.tp.attrs
-    return diff_data
+def accum_to_instant(data, dim=None, var=None, clip_negative=True):
+    """
+    Convert accumulated (cumulative-since-init) data into per-step instantaneous values.
 
+    Auto-detects whether `dim` starts at zero:
+    - If the first coordinate value along `dim` is 0, that step is a true zero-accumulation
+      baseline, so it's dropped and all remaining steps come from a plain diff.
+    - If not (no zero step present), the first raw value is assumed to already be the
+      first interval's total (e.g. day 1 = first value, day 2 = value[1] - value[0], ...).
+
+    Parameters
+    ----------
+    data : xr.Dataset or xr.DataArray
+    dim : str, optional
+        Name of the accumulation dimension (e.g. 'step', 'time'). Auto-detected if omitted.
+    var : str or list of str, optional
+        Variable name(s) to convert (Dataset only). Defaults to all vars containing `dim`.
+    clip_negative : bool
+        Clip negative diffs to 0 (handles minor accumulation resets/noise).
+    """
+    is_dataset = isinstance(data, xr.Dataset)
+
+    # --- autodetect the accumulation dimension ---
+    if dim is None:
+        candidates = ['step', 'lead_time', 'forecast_period', 'time', 'valid_time']
+        dim = next((d for d in candidates if d in data.dims), None)
+        if dim is None:
+            skip = {'latitude', 'longitude', 'lat', 'lon', 'number', 'member', 'realization'}
+            possible = [d for d in data.dims if d not in skip and data.sizes[d] > 1]
+            if len(possible) == 1:
+                dim = possible[0]
+            else:
+                raise ValueError(
+                    f"Couldn't auto-detect accumulation dimension, candidates: {possible}. "
+                    "Pass `dim=...` explicitly."
+                )
+
+    # --- check whether there's a genuine zero step at the start ---
+    first_coord_val = data[dim].values[0]
+    # handle timedelta64 dims (e.g. 'step' as np.timedelta64) as well as plain numbers
+    if np.issubdtype(np.asarray(first_coord_val).dtype, np.timedelta64):
+        has_zero_step = first_coord_val == np.timedelta64(0, 's')
+    else:
+        has_zero_step = first_coord_val == 0
+
+    def _deaccum_da(da):
+        if dim not in da.dims:
+            return da  # variable doesn't vary along this dim, leave as-is
+
+        if has_zero_step:
+            # true zero baseline present: drop it, diff the rest normally
+            out = da.diff(dim=dim)
+        else:
+            # no zero step: first raw value IS the first interval's total
+            diffed = da.diff(dim=dim)
+            first = da.isel({dim: 0})
+            out = xr.concat([first, diffed], dim=dim)
+
+        if clip_negative:
+            out = out.clip(min=0)
+        out.attrs = da.attrs
+        return out
+
+    if is_dataset:
+        if var is not None:
+            varnames = [var] if isinstance(var, str) else list(var)
+        else:
+            varnames = [v for v in data.data_vars if dim in data[v].dims]
+            if not varnames:
+                raise ValueError(f"No data variables found with dimension '{dim}'.")
+        out_ds = data.copy()
+        for v in varnames:
+            out_ds[v] = _deaccum_da(data[v])
+        return out_ds
+    else:
+        return _deaccum_da(data)
+    
 def day_mean_6h_accum(temp_data,variable):
     #function to calculate the day maximmum or mimimum of 6 hour temperature variables
     steps_in_1D=len(temp_data.sel(step=slice(None,np.timedelta64(86400000000000,'ns'))).step)
@@ -1157,7 +1223,10 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
     fig.tight_layout() 
     cbar_ax = fig.add_axes([0.15, -0.04 , 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
     cbar = fig.colorbar(contour, cax=cbar_ax, orientation='horizontal',fraction=5)
-    cbar.set_label(ds[variable].GRIB_name+f' [{units}]')
+    try:
+        cbar.set_label(ds[variable].GRIB_name+f' [{units}]')
+    except:
+        cbar.set_label(ds[variable].long_name+f' [{units}]')
 
     #manage the location of the colorbar
     if lines!=None:

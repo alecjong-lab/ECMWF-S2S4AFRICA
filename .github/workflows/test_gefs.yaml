@@ -38,6 +38,10 @@ jobs:
         working-directory: main_repo
         run: |
           pip install -r requirements.txt
+          
+      - name: Get ECMWF lagged date
+        id: ecmwf_date
+        run: echo "date=$(date -d '2 days ago' +'%Y-%m-%d')" >> $GITHUB_OUTPUT   
 
       - name: Fetch forecast
         working-directory: main_repo
@@ -47,7 +51,18 @@ jobs:
             --date latest \
             --countries "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"\
             --variable precipitation_surface \
-            --output ./data/2026-07-27/gefs/     
+            --output ./data/${{ steps.ecmwf_date.outputs.date }}/gefs/ 
+
+
+      - name: Generate GEFS plots
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python plot_gefs.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"
+
 
 # ── Authenticate to Google Cloud (Workload Identity Federation) ──
       - name: Auth to Google Cloud

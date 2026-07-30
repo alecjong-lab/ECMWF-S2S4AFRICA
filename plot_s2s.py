@@ -162,6 +162,7 @@ for country in countries:
     plt.savefig(f'{weekly_path}/weekly_change_in_precip.png',bbox_inches='tight')
     plt.close()
 
+    ##----------------------------- Ensemble stats plot -------------------------------------------------##
     if country!="Senegal":
         print(country)
 
