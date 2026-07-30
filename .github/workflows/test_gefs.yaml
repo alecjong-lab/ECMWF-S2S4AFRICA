@@ -49,7 +49,7 @@ jobs:
           uv run fetch_dynamical.py \
             --dataset noaa-gefs-forecast-35-day\
             --date latest \
-            --countries "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"\
+            --countries "Namibia,Botswana,Kenya"\
             --variable precipitation_surface \
             --output ./data/${{ steps.ecmwf_date.outputs.date }}/gefs/ 
 
@@ -88,7 +88,7 @@ jobs:
             echo "No plots directory found, skipping."
             > ../uploaded_plots.txt
           fi
-          
+
       # ── Upload only .zarr stores to the data/ folder ──────────────
       - name: Upload zarr data to GCS
         continue-on-error: true

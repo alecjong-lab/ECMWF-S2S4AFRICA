@@ -62,8 +62,8 @@ for country in countries:
     dekade = [gefs_data.step.values[i] for i in np.where(steps%240==0)[0]]
     weekly=[gefs_data.step.values[i] for i in np.where(steps%168==0)[0]]
 
-    gefs_monthly=gefs_data.sel(step=weekly).isel(step=4)
     gefs_weekly=gef.acum_to_instant(gefs_data.sel(step=weekly))
+    gefs_monthly=gefs_data.sel(step=weekly).isel(step=4)
     gefs_dekade=gef.acum_to_instant(gefs_data.sel(step=dekade))
     
     ds_to_plot=gefs_weekly
