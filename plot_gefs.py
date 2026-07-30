@@ -63,8 +63,8 @@ for country in countries:
     weekly=[gefs_data.step.values[i] for i in np.where(steps%168==0)[0]]
 
     gefs_monthly=gefs_data.sel(step=weekly).isel(step=4)
-    gefs_weekly=gef.accum_to_instant(gefs_data.sel(step=weekly))
-    gefs_dekade=gef.accum_to_instant(gefs_data.sel(step=dekade))
+    gefs_weekly=gef.acum_to_instant(gefs_data.sel(step=weekly))
+    gefs_dekade=gef.acum_to_instant(gefs_data.sel(step=dekade))
     
     ds_to_plot=gefs_weekly
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=gef.cmap,fontsize=fs)

@@ -371,7 +371,7 @@ def day_mean(ds):
         d_mean[i].attrs=ds[i].attrs.copy()
     return d_mean
 
-def accum_to_instant(data, dim=None, var=None, clip_negative=True):
+def acum_to_instant(data, dim=None, var=None, clip_negative=True):
     """
     Convert accumulated (cumulative-since-init) data into per-step instantaneous values.
 
