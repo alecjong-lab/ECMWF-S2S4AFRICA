@@ -38,7 +38,7 @@ jobs:
         working-directory: main_repo
         run: |
           pip install -r requirements.txt
-          
+
       - name: Get ECMWF lagged date
         id: ecmwf_date
         run: echo "date=$(date -d '2 days ago' +'%Y-%m-%d')" >> $GITHUB_OUTPUT   
@@ -53,7 +53,6 @@ jobs:
             --variable precipitation_surface \
             --output ./data/${{ steps.ecmwf_date.outputs.date }}/gefs/ 
 
-
       - name: Generate GEFS plots
         continue-on-error: true
         working-directory: main_repo
@@ -62,7 +61,6 @@ jobs:
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"
-
 
 # ── Authenticate to Google Cloud (Workload Identity Federation) ──
       - name: Auth to Google Cloud
@@ -78,6 +76,19 @@ jobs:
         continue-on-error: true
         uses: google-github-actions/setup-gcloud@v2
 
+    # ── Upload public plots to the bucket ─────────────────────────
+      - name: Upload plots to GCS
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          if [ -d plots ]; then
+            gcloud storage rsync -r plots "gs://${BUCKET}/plots" --exclude='.*index\.md$'
+            find plots -type f ! -name "index.md" > ../uploaded_plots.txt
+          else
+            echo "No plots directory found, skipping."
+            > ../uploaded_plots.txt
+          fi
+          
       # ── Upload only .zarr stores to the data/ folder ──────────────
       - name: Upload zarr data to GCS
         continue-on-error: true
