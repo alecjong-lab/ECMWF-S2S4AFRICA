@@ -56,7 +56,7 @@ for country in countries:
     gef.lon1=bboxes[country]['lon1']
     gef.lon2=bboxes[country]['lon2']
 
-    gefs_data=xr.open_zarr(data_path+f'/gefs_{country. lower()}.zarr')
+    gefs_data=xr.open_zarr(data_path+f'/gefs/gefs_{country. lower()}.zarr')
     gefs_data=gefs_data.cumsum(dim='step').assign_coords({'step':gefs_data.step})
     steps=(gefs_data.step.values*1e-9/3600).astype('int')
     dekade = [gefs_data.step.values[i] for i in np.where(steps%240==0)[0]]
