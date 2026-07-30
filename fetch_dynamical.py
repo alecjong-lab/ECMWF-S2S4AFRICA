@@ -175,7 +175,6 @@ def precip_step_to_daily(
     out=out.assign_coords({'forecast_day':np.array([np.timedelta64(int(i * 86400000000000), 'ns') for i in out.forecast_day])}).rename({"forecast_day":"step"})
     return out
 
-
 def parse_token(token: str, latest_fn=None) -> date:
     """Parse a single date token (see module docstring for grammar)."""
     if token in ("now", "today"):
@@ -402,11 +401,9 @@ def fetch(dataset, date_arg, start_arg, end_arg, countries, variable, output):
         print(f"  {key}: writing {out_path}", file=sys.stderr)
         if "precipitation_surface" in variable:
             country_ds2=precip_step_to_daily(country_ds)
-        country_ds.to_zarr(out_path, mode="w")
-        country_ds2.to_zarr(output_dir / f"gefs_{key.lower()}2.zarr", mode="w")
-
-
-
+        country_ds2.to_zarr(out_path, mode="w")
+        country_ds.to_zarr(output_dir / f"gefs_{key.lower()}2.zarr", mode="w")
+        
     print("Done.", file=sys.stderr)
 
 
