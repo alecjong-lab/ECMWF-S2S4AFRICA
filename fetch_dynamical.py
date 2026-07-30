@@ -403,7 +403,7 @@ def fetch(dataset, date_arg, start_arg, end_arg, countries, variable, output):
         if "precipitation_surface" in variable:
             country_ds2=precip_step_to_daily(country_ds)
         country_ds.to_zarr(out_path, mode="w")
-        country_ds2.to_zarr(out_path+'2', mode="w")
+        country_ds2.to_zarr(out_path[:-4]+'2.zarr', mode="w")
 
 
 
