@@ -64,7 +64,7 @@ jobs:
         run: |
           uv run fetch_dynamical.py \
             --dataset noaa-gefs-forecast-35-day\
-            --date latest \
+            --date ${{ steps.ecmwf_date.outputs.date }} \
             --countries "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"\
             --variable precipitation_surface \
             --output ./data/${{ steps.ecmwf_date.outputs.date }}/gefs/  
