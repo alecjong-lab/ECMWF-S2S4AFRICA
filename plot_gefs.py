@@ -10,7 +10,7 @@ if "DATE_STR" in os.environ:
     date_str=os.environ["DATE_STR"]
 else:
     today = datetime.today()
-    two_days_earlier = today - timedelta(days=3)
+    two_days_earlier = today - timedelta(days=2)
     date_str = two_days_earlier.strftime("%Y-%m-%d")
 
 prefix=os.environ["MAIN_PATH"]

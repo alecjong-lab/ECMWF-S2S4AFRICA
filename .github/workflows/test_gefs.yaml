@@ -41,7 +41,7 @@ jobs:
 
       - name: Get ECMWF lagged date
         id: ecmwf_date
-        run: echo "date=$(date -d '3 days ago' +'%Y-%m-%d')" >> $GITHUB_OUTPUT   
+        run: echo "date=$(date -d '2 days ago' +'%Y-%m-%d')" >> $GITHUB_OUTPUT   
 
       - name: Fetch forecast
         working-directory: main_repo

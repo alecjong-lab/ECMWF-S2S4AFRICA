@@ -400,9 +400,8 @@ def fetch(dataset, date_arg, start_arg, end_arg, countries, variable, output):
         out_path = output_dir / f"gefs_{key.lower()}.zarr"
         print(f"  {key}: writing {out_path}", file=sys.stderr)
         if "precipitation_surface" in variable:
-            country_ds2=precip_step_to_daily(country_ds)
-        country_ds2.to_zarr(out_path, mode="w")
-        country_ds.to_zarr(output_dir / f"gefs_{key.lower()}2.zarr", mode="w")
+            country_ds=precip_step_to_daily(country_ds)
+        country_ds.to_zarr(out_path, mode="w")
         
     print("Done.", file=sys.stderr)
 

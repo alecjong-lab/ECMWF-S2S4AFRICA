@@ -428,12 +428,11 @@ def acum_to_instant(data, dim=None, var=None, clip_negative=True):
             diffed = da.diff(dim=dim)
             first = da.isel({dim: 0})
             out = xr.concat([first, diffed], dim=dim)
-
         if clip_negative:
             out = out.clip(min=0)
         out.attrs = da.attrs
         return out
-
+    
     if is_dataset:
         if var is not None:
             varnames = [var] if isinstance(var, str) else list(var)
@@ -442,6 +441,8 @@ def acum_to_instant(data, dim=None, var=None, clip_negative=True):
             if not varnames:
                 raise ValueError(f"No data variables found with dimension '{dim}'.")
         out_ds = data.copy()
+        if has_zero_step:
+            out_ds=out_ds.isel(step=slice(1,None))
         for v in varnames:
             out_ds[v] = _deaccum_da(data[v])
         return out_ds
