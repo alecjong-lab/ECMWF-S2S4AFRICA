@@ -1,5 +1,6 @@
 # Recent Artifacts
 
+- [Domain-wide data — 2026-07-29](data/2026-07-29/index.md)
 - [Zimbabwe plots — 2026-07-28](plots/Zimbabwe/2026-07-28/index.md)
 - [Ghana plots — 2026-07-28](plots/Ghana/2026-07-28/index.md)
 - [Madagascar plots — 2026-07-28](plots/Madagascar/2026-07-28/index.md)
@@ -29,4 +30,3 @@
 - [Zimbabwe plots — 2026-07-27](plots/Zimbabwe/2026-07-27/index.md)
 - [Ghana plots — 2026-07-27](plots/Ghana/2026-07-27/index.md)
 - [Madagascar plots — 2026-07-27](plots/Madagascar/2026-07-27/index.md)
-- [Botswana plots — 2026-07-27](plots/Botswana/2026-07-27/index.md)
