@@ -62,6 +62,7 @@ def voronoi_bubbles(ax, lon, lat, values, cmap, norm, max_radius):
             continue
 
         x, y = clipped.exterior.xy
+        print(i,values,np.size(values))
         ax.fill(
             x, y,
             color=cmap(norm(values[i])),
