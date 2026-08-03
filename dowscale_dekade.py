@@ -59,7 +59,7 @@ forecast_files = {
     (9, 11): ["ECMWF_tp_forecasts_09-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_26_Great_Horn.nc","September_Dekad2"],
 }
 
-try:
+if (int(month),int(day)) in forecast_files.keys():
     keys = list(forecast_files)
     start = keys.index((month, day))
 
@@ -246,8 +246,6 @@ try:
                 districts.boundary.plot(ax=ax, color="black", linewidth=0.5)
 
             plt.savefig(f'plots/{country}/{date_str}/dekadal/dekadal_precip_downscaled_anomaly_clipped.png',bbox_inches='tight')
-except ValueError:
-    print('these are not the days you are looking for...')
 
 bboxes = {
     "Kenya": {"lat1": 7, "lon1": 33, "lat2": -6, "lon2": 42},
