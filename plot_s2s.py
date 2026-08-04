@@ -323,9 +323,6 @@ for data in all_ensemble_data:
 
 if os.environ["AI_ACTIVE"]=='True':
     try:
-        from google import genai
-        from google.genai import types
-
         #Short ai summary production
         region_map = {
             "Nyandarua": "Highlands East of the Rift Valley","Laikipia": "Highlands East of the Rift Valley","Nyeri": "Highlands East of the Rift Valley",
@@ -356,46 +353,27 @@ if os.environ["AI_ACTIVE"]=='True':
             anom_prct=promt_anom/promt_clim.rename({'time':'step'}).assign_coords({'step':promt_anom.step.values})*100
             promt_aboblnrml=gef.clip_by_overlap(ensemble_stats_tp[2].tp, regions, region, threshold=0.15).mean({'latitude','longitude'})
             prompt_efi=gef.clip_by_overlap(efi.tp, regions, region, threshold=0.15)
-            
+            promt_raw_precip=gef.clip_by_overlap(data_weekly.mean('number').tp, regions, region, threshold=0.15).mean({'latitude','longitude'})
+            promt_p50=gef.clip_by_overlap(ensemble_stats_tp[0].sel(quantile=50).tp, regions, region, threshold=0.15).mean({'latitude','longitude'})
+
             anom_prct_dict=[{'anom_prct':round(float(i),2)} for i in anom_prct]
             promt_anom_dict=[{'anom':round(float(i),2)} for i in promt_anom]
             promt_aboblnrml_dict=[{'p66':float(promt_aboblnrml.isel(step=i)[1]),
             'p33':float(promt_aboblnrml.isel(step=i)[0]),} for i in range(6)]
             promt_efi_dict=gef.zone_stats_per_step(prompt_efi)
-            promt_dict={f"week{i+1}": anom_prct_dict[i] | promt_anom_dict[i] | promt_aboblnrml_dict[i] | promt_efi_dict[i] for i, d in enumerate(gef.zone_stats_per_step(prompt_efi))}
+            promt_raw_precip_dict=[{'raw_precip_mm':round(float(i),2)} for i in promt_raw_precip]
+            promt_p50_dict=[{'p50':round(float(i),2)} for i in promt_p50]
+
+            if medium_range:
+                promt_medium_precip=gef.clip_by_overlap(data_weekly_medium.mean('number').tp, regions, region, threshold=0.15).mean({'latitude','longitude'})
+                promt_medium_precip_dict=[{'medium_range_precip_mm':round(float(i),2)} for i in promt_medium_precip]
+            else:
+                promt_medium_precip_dict=[]
+            promt_medium_precip_dict += [{}] * (6 - len(promt_medium_precip_dict))
+
+            promt_dict={f"week{i+1}": anom_prct_dict[i] | promt_anom_dict[i] | promt_aboblnrml_dict[i] | promt_efi_dict[i] | promt_raw_precip_dict[i] | promt_p50_dict[i] | promt_medium_precip_dict[i] for i, d in enumerate(gef.zone_stats_per_step(prompt_efi))}
             promt_unformat[region]=promt_dict
-
-        with open(f"{prefix}/prompts/system_prompt.md") as f:
-            system_prompt = f.read()
-
-        user_prompt = f"""
-        Forecast date: {date_str}
-        Country: Kenya
-        Month: {date_str[5:7]}
-        Zone statistics (6-week forecast):
-        {gef.format_prompt_data(promt_unformat)}
-        """
-
-        client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
-
-        response = client.models.generate_content(
-            model="gemini-3.1-flash-lite",
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                max_output_tokens=1000,
-            )
-        )
-
-        summary = response.text
-
-        var_ex='''\n \nLegend:\np33= Percentage of ensemble members below normal of model climate
-        p66= Percentage of ensemble members above normal of model climate
-        p50anom= Anomaly of the ensemble mean from the median of the model climate in % and mm
-        efi= Extreme forecast index'''
-
-        with open(f'{prefix}/prompts/digest_{date_str}.txt', 'w') as f:
-            f.write(summary+var_ex)
+        gef.save_dict(promt_unformat,f"{prefix}/promt_unformat1.json")
     except:
-        with open(f'{prefix}/prompts/digest_{date_str}.txt', 'w') as f:
-            f.write('')
+        gef.save_dict({},f"{prefix}/promt_unformat1.json")
+

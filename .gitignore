@@ -5,3 +5,7 @@ __pycache__/
 private_data/
 private_plots/
 .vscode/
+CLAUDE.md
+test/*
+!test/.env.example
+s2s_briefing_*.pptx

@@ -4,6 +4,7 @@ import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import geopandas as gpd
 from datetime import datetime, timedelta
 
 if "DATE_STR" in os.environ:
@@ -80,3 +81,37 @@ for country in countries:
     fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap=gef.cmap,fontsize=fs)
     plt.savefig(f'{monthly_path}/gefs_monthly_precip.png',bbox_inches='tight')
     plt.close()
+
+    if country=='Kenya':
+        try:
+            region_map = {
+                "Nyandarua": "Highlands East of the Rift Valley","Laikipia": "Highlands East of the Rift Valley","Nyeri": "Highlands East of the Rift Valley",
+                "Kirinyaga": "Highlands East of the Rift Valley","Murang'a": "Highlands East of the Rift Valley","Kiambu": "Highlands East of the Rift Valley",
+                "Meru": "Highlands East of the Rift Valley","Embu": "Highlands East of the Rift Valley","Tharaka-Nithi": "Highlands East of the Rift Valley",
+                "Nairobi": "Highlands East of the Rift Valley","Nandi": "Highlands West of the Rift Valley","Kakamega": "Highlands West of the Rift Valley",
+                "Vihiga": "Highlands West of the Rift Valley","Bungoma": "Highlands West of the Rift Valley","Siaya": "Highlands West of the Rift Valley",
+                "Busia": "Highlands West of the Rift Valley","Baringo": "Highlands West of the Rift Valley","Nakuru": "Highlands West of the Rift Valley",
+                "Trans Nzoia": "Highlands West of the Rift Valley","Uasin Gishu": "Highlands West of the Rift Valley","Elgeyo-Marakwet": "Highlands West of the Rift Valley",
+                "West Pokot": "Highlands West of the Rift Valley","Kisii": "Rift Valley and Lake Victoria Basin","Nyamira": "Rift Valley and Lake Victoria Basin",
+                "Kericho": "Rift Valley and Lake Victoria Basin","Bomet": "Rift Valley and Lake Victoria Basin","Kisumu": "Rift Valley and Lake Victoria Basin",
+                "Homa Bay": "Rift Valley and Lake Victoria Basin","Migori": "Rift Valley and Lake Victoria Basin","Narok": "Rift Valley and Lake Victoria Basin",
+                "Mombasa": "Coast","Kilifi": "Coast","Lamu": "Coast","Kwale": "Coast","Marsabit": "Northeastern Kenya","Mandera": "Northeastern Kenya",
+                "Wajir": "Northeastern Kenya","Garissa": "Northeastern Kenya","Isiolo": "Northeastern Kenya","Machakos": "Southeastern Lowlands"
+                ,"Kitui": "Southeastern Lowlands","Makueni": "Southeastern Lowlands","Kajiado": "Southeastern Lowlands","Taita Taveta": "Southeastern Lowlands",
+                "Tana River": "Southeastern Lowlands","Turkana": "Northwestern Kenya","Samburu": "Northwestern Kenya",
+            }
+
+            states1_gefs=gpd.read_file("Kenya_shapes/ken_admin1.shp")
+            states1_gefs['region'] = states1_gefs['adm1_name'].map(region_map)
+            regions_gefs = states1_gefs.dropna(subset=['region']).dissolve(by='region')
+
+            promt_unformat2={}
+            gefs_weekly_mean=gefs_weekly.mean('number')
+
+            for region in states1_gefs['region'].unique():
+                promt_raw=gef.clip_by_overlap(gefs_weekly_mean.tp, regions_gefs, region, threshold=0.15).mean({'latitude','longitude'})
+                promt_raw_dict=[{'raw_precip_mm':round(float(v),2)} for v in promt_raw]
+                promt_unformat2[f"{region} (GEFS)"]={f"week{i+1}": d for i, d in enumerate(promt_raw_dict)}
+            gef.save_dict(promt_unformat2,f"{prefix}/promt_unformat2.json")
+        except:
+            gef.save_dict({},f"{prefix}/promt_unformat2.json")

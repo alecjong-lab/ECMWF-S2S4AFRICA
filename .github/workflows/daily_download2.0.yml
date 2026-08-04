@@ -77,7 +77,6 @@ jobs:
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           WEBSITE_PATH: ${{ github.workspace }}/website_branch/
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY}}
           COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"
           AI_ACTIVE: 'True'
 
@@ -96,8 +95,18 @@ jobs:
         run: |
           python dowscale_dekade.py
         env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
           DEKADE_COUNTRIES: "Kenya,Great_Horn,Ethiopia"
           WEEK_COUNTRIES: "Kenya,Ghana"
+
+      - name: Generate AI weather briefing
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python ai_weather_briefing.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
 
       # ── Convert NetCDF → JSON and update catalog ─────────────────
       - name: Convert NetCDF and update catalog
@@ -278,6 +287,7 @@ jobs:
             main_repo/private_plots/**/*.png
             main_repo/private_data/**/*.csv
             main_repo/prompts/*.txt
+            main_repo/s2s_briefing_*.pptx
 
   build-matrix:
     needs: download
@@ -347,34 +357,51 @@ jobs:
         with:
           name: s2s_data
 
-      - name: Read forecast summary
-        id: summary
-        if: matrix.country == 'Kenya'
-        run: |
-            python3 -c "
-            import os
-            with open('prompts/digest_${{ steps.ecmwf_date.outputs.date }}.txt') as f:
-              text = f.read()
-            with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-              out.write('body<<FORECAST_END\n')
-              out.write(text)
-              out.write('\nFORECAST_END\n')
-            "
-
-      - name: Check required plots exist
+      - name: Check required attachments exist
         id: check_plots
         run: |
           country="${{ matrix.country }}"
           date="${{ steps.ecmwf_date.outputs.date }}"
-          dekadal="plots/${country}/${date}/dekadal/dekadal_precip.png"
-          weekly="plots/${country}/${date}/weekly/weekly_precip.png"
 
-          if [ -f "$dekadal" ] && [ -f "$weekly" ]; then
-            echo "plots_ok=true" >> "$GITHUB_OUTPUT"
+          if [ "$country" == "Kenya" ]; then
+            briefing="s2s_briefing_${date}.pptx"
+            if [ -f "$briefing" ]; then
+              echo "plots_ok=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "plots_ok=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::Missing weather briefing PowerPoint for Kenya on ${date} — skipping email."
+            fi
           else
-            echo "plots_ok=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Missing required plots for ${country} on ${date} — skipping email. dekadal_precip.png present: $( [ -f "$dekadal" ] && echo yes || echo no ); weekly_precip.png present: $( [ -f "$weekly" ] && echo yes || echo no )"
+            dekadal="plots/${country}/${date}/dekadal/dekadal_precip.png"
+            weekly="plots/${country}/${date}/weekly/weekly_precip.png"
+
+            if [ -f "$dekadal" ] && [ -f "$weekly" ]; then
+              echo "plots_ok=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "plots_ok=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::Missing required plots for ${country} on ${date} — skipping email. dekadal_precip.png present: $( [ -f "$dekadal" ] && echo yes || echo no ); weekly_precip.png present: $( [ -f "$weekly" ] && echo yes || echo no )"
+            fi
           fi
+
+      - name: Build attachment list for ${{ matrix.country }}
+        id: attachments
+        run: |
+          country="${{ matrix.country }}"
+          ecmwf_date="${{ steps.ecmwf_date.outputs.date }}"
+          today_date="${{ steps.date.outputs.date }}"
+
+          if [ "$country" == "Kenya" ]; then
+            list="s2s_briefing_${ecmwf_date}.pptx"
+          else
+            list="plots/${country}/${ecmwf_date}/dekadal/dekadal_precip.png,"
+            list+="plots/${country}/${ecmwf_date}/weekly/weekly_precip.png,"
+            list+="plots/${country}/${ecmwf_date}/weekly/weekly_precip_downscaled_clipped.png,"
+            list+="plots/${country}/${ecmwf_date}/weekly/weekly_medium_range_precip.png,"
+            list+="private_plots/${country}/${today_date}/*.png,"
+            list+="private_data/station_data/${country}/${today_date}/*.csv"
+          fi
+
+          echo "list=$list" >> "$GITHUB_OUTPUT"
 
       - name: Email out generated plots for ${{ matrix.country }}
         if: steps.check_plots.outputs.plots_ok == 'true'
@@ -391,17 +418,5 @@ jobs:
             Attached are dekadal and weekly outlooks and historical station data related
             to the subseasonal forecast. You can also browse the full archive (except for
             the station data) at https://console.cloud.google.com/storage/browser/africa-forecasting-data .
-
-            ${{ steps.summary.outputs.body || '' }}
           reply_to: genevieve@rhizaresearch.org
-          attachments: >
-            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/dekadal_precip.png,
-            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip.png,
-            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_precip_downscaled_clipped.png,
-            plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/weekly_medium_range_precip.png,
-            # plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/imerg_Kenya_dekadal.png,
-            # plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/imerg_Kenya_weekly.png,
-            # plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/dekadal/chirps_Kenya_dekadal.png,
-            # plots/${{ matrix.country }}/${{ steps.ecmwf_date.outputs.date }}/weekly/chirps_Kenya_weekly.png,
-            private_plots/${{ matrix.country }}/${{ steps.date.outputs.date }}/*.png,
-            private_data/station_data/${{ matrix.country }}/${{ steps.date.outputs.date }}/*.csv
+          attachments: ${{ steps.attachments.outputs.list }}

@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import cfgrib
+import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -232,6 +233,144 @@ def rank_upscale_and_align(
     sorted_target = target_da.isel(rank=smoothed.isel(year=-1).clip(min=None,max=len(target_da['rank'])-1))
 
     return sorted_target.T
+
+def stack_climatology_steps(files, target_steps, base_path='', apply_rank_sort=False, bbox=None):
+    """
+    Open a list of per-dekad/per-week climatology files, tag each with its
+    matching forecast step, and concatenate along 'step'.
+
+    Parameters
+    ----------
+    files : sequence of str
+        Filenames (without base_path) to open, one per forecast step, in order.
+    target_steps : sequence
+        Step values to assign, indexed positionally against `files`.
+    base_path : str
+        Prepended to each filename before opening.
+    apply_rank_sort : bool
+        If True, rank-sort each file (via sort_by_rank) before tagging it.
+    bbox : dict or None
+        If given, subset the concatenated result with keys lat1/lon1/lat2/lon2.
+    """
+    datasets = []
+    for i, file in enumerate(files):
+        ds = xr.open_dataset(f'{base_path}{file}')
+        if apply_rank_sort:
+            ds = sort_by_rank(ds)
+        datasets.append(ds.assign_coords({'step': target_steps[i]}))
+    combined = xr.concat(datasets, dim='step')
+    if bbox is not None:
+        combined = combined.sel(longitude=slice(bbox['lon1'], bbox['lon2']),
+                                 latitude=slice(bbox['lat1'], bbox['lat2']))
+    return combined
+
+def build_rescaled_forecast(extended_fclim, chirps_ds, attrs_source, var='tp', upscale_factor=30, sortby_lat=False):
+    """
+    Run rank_upscale_and_align on `extended_fclim`/`chirps_ds` and package the
+    result back into a Dataset with the forecast's time coords and attrs.
+    """
+    source_da = extended_fclim[var]
+    target_da = chirps_ds[var]
+    if sortby_lat:
+        source_da = source_da.sortby('latitude', ascending=False)
+        target_da = target_da.sortby('latitude', ascending=False)
+
+    rescaled = rank_upscale_and_align(source_da, target_da, upscale_factor=upscale_factor)
+    rescaled = rescaled.assign_coords({'time': extended_fclim.time, 'valid_time': extended_fclim.valid_time}).to_dataset(name=var)
+    rescaled = rescaled.where(rescaled >= 0)
+    rescaled[var].attrs = attrs_source[var].attrs
+    return rescaled
+
+def compute_rainfall_anomaly(forecast_ds, climatology_ds, var='tp', rank_dim='rank'):
+    """forecast_ds - climatology_ds.mean(rank_dim), tagged with rainfall-anomaly attrs."""
+    anomaly = forecast_ds - climatology_ds.mean(rank_dim)
+    anomaly[var].attrs['units'] = 'mm'
+    anomaly[var].attrs['GRIB_name'] = 'rainfall anomaly'
+    return anomaly
+
+def symmetric_vmin_vmax(ds, var='tp', qlow=0.01, qhigh=0.99):
+    """
+    Symmetric-around-zero vmin/vmax for anomaly plots, sized to the larger
+    magnitude of the low/high quantiles of ds[var].
+    """
+    vmax = int(ds.quantile(qhigh)[var].values)
+    vmin = int(ds.quantile(qlow)[var].values)
+    limit = max(abs(vmax), abs(vmin))
+    return -limit, limit
+
+def set_extent_from_dataset(ds):
+    """
+    Set the module-level lat1/lat2/lon1/lon2 extent (used by panel_plot_variable)
+    from a dataset's actual coordinate bounds, e.g. after clipping to a boundary.
+    """
+    global lat1, lat2, lon1, lon2
+    lat1 = ds.latitude.max().values
+    lat2 = ds.latitude.min().values
+    lon2 = ds.longitude.max().values
+    lon1 = ds.longitude.min().values
+    return lat1, lat2, lon1, lon2
+
+def clip_to_shapefile(ds, shapefile_path, reproject_gdf=True, transpose=False, sortby_lat=False, crs="EPSG:4326"):
+    """Clip a CRS-tagged dataset to the (optionally reprojected) geometries in a shapefile."""
+    gdf = gpd.read_file(shapefile_path).set_crs(crs)
+    if reproject_gdf:
+        gdf = gdf.to_crs(ds.rio.crs)
+    clipped = ds.rio.clip(gdf.geometry, gdf.crs, drop=True)
+    if transpose:
+        clipped = clipped.transpose('latitude', 'longitude', 'step')
+    if sortby_lat:
+        clipped = clipped.sortby('latitude', ascending=False)
+    return clipped
+
+def plot_panel_and_save(ds, variable, cmap, fontsize, save_path, vmin=None, vmax=None,
+                         boundary_gdf=None, boundary_axes=None):
+    """panel_plot_variable + optional admin-boundary overlay + savefig, in one call."""
+    fig = panel_plot_variable(ds, variable=variable, forecast_timestep=ds.step.values,
+                               cmap=cmap, fontsize=fontsize, vmin=vmin, vmax=vmax)
+    if boundary_gdf is not None:
+        for ax in fig.axes[boundary_axes]:
+            boundary_gdf.boundary.plot(ax=ax, color='black', linewidth=0.5)
+    plt.savefig(save_path, bbox_inches='tight')
+    return fig
+
+def plot_admin1_county_breakdown(rescaled_forecast, chirps_ds, states1, save_dir,
+                                  transpose_first=False, buffer_size=0.05):
+    """
+    For each admin-1 region in `states1`, clip the rescaled forecast to a
+    buffered boundary and save the downscaled-forecast panel plus its anomaly
+    vs. `chirps_ds` climatology under f'{save_dir}/<adm1_name>/'.
+    """
+    base = rescaled_forecast.transpose() if transpose_first else rescaled_forecast
+
+    for name in states1['adm1_name']:
+        gdf = states1[states1['adm1_name'] == name]
+        gdf_buffered = gdf.copy()
+        gdf_buffered["geometry"] = gdf.geometry.buffer(buffer_size)
+
+        clip = base.rio.clip(gdf_buffered.geometry, gdf_buffered.crs, drop=True, all_touched=True)
+        clat1, clat2, clon1, clon2 = set_extent_from_dataset(clip)
+        fontsize = 8 + 10 * 1/(clat1-clat2)*(clon2-clon1) + (clon2-clon1)/(clat1-clat2)*2
+
+        county_path = f'{save_dir}/{name}/'
+        os.makedirs(county_path, exist_ok=True)
+
+        fig = panel_plot_variable(clip, variable='tp', forecast_timestep=clip.step.values,
+                                   cmap=cmap, fontsize=fontsize, vmin=0,
+                                   vmax=int(clip.quantile(0.99).tp.values))
+        for ax in fig.get_axes()[:-1]:
+            gdf.boundary.plot(ax=ax, color='black')
+        plt.savefig(f'{county_path}/dowscaled_forecast.png', bbox_inches='tight')
+        plt.close()
+
+        anomaly_clip = compute_rainfall_anomaly(clip, chirps_ds)
+        vmin, vmax = symmetric_vmin_vmax(anomaly_clip)
+
+        fig = panel_plot_variable(anomaly_clip, variable='tp', forecast_timestep=clip.step.values,
+                                   cmap='BrBG', fontsize=fontsize, vmin=vmin, vmax=vmax)
+        for ax in fig.get_axes()[:-1]:
+            gdf.boundary.plot(ax=ax, color='black')
+        plt.savefig(f'{county_path}/dowscaled_forecast_anomaly.png', bbox_inches='tight')
+        plt.close()
 
 def link_ECMWF_key(api_config):
     # Get the current working directory
@@ -1782,14 +1921,24 @@ def format_prompt_data(data: dict) -> str:
     for zone, weeks in data.items():
         lines.append(f"\n{zone}:")
         for week, stats in weeks.items():
-            lines.append(
-                f"  {week} ({SKILL[week]}): "
-                f"anom={stats['anom_prct']:+.0f}% ({stats['anom']:+.1f}mm), "
-                f"p66={stats['p66']:.0f}%, p33={stats['p33']:.0f}%, "
-                f"EFI>0.5={stats['efi_pct_above_05']:.0f}%, "
-                f"EFI>0.8={stats['efi_pct_above_08']:.0f}%, "
-                f"max_EFI={stats['efi_max']:.2f}"
-            )
+            skill = SKILL.get(week, "")
+            skill_str = f" ({skill})" if skill else ""
+            if 'anom_prct' in stats:
+                line = (
+                    f"  {week}{skill_str}: "
+                    f"anom={stats['anom_prct']:+.0f}% ({stats['anom']:+.1f}mm), "
+                    f"p66={stats['p66']:.0f}%, p33={stats['p33']:.0f}%, "
+                    f"p50={stats['p50']:.0f}%, "
+                    f"EFI>0.5={stats['efi_pct_above_05']:.0f}%, "
+                    f"EFI>0.8={stats['efi_pct_above_08']:.0f}%, "
+                    f"max_EFI={stats['efi_max']:.2f}, "
+                    f"raw_precip={stats['raw_precip_mm']:.1f}mm"
+                )
+                if 'medium_range_precip_mm' in stats:
+                    line += f", medium_range_precip={stats['medium_range_precip_mm']:.1f}mm"
+                lines.append(line)
+            elif 'raw_precip_mm' in stats:
+                lines.append(f"  {week}{skill_str}: raw_precip={stats['raw_precip_mm']:.1f}mm")
     return "\n".join(lines)
 
 
@@ -1808,3 +1957,12 @@ def sort_by_rank(ds, dim="year"):
 
     sorted_ds = sorted_ds.assign_coords(rank=np.arange(n ))
     return sorted_ds
+
+def save_dict(pet,filename):
+    with open(filename, 'w') as f:
+        f.write(json.dumps(pet))
+
+def load_dict(filename):
+    with open(filename) as f:
+        pet = json.loads(f.read())
+    return pet
