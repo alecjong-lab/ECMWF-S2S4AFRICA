@@ -37,6 +37,8 @@
 ### Precipitation
 
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Great_Horn/2026-08-01/dekadal/dekadal_precip.png)
+- [dekadal_precip_downscaled.png](https://storage.googleapis.com/africa-forecasting-data/plots/Great_Horn/2026-08-01/dekadal/dekadal_precip_downscaled.png)
+- [dekadal_precip_downscaled_anomaly.png](https://storage.googleapis.com/africa-forecasting-data/plots/Great_Horn/2026-08-01/dekadal/dekadal_precip_downscaled_anomaly.png)
 - [gefs_dekade_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Great_Horn/2026-08-01/dekadal/gefs_dekade_precip.png)
 
 ## Monthly

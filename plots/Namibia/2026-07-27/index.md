@@ -12,6 +12,7 @@
 - [anomaly_from_75th.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-07-27/weekly/anomaly_from_75th.png)
 - [chance_of_above_or_below.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-07-27/weekly/chance_of_above_or_below.png)
 - [efi_sot_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-07-27/weekly/efi_sot_precip.png)
+- [gefs_weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-07-27/weekly/gefs_weekly_precip.png)
 - [meteogram_Rundu.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-07-27/weekly/meteogram_Rundu.png)
 - [meteogram_Windhoek.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-07-27/weekly/meteogram_Windhoek.png)
 - [weekly_change_in_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-07-27/weekly/weekly_change_in_precip.png)
@@ -36,9 +37,11 @@
 ### Precipitation
 
 - [dekadal_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-07-27/dekadal/dekadal_precip.png)
+- [gefs_dekade_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-07-27/dekadal/gefs_dekade_precip.png)
 
 ## Monthly
 
 ### Precipitation
 
+- [gefs_monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-07-27/monthly/gefs_monthly_precip.png)
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Namibia/2026-07-27/monthly/monthly_precip.png)
