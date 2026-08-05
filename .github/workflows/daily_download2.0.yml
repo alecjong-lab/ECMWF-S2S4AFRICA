@@ -18,6 +18,7 @@ jobs:
       DATA_DIR: website_data
       OUTPUT_DIR: data
       BUCKET: africa-forecasting-data
+      KENYA_BUCKET: kenya-forecasting-data
       CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
       TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
       TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
@@ -172,6 +173,44 @@ jobs:
             done
           else
             echo "No $OUTPUT_DIR directory found, skipping."
+          fi
+
+      # ── Stage Kenya-only plots + cropped zarr data ────────────────
+      - name: Stage Kenya bucket contents
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          STAGE_DIR="kenya_bucket_staging/${{ steps.ecmwf_date.outputs.date }}"
+          mkdir -p "$STAGE_DIR"
+          for sub in weekly dekadal monthly; do
+            src="plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/$sub"
+            if [ -d "$src" ]; then
+              mkdir -p "$STAGE_DIR/$sub"
+              cp -r "$src"/. "$STAGE_DIR/$sub/"
+            fi
+          done
+          mkdir -p "$STAGE_DIR/data"
+          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/gefs" ]; then
+            mkdir -p "$STAGE_DIR/data/gefs"
+            cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/gefs/gefs_kenya.zarr" "$STAGE_DIR/data/gefs/" 2>/dev/null || true
+          fi
+          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" ]; then
+            cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" "$STAGE_DIR/data/"
+          fi
+          python crop_kenya_zarr.py \
+            --data-dir "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" \
+            --output "$STAGE_DIR/data"
+
+      # ── Upload Kenya-only bucket contents ─────────────────────────
+      - name: Upload to Kenya bucket
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          STAGE_DIR="kenya_bucket_staging/${{ steps.ecmwf_date.outputs.date }}"
+          if [ -d "$STAGE_DIR" ]; then
+            gcloud storage rsync -r "$STAGE_DIR" "gs://${KENYA_BUCKET}/${{ steps.ecmwf_date.outputs.date }}" --exclude='.*index\.md$'
+          else
+            echo "No Kenya staging directory found, skipping."
           fi
 
       # ── Generate markdown index for everything just uploaded ─────

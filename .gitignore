@@ -9,3 +9,5 @@ CLAUDE.md
 test/*
 !test/.env.example
 s2s_briefing_*.pptx
+.superpowers/
+kenya_bucket_staging/
