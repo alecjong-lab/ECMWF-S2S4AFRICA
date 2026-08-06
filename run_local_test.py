@@ -22,8 +22,6 @@ TEST_DIR = REPO_ROOT / "test"
 SANDBOX = TEST_DIR / "run"
 
 STAGES = ["plot_s2s", "plot_gefs", "dowscale_dekade", "ai_weather_briefing"]
-STAGES = ["ai_weather_briefing"]
-
 
 
 def resolve_default_date():
