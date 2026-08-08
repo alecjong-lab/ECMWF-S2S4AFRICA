@@ -1,13 +1,15 @@
-name: Daily ECMWF Download
+name: Kenya-only ECMWF Download
 
 permissions:
   contents: write
   id-token: write
 
 on:
-  schedule:
-   - cron: "16 00 * * *" # every day at 00:16 UTC
   workflow_dispatch:
+    inputs:
+      date_str:
+        description: "date_str"
+        required: True
 
 jobs:
   download:
@@ -55,20 +57,17 @@ jobs:
           python download_s2s.py
         env:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
-
-      - name: Get ECMWF lagged date
-        id: ecmwf_date
-        run: echo "date=$(date -d '2 days ago' +'%Y-%m-%d')" >> $GITHUB_OUTPUT          
+          DATE_STR: "${{ inputs.date_str }}"
 
       - name: Fetch forecast
         working-directory: main_repo
         run: |
           uv run fetch_dynamical.py \
             --dataset noaa-gefs-forecast-35-day\
-            --date ${{ steps.ecmwf_date.outputs.date }} \
-            --countries "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"\
+            --date ${{ inputs.date_str }} \
+            --countries "Kenya"\
             --variable precipitation_surface \
-            --output ./data/${{ steps.ecmwf_date.outputs.date }}/gefs/  
+            --output ./data/${{ inputs.date_str }}/gefs/
 
       - name: Generate plots
         continue-on-error: true
@@ -78,8 +77,9 @@ jobs:
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           WEBSITE_PATH: ${{ github.workspace }}/website_branch/
-          COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"
+          COUNTRIES: "Kenya"
           AI_ACTIVE: 'True'
+          DATE_STR: "${{ inputs.date_str }}"
 
       - name: Generate GEFS plots
         continue-on-error: true
@@ -88,7 +88,8 @@ jobs:
           python plot_gefs.py
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
-          COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"
+          COUNTRIES: "Kenya"
+          DATE_STR: "${{ inputs.date_str }}"
 
       - name: Perform downscaling
         continue-on-error: true
@@ -97,8 +98,9 @@ jobs:
           python dowscale_dekade.py
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
-          DEKADE_COUNTRIES: "Kenya,Great_Horn,Ethiopia"
-          WEEK_COUNTRIES: "Kenya,Ghana"
+          DEKADE_COUNTRIES: "Kenya"
+          WEEK_COUNTRIES: "Kenya"
+          DATE_STR: "${{ inputs.date_str }}"
 
       - name: Generate AI weather briefing
         continue-on-error: true
@@ -108,6 +110,7 @@ jobs:
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          DATE_STR: "${{ inputs.date_str }}"
 
       # ── Convert NetCDF → JSON and update catalog ─────────────────
       - name: Convert NetCDF and update catalog
@@ -180,25 +183,25 @@ jobs:
         continue-on-error: true
         working-directory: main_repo
         run: |
-          STAGE_DIR="kenya_bucket_staging/${{ steps.ecmwf_date.outputs.date }}"
+          STAGE_DIR="kenya_bucket_staging/${{ inputs.date_str }}"
           mkdir -p "$STAGE_DIR"
           for sub in weekly dekadal monthly; do
-            src="plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/$sub"
+            src="plots/Kenya/${{ inputs.date_str }}/$sub"
             if [ -d "$src" ]; then
               mkdir -p "$STAGE_DIR/$sub"
               cp -r "$src"/. "$STAGE_DIR/$sub/"
             fi
           done
           mkdir -p "$STAGE_DIR/data"
-          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/gefs" ]; then
+          if [ -d "$OUTPUT_DIR/${{ inputs.date_str }}/gefs" ]; then
             mkdir -p "$STAGE_DIR/data/gefs"
-            cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/gefs/gefs_kenya.zarr" "$STAGE_DIR/data/gefs/" 2>/dev/null || true
+            cp -r "$OUTPUT_DIR/${{ inputs.date_str }}/gefs/gefs_kenya.zarr" "$STAGE_DIR/data/gefs/" 2>/dev/null || true
           fi
-          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" ]; then
-            cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" "$STAGE_DIR/data/"
+          if [ -d "$OUTPUT_DIR/${{ inputs.date_str }}/geotifs_kenya" ]; then
+            cp -r "$OUTPUT_DIR/${{ inputs.date_str }}/geotifs_kenya" "$STAGE_DIR/data/"
           fi
           python crop_kenya_zarr.py \
-            --data-dir "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" \
+            --data-dir "$OUTPUT_DIR/${{ inputs.date_str }}" \
             --output "$STAGE_DIR/data"
 
       # ── Upload Kenya-only bucket contents ─────────────────────────
@@ -206,9 +209,9 @@ jobs:
         continue-on-error: true
         working-directory: main_repo
         run: |
-          STAGE_DIR="kenya_bucket_staging/${{ steps.ecmwf_date.outputs.date }}"
+          STAGE_DIR="kenya_bucket_staging/${{ inputs.date_str }}"
           if [ -d "$STAGE_DIR" ]; then
-            gcloud storage rsync -r "$STAGE_DIR" "gs://${KENYA_BUCKET}/${{ steps.ecmwf_date.outputs.date }}" --exclude='.*index\.md$'
+            gcloud storage rsync -r "$STAGE_DIR" "gs://${KENYA_BUCKET}/${{ inputs.date_str }}" --exclude='.*index\.md$'
           else
             echo "No Kenya staging directory found, skipping."
           fi
@@ -276,7 +279,7 @@ jobs:
           max_attempts: 2
           command: |
             cd main_repo
-            yes | python get_tahmo_data.py --country Kenya,Ghana,Senegal,Ethiopia
+            yes | python get_tahmo_data.py --country Kenya
 
       - name: Download IMERG satellite data
         uses: nick-fields/retry@v3
@@ -286,7 +289,7 @@ jobs:
           max_attempts: 2
           command: |
             cd main_repo
-            yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia --satellite imerg
+            yes | python get_sat_data.py --country Kenya --satellite imerg
 
       - name: Download CHIRPS satellite data
         uses: nick-fields/retry@v3
@@ -296,7 +299,7 @@ jobs:
           max_attempts: 2
           command: |
             cd main_repo
-            yes | python get_sat_data.py --country Kenya,Ghana,Senegal,Ethiopia --satellite chirps
+            yes | python get_sat_data.py --country Kenya --satellite chirps
 
       - name: Cache nuthatch data
         uses: actions/cache/save@v4
@@ -308,21 +311,17 @@ jobs:
         working-directory: main_repo
         continue-on-error: true
         run: |
-          yes | python plot_sat_vs_stations.py --country Kenya,Ghana,Senegal,Ethiopia
+          yes | python plot_sat_vs_stations.py --country Kenya
 
       - name: Upload files as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: s2s_data
+          name: s2s_data_kenya
           path: |
-            main_repo/plots/*/*/dekadal/dekadal_precip.png
-            main_repo/plots/*/*/weekly/weekly_precip.png
-            main_repo/plots/*/*/weekly/weekly_precip_downscaled_clipped.png
-            main_repo/plots/*/*/weekly/weekly_medium_range_precip.png
-            # main_repo/plots/*/*/dekadal/imerg_*_dekadal.png
-            # main_repo/plots/*/*/weekly/imerg_*_weekly.png
-            # main_repo/plots/*/*/dekadal/chirps_*_dekadal.png
-            # main_repo/plots/*/*/weekly/chirps_*_weekly.png
+            main_repo/plots/Kenya/*/dekadal/dekadal_precip.png
+            main_repo/plots/Kenya/*/weekly/weekly_precip.png
+            main_repo/plots/Kenya/*/weekly/weekly_precip_downscaled_clipped.png
+            main_repo/plots/Kenya/*/weekly/weekly_medium_range_precip.png
             main_repo/private_plots/**/*.png
             main_repo/private_data/**/*.csv
             main_repo/prompts/*.txt
@@ -366,7 +365,7 @@ jobs:
                   if country and email:
                       country_emails[country].add(email)
 
-          KNOWN_COUNTRIES = ["Namibia", "Botswana", "Kenya", "Zambia", "Madagascar", "Angola", "Ghana", "Senegal", "Ethiopia", "Zimbabwe", "Malawi","Great_Horn"]
+          KNOWN_COUNTRIES = ["Kenya"]
           matrix = [
               {"country": c, "emails": ",".join(sorted(country_emails[c]))}
               for c in KNOWN_COUNTRIES
@@ -387,64 +386,36 @@ jobs:
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
-      - name: Get ECMWF lagged date
-        id: ecmwf_date
-        run: echo "date=$(date -d '2 days ago' +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-
       - name: Download files as artifact
         uses: actions/download-artifact@v4
         with:
-          name: s2s_data
+          name: s2s_data_kenya
 
       - name: Check required attachments exist
         id: check_plots
         run: |
-          country="${{ matrix.country }}"
-          date="${{ steps.ecmwf_date.outputs.date }}"
+          date="${{ inputs.date_str }}"
 
-          if [ "$country" == "Kenya" ]; then
-            briefing="s2s_briefing_${date}.pptx"
-            if [ -f "$briefing" ]; then
-              echo "plots_ok=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "plots_ok=false" >> "$GITHUB_OUTPUT"
-              echo "::warning::Missing weather briefing PowerPoint for Kenya on ${date} — skipping email."
-            fi
+          briefing="s2s_briefing_${date}.pptx"
+          if [ -f "$briefing" ]; then
+            echo "plots_ok=true" >> "$GITHUB_OUTPUT"
           else
-            dekadal="plots/${country}/${date}/dekadal/dekadal_precip.png"
-            weekly="plots/${country}/${date}/weekly/weekly_precip.png"
-
-            if [ -f "$dekadal" ] && [ -f "$weekly" ]; then
-              echo "plots_ok=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "plots_ok=false" >> "$GITHUB_OUTPUT"
-              echo "::warning::Missing required plots for ${country} on ${date} — skipping email. dekadal_precip.png present: $( [ -f "$dekadal" ] && echo yes || echo no ); weekly_precip.png present: $( [ -f "$weekly" ] && echo yes || echo no )"
-            fi
+            echo "plots_ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Missing weather briefing PowerPoint for Kenya on ${date} — skipping email."
           fi
 
-      - name: Build attachment list for ${{ matrix.country }}
+      - name: Build attachment list for Kenya
         id: attachments
         run: |
-          country="${{ matrix.country }}"
-          ecmwf_date="${{ steps.ecmwf_date.outputs.date }}"
+          ecmwf_date="${{ inputs.date_str }}"
           today_date="${{ steps.date.outputs.date }}"
 
-          if [ "$country" == "Kenya" ]; then
-            list="s2s_briefing_${ecmwf_date}.pptx"
-            list+="private_data/station_data/${country}/${today_date}/*.csv"
-
-          else
-            list="plots/${country}/${ecmwf_date}/dekadal/dekadal_precip.png,"
-            list+="plots/${country}/${ecmwf_date}/weekly/weekly_precip.png,"
-            list+="plots/${country}/${ecmwf_date}/weekly/weekly_precip_downscaled_clipped.png,"
-            list+="plots/${country}/${ecmwf_date}/weekly/weekly_medium_range_precip.png,"
-            list+="private_plots/${country}/${today_date}/*.png,"
-            list+="private_data/station_data/${country}/${today_date}/*.csv"
-          fi
+          list="s2s_briefing_${ecmwf_date}.pptx"
+          list+="private_data/station_data/Kenya/${today_date}/*.csv"
 
           echo "list=$list" >> "$GITHUB_OUTPUT"
 
-      - name: Email out generated plots for ${{ matrix.country }}
+      - name: Email out generated plots for Kenya
         if: steps.check_plots.outputs.plots_ok == 'true'
         uses: dawidd6/action-send-mail@v16
         with:
@@ -454,7 +425,7 @@ jobs:
           password: ${{ secrets.RESEND_API_KEY }}
           subject: Daily S2S Outlook
           to: ${{ matrix.emails }}
-          from: "${{ matrix.country }} Data Share <info@dashboards.rhizaresearch.org>"
+          from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
             Attached are dekadal and weekly outlooks and historical station data related
             to the subseasonal forecast. You can also browse the full archive (except for
