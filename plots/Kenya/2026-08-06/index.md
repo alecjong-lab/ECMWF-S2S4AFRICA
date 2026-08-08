@@ -18,6 +18,11 @@
 - [weekly_change_in_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-06/weekly/weekly_change_in_precip.png)
 - [weekly_medium_range_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-06/weekly/weekly_medium_range_precip.png)
 - [weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-06/weekly/weekly_precip.png)
+- [weekly_precip_downscaled.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-06/weekly/weekly_precip_downscaled.png)
+- [weekly_precip_downscaled_anomaly.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-06/weekly/weekly_precip_downscaled_anomaly.png)
+- [weekly_precip_downscaled_anomaly_clipped.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-06/weekly/weekly_precip_downscaled_anomaly_clipped.png)
+- [weekly_precip_downscaled_clipped.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-06/weekly/weekly_precip_downscaled_clipped.png)
+- [County-level precipitation maps](https://console.cloud.google.com/storage/browser/africa-forecasting-data/plots/Kenya/2026-08-06/weekly/counties)
 
 ### 10m-wind
 
