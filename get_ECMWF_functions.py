@@ -322,6 +322,18 @@ def clip_to_shapefile(ds, shapefile_path, reproject_gdf=True, transpose=False, s
         clipped = clipped.sortby('latitude', ascending=False)
     return clipped
 
+def remove_coastline_and_borders(ax):
+    """
+    Strip cartopy's own COASTLINE/BORDERS features (added by panel_plot_variable)
+    from an axes. Use before overlaying an admin shapefile boundary — cartopy's
+    Natural Earth coastline is a different resolution than the shapefile and the
+    two don't align, which looks funky for coastal admin units.
+    """
+    for artist in ax.get_children():
+        if (type(artist).__name__ == 'FeatureArtist'
+                and getattr(artist, '_feature', None) in (cfeature.COASTLINE, cfeature.BORDERS)):
+            artist.remove()
+
 def plot_panel_and_save(ds, variable, cmap, fontsize, save_path, vmin=None, vmax=None,
                          boundary_gdf=None, boundary_axes=None):
     """panel_plot_variable + optional admin-boundary overlay + savefig, in one call."""
@@ -329,6 +341,7 @@ def plot_panel_and_save(ds, variable, cmap, fontsize, save_path, vmin=None, vmax
                                cmap=cmap, fontsize=fontsize, vmin=vmin, vmax=vmax)
     if boundary_gdf is not None:
         for ax in fig.axes[boundary_axes]:
+            remove_coastline_and_borders(ax)
             boundary_gdf.boundary.plot(ax=ax, color='black', linewidth=0.5)
     plt.savefig(save_path, bbox_inches='tight')
     return fig
@@ -358,6 +371,7 @@ def plot_admin1_county_breakdown(rescaled_forecast, chirps_ds, states1, save_dir
                                    cmap=cmap, fontsize=fontsize, vmin=0,
                                    vmax=int(clip.quantile(0.99).tp.values))
         for ax in fig.get_axes()[:-1]:
+            remove_coastline_and_borders(ax)
             gdf.boundary.plot(ax=ax, color='black')
         plt.savefig(f'{county_path}/dowscaled_forecast.png', bbox_inches='tight')
         plt.close()
@@ -368,6 +382,7 @@ def plot_admin1_county_breakdown(rescaled_forecast, chirps_ds, states1, save_dir
         fig = panel_plot_variable(anomaly_clip, variable='tp', forecast_timestep=clip.step.values,
                                    cmap='BrBG', fontsize=fontsize, vmin=vmin, vmax=vmax)
         for ax in fig.get_axes()[:-1]:
+            remove_coastline_and_borders(ax)
             gdf.boundary.plot(ax=ax, color='black')
         plt.savefig(f'{county_path}/dowscaled_forecast_anomaly.png', bbox_inches='tight')
         plt.close()
