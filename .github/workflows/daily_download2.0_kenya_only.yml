@@ -410,7 +410,7 @@ jobs:
           ecmwf_date="${{ inputs.date_str }}"
           today_date="${{ steps.date.outputs.date }}"
 
-          list="s2s_briefing_${ecmwf_date}.pptx"
+          list="s2s_briefing_${ecmwf_date}.pptx,"
           list+="private_data/station_data/Kenya/${today_date}/*.csv"
 
           echo "list=$list" >> "$GITHUB_OUTPUT"

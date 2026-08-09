@@ -430,7 +430,7 @@ jobs:
           today_date="${{ steps.date.outputs.date }}"
 
           if [ "$country" == "Kenya" ]; then
-            list="s2s_briefing_${ecmwf_date}.pptx"
+            list="s2s_briefing_${ecmwf_date}.pptx,"
             list+="private_data/station_data/${country}/${today_date}/*.csv"
 
           else
