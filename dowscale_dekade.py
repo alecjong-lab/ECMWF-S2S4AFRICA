@@ -17,6 +17,9 @@ else:
 
 prefix=os.environ["MAIN_PATH"]
 
+data_path=f'{prefix}/data/{date_str}'
+data=xr.open_zarr(f'{data_path}/ECMWF_s2s_precip_{date_str}.zarr',consolidated=True).compute()
+
 data_dekade=xr.open_dataset(f'data/{date_str}/data_dekade.nc')
 month=int(data_dekade.time.dt.month.values)
 day=int(data_dekade.time.dt.day.values)
@@ -258,6 +261,21 @@ for country in countries_to_downscale:
     )
 
     if country=='Kenya':
+        daily_downscaled=gef.disaggregate_weekly_to_daily(rescaled_forecast.tp, data.tp.mean('number'))
+        # make sure dims are named/ordered as rioxarray expects
+        da = daily_downscaled.tp.drop_vars({'surface','time','year','rank'}) 
+        da = da.rio.set_spatial_dims(x_dim="longitude", y_dim="latitude")
+        # set the CRS (assuming plain lat/lon WGS84 — adjust if not)
+        da = da.rio.write_crs("EPSG:4326", inplace=False)
+        da=da.rio.write_nodata(np.nan, inplace=True)
+
+        da.rio.to_raster(
+            f'{data_path}/daily_downscaled_kenya.tif',
+            tags={
+                "band_dim_name": "day",
+            },
+        )
+
         rescaled_forecast = rescaled_forecast.rio.write_crs("EPSG:4326")
         ds_to_plot = gef.clip_to_shapefile(rescaled_forecast, kenya_counties_shp, transpose=True)
         gef.plot_panel_and_save(
