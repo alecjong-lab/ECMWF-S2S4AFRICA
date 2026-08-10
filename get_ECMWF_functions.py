@@ -2084,3 +2084,52 @@ def disaggregate_weekly_to_daily(
     result["step"].attrs = dict(data.step.attrs)
 
     return result.to_dataset()
+
+def _max_consecutive_below_1d(series, threshold):
+    """Core 1D logic — same as your original, with NaN handling."""
+    if np.isnan(series).any():
+        return np.nan
+    below = series < threshold
+    max_consecutive = 0
+    current = 0
+    for val in below:
+        if val:
+            current += 1
+            max_consecutive = max(max_consecutive, current)
+        else:
+            current = 0
+    if max_consecutive == 0:
+        return np.nan
+    if max_consecutive > 300:
+        return np.nan
+    return float(max_consecutive)
+
+def dry_spell_length(da, threshold, time_dim="step"):
+    """
+    Max consecutive-days-below-threshold ("dry spell length") for each
+    gridpoint/member/etc, computed along time_dim.
+
+    da : xr.DataArray, e.g. dims (time, lat, lon) or (time, member, lat, lon)
+    threshold : float, precip threshold (same units as da)
+    """
+    return xr.apply_ufunc(
+        _max_consecutive_below_1d,
+        da,
+        threshold,
+        input_core_dims=[[time_dim], []],
+        vectorize=True,
+        dask="parallelized",
+        output_dtypes=[float],
+    )
+
+def dry_spell_probability(da, threshold, spell_length_threshold, time_dim="step", member_dim="number"):
+    """
+    Probability (fraction of ensemble members) that a dry spell of
+    length >= spell_length_threshold occurs.
+    """
+    spell_lengths = dry_spell_length(da, threshold, time_dim=time_dim)  # dims: (member, lat, lon, ...)
+    exceeds = spell_lengths >= spell_length_threshold
+    prob = exceeds.mean(dim=member_dim, skipna=True)
+    prob.attrs['GRIB_name']=f'chance of dry spell longer than {spell_length_threshold}'
+    prob.attrs['units']='%'
+    return prob, spell_lengths

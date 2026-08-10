@@ -147,6 +147,25 @@ for country in countries:
     fig=gef.panel_plot_variable(ds_to_plot_monthly,variable='tp',forecast_timestep=ds_to_plot_monthly.step.values,cmap=gef.cmap,fontsize=fs)
     plt.savefig(f'{monthly_path}/monthly_precip.png',bbox_inches='tight')
     plt.close()
+
+    #---------------------------------month dry spell-----------------------------------------------------------------------------------------------
+    precip=data.diff('step').tp.isel(step=slice(None,28))
+    precip.attrs=data.tp.attrs
+
+    hold_cdd=[gef.dry_spell_probability(precip, threshold=1.0, spell_length_threshold=i)[0] for i in range(28)]  # mm/day threshold
+    stacked = xr.concat(hold_cdd, dim=xr.DataArray(np.arange(28), dims="spell_length", name="spell_length"))
+
+    count_above = (stacked >= 0.5).sum(dim="spell_length")
+    median_length = (count_above - 1).where(count_above > 0)  # count of True values minus 1 (0-indexing); NaN where prob never reaches 0.5
+    median_length.attrs['GRIB_name']='Median dry spell length'
+    median_length.attrs['units']='days'
+    median_length=median_length.assign_coords({'step':precip.isel(step=-1).step}).to_dataset()
+
+
+    ds_to_plot=median_length.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
+    fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='jet',fontsize=fs,vmin=0)
+    plt.savefig(f'{monthly_path}/median_dryspell_length.png',bbox_inches='tight')
+    plt.close()
     
     #plot dekadal precip from extended range forecast
     ds_to_plot_dekade=data_dekade.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))

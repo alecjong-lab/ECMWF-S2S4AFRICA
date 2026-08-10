@@ -244,6 +244,8 @@ for country in countries_to_downscale:
 
     rescaled_forecast = gef.build_rescaled_forecast(extended_fclim, chirps_weeks_ds, data_weekly, upscale_factor=upscale_factor)
 
+    rescaled_forecast_month = rescaled_forecast.isel(step=slice(0,4)).sum('step',keep_attrs=True).assign_coords(step=rescaled_forecast.isel(step=3).step).expand_dims('step')
+
     fs=12
 
     gef.lat1=weekly_bboxes[country]['lat1']
@@ -258,6 +260,14 @@ for country in countries_to_downscale:
         ds_to_plot,'tp',cmap,fs,
         f'plots/{country}/{date_str}/weekly/weekly_precip_downscaled.png',
         vmax=int(ds_to_plot.quantile(0.99).tp.values)
+    )
+
+    os.makedirs(f'plots/{country}/{date_str}/monthly/', exist_ok=True)
+    ds_to_plot_month=rescaled_forecast_month.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','step')
+    gef.plot_panel_and_save(
+        ds_to_plot_month,'tp',cmap,fs,
+        f'plots/{country}/{date_str}/monthly/monthly_precip_downscaled.png',
+        vmax=int(ds_to_plot_month.quantile(0.99).tp.values)
     )
 
     if country=='Kenya':
@@ -292,6 +302,17 @@ for country in countries_to_downscale:
         gef.plot_panel_and_save(
             ds_to_plot,'tp','BrBG',fs,
             f'plots/{country}/{date_str}/weekly/weekly_precip_downscaled_anomaly.png',
+            vmin=vmin,vmax=vmax
+        )
+
+        chirps_weeks_ds_month=chirps_weeks_ds.isel(step=slice(0,4)).sum('step',keep_attrs=True).assign_coords(step=chirps_weeks_ds.isel(step=3).step).expand_dims('step')
+        anomaly_month = gef.compute_rainfall_anomaly(rescaled_forecast_month, chirps_weeks_ds_month)
+
+        ds_to_plot_anom_month=anomaly_month.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','step')
+        vmin,vmax=gef.symmetric_vmin_vmax(ds_to_plot_anom_month)
+        gef.plot_panel_and_save(
+            ds_to_plot_anom_month,'tp','BrBG',fs,
+            f'plots/{country}/{date_str}/monthly/monthly_precip_downscaled_anomaly.png',
             vmin=vmin,vmax=vmax
         )
 
