@@ -30,22 +30,25 @@ weekly=[data.step.values[i] for i in np.where(steps%168==0)[0]]
 data_weekly=data.sel(step=weekly)
 data_dekade=data.sel(step=dekade)
 
-data_monthly=data_weekly.isel(step=4)
 data_weekly=gef.acum_to_instant(data_weekly)
 data_dekade=gef.acum_to_instant(data_dekade)
+
+data_monthly=data_weekly.isel(step=slice(0,4)).sum('step',keep_attrs=True).assign_coords(step=data_weekly.isel(step=3).step).expand_dims('step')
 
 data_weekly.to_netcdf(f'{data_path}/data_weekly.nc')
 data_dekade.to_netcdf(f'{data_path}/data_dekade.nc')
 data_monthly.to_netcdf(f'{data_path}/data_monthly.nc')
 
 m_climate_big = gef.open_mclimate(data_weekly,folder_path=f'{prefix}/m-climate/')
+m_climate_big_month=m_climate_big.isel(time=slice(None,4)).sum('time',keep_attrs=True).assign_coords(time=m_climate_big.isel(time=3).time).expand_dims('time')
 
 efi,sot = efi_sot.EFI_SOT(data_weekly, m_climate_big)
 
 data_weekly_cut_to_mclimate=data_weekly.sel(longitude=slice(m_climate_big.longitude.min(),m_climate_big.longitude.max()),latitude=slice(m_climate_big.latitude.max(),m_climate_big.latitude.min()))
+data_monthly_cut_to_mclimate=data_monthly.sel(longitude=slice(m_climate_big.longitude.min(),m_climate_big.longitude.max()),latitude=slice(m_climate_big.latitude.max(),m_climate_big.latitude.min()))
 
 ensemble_stats_tp=gef.ensemble_data(data_weekly_cut_to_mclimate,m_climate_big,'tp',quantiles=[75,50,25])
-# ensemble_stats_tp_month=gef.ensemble_data(data_weekly_cut_to_mclimate.isel(step=slice(None,3)).sum('step'),m_climate_big.isel(step=slice(None,3)).sum('step'),'tp',quantiles=[75,50,25])
+ensemble_stats_tp_month=gef.ensemble_data(data_monthly_cut_to_mclimate,m_climate_big_month,'tp',quantiles=[75,50,25])
 
 #-----precip medium range---------------------------------------------------------------------------------------#
 try:
@@ -113,6 +116,7 @@ for country in countries:
 
     m_climate=m_climate_big.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     m_climate_celcius=m_climate.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
+    m_climate_month=m_climate_big_month.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     if country=='Madagascar':
         fs=12
     if country=='Malawi':
@@ -173,7 +177,9 @@ for country in countries:
         os.makedirs(weekly_temp_path, exist_ok=True)
 
         gef.ensemble_plots(ds_to_plot,m_climate,ensemble_stats_tp[0],ensemble_stats_tp[1],ensemble_stats_tp[2],'tp',weekly_path,country=country,fontsize=fs,major_cities=major_cities)
-        
+
+        gef.ensemble_plots(ds_to_plot_monthly,m_climate_month,ensemble_stats_tp_month[0],ensemble_stats_tp_month[1],ensemble_stats_tp_month[2],'tp',monthly_path,country=country,fontsize=fs,major_cities=major_cities)
+
         ds_to_plot_temp=gef.convert_to_celcius(week_dailyvars,'t2m')
 
         gef.ensemble_plots(ds_to_plot_temp,mclim_celcius,ensemble_stats_t2m[0],ensemble_stats_t2m[1],ensemble_stats_t2m[2],'t2m',weekly_temp_path,country=country,fontsize=fs,major_cities=major_cities)
