@@ -1,3 +1,13 @@
 # Domain-wide — 2026-07-27
 
-- [index.md](https://storage.googleapis.com/africa-forecasting-data/data/2026-07-27/index.md)
+- **ECMWF_s2s_10wind_2026-07-27.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-07-27/ECMWF_s2s_10wind_2026-07-27.zarr) · `gs://africa-forecasting-data/data/2026-07-27/ECMWF_s2s_10wind_2026-07-27.zarr`
+- **ECMWF_s2s_500wind_2026-07-27.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-07-27/ECMWF_s2s_500wind_2026-07-27.zarr) · `gs://africa-forecasting-data/data/2026-07-27/ECMWF_s2s_500wind_2026-07-27.zarr`
+- **ECMWF_s2s_700wind_2026-07-27.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-07-27/ECMWF_s2s_700wind_2026-07-27.zarr) · `gs://africa-forecasting-data/data/2026-07-27/ECMWF_s2s_700wind_2026-07-27.zarr`
+- **ECMWF_s2s_Tminmax_2026-07-27.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-07-27/ECMWF_s2s_Tminmax_2026-07-27.zarr) · `gs://africa-forecasting-data/data/2026-07-27/ECMWF_s2s_Tminmax_2026-07-27.zarr`
+- **ECMWF_s2s_daily_vars_2026-07-27.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-07-27/ECMWF_s2s_daily_vars_2026-07-27.zarr) · `gs://africa-forecasting-data/data/2026-07-27/ECMWF_s2s_daily_vars_2026-07-27.zarr`
+- **ECMWF_s2s_precip_2026-07-27.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-07-27/ECMWF_s2s_precip_2026-07-27.zarr) · `gs://africa-forecasting-data/data/2026-07-27/ECMWF_s2s_precip_2026-07-27.zarr`
+- **gefs_kenya.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-07-27/gefs/gefs_kenya.zarr) · `gs://africa-forecasting-data/data/2026-07-27/gefs/gefs_kenya.zarr`
+- **gefs_kenya2.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-07-27/gefs/gefs_kenya2.zarr) · `gs://africa-forecasting-data/data/2026-07-27/gefs/gefs_kenya2.zarr`
+- **gefs_namibia.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-07-27/gefs/gefs_namibia.zarr) · `gs://africa-forecasting-data/data/2026-07-27/gefs/gefs_namibia.zarr`
+- **gefs_namibia2.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-07-27/gefs/gefs_namibia2.zarr) · `gs://africa-forecasting-data/data/2026-07-27/gefs/gefs_namibia2.zarr`
+- **medium_range_precip.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-07-27/medium_range_precip.zarr) · `gs://africa-forecasting-data/data/2026-07-27/medium_range_precip.zarr`
