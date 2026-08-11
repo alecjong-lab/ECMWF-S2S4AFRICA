@@ -2222,24 +2222,28 @@ def disaggregate_weekly_to_daily(
 
     return result.to_dataset()
 
-def _max_consecutive_below_1d(series, threshold):
-    """Core 1D logic — same as your original, with NaN handling."""
-    if np.isnan(series).any():
-        return np.nan
-    below = series < threshold
-    max_consecutive = 0
-    current = 0
-    for val in below:
-        if val:
-            current += 1
-            max_consecutive = max(max_consecutive, current)
-        else:
-            current = 0
-    if max_consecutive == 0:
-        return np.nan
-    if max_consecutive > 300:
-        return np.nan
-    return float(max_consecutive)
+def _max_consecutive_below_nd(block, threshold):
+    """
+    Core logic, vectorized over every leading (batch) dim at once.
+
+    block : ndarray, shape (..., n_time) — time_dim must be the last axis
+    threshold : float, precip threshold (same units as block)
+
+    Loops only over n_time (small, e.g. tens of steps) instead of over
+    every gridpoint/member combination (which can be huge); each loop
+    iteration is a single numpy op over the whole batch.
+    """
+    below = block < threshold
+    has_nan = np.isnan(block).any(axis=-1)
+
+    counter = np.zeros(block.shape[:-1], dtype=float)
+    max_consecutive = np.zeros(block.shape[:-1], dtype=float)
+    for t in range(block.shape[-1]):
+        counter = (counter + 1) * below[..., t]
+        np.maximum(max_consecutive, counter, out=max_consecutive)
+
+    max_consecutive[has_nan] = np.nan
+    return max_consecutive
 
 def dry_spell_length(da, threshold, time_dim="step"):
     """
@@ -2250,12 +2254,10 @@ def dry_spell_length(da, threshold, time_dim="step"):
     threshold : float, precip threshold (same units as da)
     """
     return xr.apply_ufunc(
-        _max_consecutive_below_1d,
+        _max_consecutive_below_nd,
         da,
         threshold,
         input_core_dims=[[time_dim], []],
-        vectorize=True,
-        dask="parallelized",
         output_dtypes=[float],
     )
 
