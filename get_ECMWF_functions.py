@@ -24,6 +24,7 @@ import subprocess
 import requests
 from cfgrib.xarray_to_grib import to_grib
 import matplotlib.colors as mcolors
+import xml.etree.ElementTree as ET
 
 colors = ["white","wheat","lightgreen", "green","lightblue", "blue","yellow","orange", "red","purple"]
 cmap = LinearSegmentedColormap.from_list("wgbrp", colors)
@@ -82,6 +83,142 @@ def combine_to_zarr(data_path, filename, zarr_name):
     pf.close()
     cf.close()
 
+    return zarr_path
+
+def gcs_object_exists(bucket, key, timeout=15):
+    """
+    Check whether an object exists in a public (unauthenticated) GCS bucket.
+    """
+    try:
+        resp = requests.head(f"https://storage.googleapis.com/{bucket}/{key}", timeout=timeout)
+        return resp.status_code == 200
+    except requests.RequestException:
+        return False
+
+def gcs_list_prefix(bucket, prefix, timeout=30):
+    """
+    List object keys under a prefix in a public (unauthenticated) GCS bucket.
+    """
+    ns = {"s3": "http://doc.s3.amazonaws.com/2006-03-01"}
+    keys = []
+    marker = None
+    try:
+        while True:
+            params = {"prefix": prefix}
+            if marker:
+                params["marker"] = marker
+            resp = requests.get(f"https://storage.googleapis.com/{bucket}", params=params, timeout=timeout)
+            resp.raise_for_status()
+            root = ET.fromstring(resp.content)
+            new_keys = [c.find("s3:Key", ns).text for c in root.findall("s3:Contents", ns)]
+            keys.extend(new_keys)
+            is_truncated = root.find("s3:IsTruncated", ns)
+            if is_truncated is None or is_truncated.text != "true" or not new_keys:
+                break
+            marker = new_keys[-1]
+    except requests.RequestException:
+        return []
+    return keys
+
+def download_gcs_object(bucket, key, dest_path, timeout=60):
+    """
+    Stream-download one object from a public GCS bucket to dest_path, writing to
+    a temp file first and atomically renaming it into place on success.
+    """
+    dest_dir = os.path.dirname(dest_path)
+    if dest_dir:
+        os.makedirs(dest_dir, exist_ok=True)
+    tmp_path = dest_path + ".part"
+    with requests.get(f"https://storage.googleapis.com/{bucket}/{key}", stream=True, timeout=timeout) as resp:
+        resp.raise_for_status()
+        with open(tmp_path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                f.write(chunk)
+    os.replace(tmp_path, dest_path)
+
+def ensure_grib_downloaded(local_path, gcs_key, retrieve_fn, bucket):
+    """
+    Make sure local_path exists, preferring (in order) an already-present local
+    file, a copy already uploaded to gcs_key in bucket (skipped if gcs_key is
+    None), or else calling retrieve_fn(tmp_path) to fetch it fresh. All downloads
+    are written to a temp path and atomically renamed into place, so a killed or
+    interrupted run never leaves a file that looks complete.
+    """
+    if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+        print(f"{local_path} already present locally, skipping download")
+        return
+
+    if gcs_key and gcs_object_exists(bucket, gcs_key):
+        print(f"Restoring {local_path} from gs://{bucket}/{gcs_key}")
+        try:
+            download_gcs_object(bucket, gcs_key, local_path)
+            return
+        except requests.RequestException as e:
+            print(f"Failed to restore {local_path} from GCS ({e}), falling back to fresh download")
+
+    tmp_path = local_path + ".part"
+    retrieve_fn(tmp_path)
+    os.replace(tmp_path, local_path)
+
+def restore_zarr_from_gcs(bucket, gcs_prefix, local_zarr_path):
+    """
+    If gcs_prefix (a .zarr store) exists in bucket, download every object under
+    it into local_zarr_path and return True. Returns False if nothing was found
+    there, or if the restore failed partway through.
+    """
+    keys = gcs_list_prefix(bucket, gcs_prefix + "/")
+    if not keys:
+        return False
+    try:
+        for key in keys:
+            rel = key[len(gcs_prefix) + 1:]
+            download_gcs_object(bucket, key, os.path.join(local_zarr_path, rel))
+    except requests.RequestException as e:
+        print(f"Failed to restore {gcs_prefix} from GCS ({e}), will regenerate locally")
+        return False
+    return True
+
+def mark_complete(zarr_path):
+    """
+    Write a sentinel file inside a zarr store marking it as fully written. This
+    (not zarr's internal file layout) is what is_complete checks for, and it
+    rides along automatically when the store is later uploaded to or restored
+    from GCS.
+    """
+    with open(os.path.join(zarr_path, ".download_complete"), "w") as f:
+        f.write("")
+
+def is_complete(zarr_path):
+    return os.path.exists(os.path.join(zarr_path, ".download_complete"))
+
+def ensure_group_zarr(date_str, path, bucket, filename, zarr_name, retrieve_fns):
+    """
+    Ensure a combined <zarr_name>.zarr exists under path for this date.
+
+    Checks, in order: already complete locally; restorable (and complete) from
+    GCS; otherwise downloads each forecast type's grib file (skipping ones
+    already local or in GCS, per ensure_grib_downloaded) and combines them with
+    combine_to_zarr. retrieve_fns maps forecast_type -> callable(tmp_path) that
+    performs the CDS/ECMWF retrieval into tmp_path.
+    """
+    zarr_path = f"{path}/{zarr_name}.zarr"
+    gcs_prefix = f"data/{date_str}/{zarr_name}.zarr"
+
+    if os.path.isdir(zarr_path) and is_complete(zarr_path):
+        print(f"{zarr_path} already complete locally, skipping")
+        return zarr_path
+
+    if restore_zarr_from_gcs(bucket, gcs_prefix, zarr_path) and is_complete(zarr_path):
+        print(f"Restored {zarr_path} from GCS")
+        return zarr_path
+
+    for ftype, retrieve_fn in retrieve_fns.items():
+        target = f"{path}/{filename.format(ftype=ftype)}"
+        gcs_key = f"data/{date_str}/{os.path.basename(target)}"
+        ensure_grib_downloaded(target, gcs_key, retrieve_fn, bucket)
+
+    zarr_path = combine_to_zarr(path, filename, zarr_name)
+    mark_complete(zarr_path)
     return zarr_path
 
 def windspeed(ds,u_name,v_name):

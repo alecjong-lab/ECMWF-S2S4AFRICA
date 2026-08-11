@@ -49,12 +49,16 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run download script
+        uses: nick-fields/retry@v3
         continue-on-error: true
-        working-directory: main_repo
-        run: |
-          python download_s2s.py
         env:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
+        with:
+          timeout_minutes: 45
+          max_attempts: 3
+          command: |
+            cd main_repo
+            python download_s2s.py
 
       - name: Get ECMWF lagged date
         id: ecmwf_date

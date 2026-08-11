@@ -161,9 +161,8 @@ for country in countries:
     median_length.attrs['units']='days'
     median_length=median_length.assign_coords({'step':precip.isel(step=-1).step}).to_dataset()
 
-
-    ds_to_plot=median_length.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
-    fig=gef.panel_plot_variable(ds_to_plot,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='jet',fontsize=fs,vmin=0)
+    ds_to_plot_cdd=median_length.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
+    fig=gef.panel_plot_variable(ds_to_plot_cdd,variable='tp',forecast_timestep=ds_to_plot_cdd.step.values,cmap='jet',fontsize=fs,vmin=0)
     plt.savefig(f'{monthly_path}/median_dryspell_length.png',bbox_inches='tight')
     plt.close()
     
