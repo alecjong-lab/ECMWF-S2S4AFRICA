@@ -25,6 +25,11 @@
 - [ECMWF_s2s_perturbed_forecast_forecast_precip_46days_23N-20W-37S-59E.grib](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-09/ECMWF_s2s_perturbed_forecast_forecast_precip_46days_23N-20W-37S-59E.grib)
 - [ECMWF_s2s_perturbed_forecast_forecast_precip_46days_23N-20W-37S-59E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-09/ECMWF_s2s_perturbed_forecast_forecast_precip_46days_23N-20W-37S-59E.grib.5b7b6.idx)
 - [daily_downscaled_kenya.tif](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-09/daily_downscaled_kenya.tif)
+- [index.md](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-09/index.md)
+- [medium-tp-2026-08-09-mean-cf_big.grib](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-09/medium-tp-2026-08-09-mean-cf_big.grib)
+- [medium-tp-2026-08-09-mean-cf_big.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-09/medium-tp-2026-08-09-mean-cf_big.grib.5b7b6.idx)
+- [medium-tp-2026-08-09-mean-pf_big.grib](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-09/medium-tp-2026-08-09-mean-pf_big.grib)
+- [medium-tp-2026-08-09-mean-pf_big.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-09/medium-tp-2026-08-09-mean-pf_big.grib.5b7b6.idx)
 - **ECMWF_s2s_10wind_2026-08-09.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-09/ECMWF_s2s_10wind_2026-08-09.zarr) · `gs://africa-forecasting-data/data/2026-08-09/ECMWF_s2s_10wind_2026-08-09.zarr`
 - **ECMWF_s2s_500wind_2026-08-09.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-09/ECMWF_s2s_500wind_2026-08-09.zarr) · `gs://africa-forecasting-data/data/2026-08-09/ECMWF_s2s_500wind_2026-08-09.zarr`
 - **ECMWF_s2s_700wind_2026-08-09.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-09/ECMWF_s2s_700wind_2026-08-09.zarr) · `gs://africa-forecasting-data/data/2026-08-09/ECMWF_s2s_700wind_2026-08-09.zarr`
