@@ -50,6 +50,18 @@ data_monthly_cut_to_mclimate=data_monthly.sel(longitude=slice(m_climate_big.long
 ensemble_stats_tp=gef.ensemble_data(data_weekly_cut_to_mclimate,m_climate_big,'tp',quantiles=[75,50,25])
 ensemble_stats_tp_month=gef.ensemble_data(data_monthly_cut_to_mclimate,m_climate_big_month,'tp',quantiles=[75,50,25])
 
+precip=data.diff('step').tp.isel(step=slice(None,28))
+precip.attrs=data.tp.attrs
+
+hold_cdd=[gef.dry_spell_probability(precip, threshold=1.0, spell_length_threshold=i)[0] for i in range(28)]  # mm/day threshold
+stacked = xr.concat(hold_cdd, dim=xr.DataArray(np.arange(28), dims="spell_length", name="spell_length"))
+
+count_above = (stacked >= 0.5).sum(dim="spell_length")
+median_length = (count_above - 1).where(count_above > 0)  # count of True values minus 1 (0-indexing); NaN where prob never reaches 0.5
+median_length.attrs['GRIB_name']='Median dry spell length'
+median_length.attrs['units']='days'
+median_length=median_length.assign_coords({'step':precip.isel(step=-1).step}).to_dataset()
+
 #-----precip medium range---------------------------------------------------------------------------------------#
 try:
     data_weekly_medium=xr.open_zarr(f'{data_path}/medium_range_precip.zarr',consolidated=True).compute()
@@ -149,18 +161,6 @@ for country in countries:
     plt.close()
 
     #---------------------------------month dry spell-----------------------------------------------------------------------------------------------
-    precip=data.diff('step').tp.isel(step=slice(None,28))
-    precip.attrs=data.tp.attrs
-
-    hold_cdd=[gef.dry_spell_probability(precip, threshold=1.0, spell_length_threshold=i)[0] for i in range(28)]  # mm/day threshold
-    stacked = xr.concat(hold_cdd, dim=xr.DataArray(np.arange(28), dims="spell_length", name="spell_length"))
-
-    count_above = (stacked >= 0.5).sum(dim="spell_length")
-    median_length = (count_above - 1).where(count_above > 0)  # count of True values minus 1 (0-indexing); NaN where prob never reaches 0.5
-    median_length.attrs['GRIB_name']='Median dry spell length'
-    median_length.attrs['units']='days'
-    median_length=median_length.assign_coords({'step':precip.isel(step=-1).step}).to_dataset()
-
     ds_to_plot_cdd=median_length.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
     fig=gef.panel_plot_variable(ds_to_plot_cdd,variable='tp',forecast_timestep=ds_to_plot_cdd.step.values,cmap='jet',fontsize=fs,vmin=0)
     plt.savefig(f'{monthly_path}/median_dryspell_length.png',bbox_inches='tight')

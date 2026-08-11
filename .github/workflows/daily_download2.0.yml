@@ -161,7 +161,8 @@ jobs:
           fi
 
       # ── Upload .zarr stores and other data files (e.g. .tif) to the data/ folder ──
-      # NetCDF (.nc) files are intermediate/local-only and are always skipped.
+      # NetCDF (.nc), GRIB (.grib/.grib.idx), and markdown (.md) files are intermediate/
+      # local-only and are always skipped.
       - name: Upload zarr and other data files to GCS
         continue-on-error: true
         working-directory: main_repo
@@ -177,8 +178,11 @@ jobs:
               echo "data/${rel_path}" >> ../uploaded_data.txt
             done
 
-            # Any other file (e.g. .tif geotiffs) outside the .zarr stores, skipping NetCDF.
-            find "$OUTPUT_DIR" -type d -iname "*.zarr" -prune -o -type f ! -iname "*.nc" -print | while read -r file_path; do
+            # Any other file (e.g. .tif geotiffs) outside the .zarr stores, skipping
+            # NetCDF, GRIB, and markdown.
+            find "$OUTPUT_DIR" -type d -iname "*.zarr" -prune -o -type f \
+              ! -iname "*.nc" ! -iname "*.grib" ! -iname "*.grib.idx" ! -iname "*.md" \
+              -print | while read -r file_path; do
               rel_path="${file_path#"$OUTPUT_DIR"/}"
               echo "Uploading $file_path -> gs://${BUCKET}/data/${rel_path}"
               gcloud storage cp "$file_path" "gs://${BUCKET}/data/${rel_path}"
