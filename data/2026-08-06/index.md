@@ -1,10 +1,3 @@
 # Domain-wide — 2026-08-06
 
-- **ECMWF_s2s_10wind_2026-08-06.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-06/ECMWF_s2s_10wind_2026-08-06.zarr) · `gs://africa-forecasting-data/data/2026-08-06/ECMWF_s2s_10wind_2026-08-06.zarr`
-- **ECMWF_s2s_500wind_2026-08-06.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-06/ECMWF_s2s_500wind_2026-08-06.zarr) · `gs://africa-forecasting-data/data/2026-08-06/ECMWF_s2s_500wind_2026-08-06.zarr`
-- **ECMWF_s2s_700wind_2026-08-06.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-06/ECMWF_s2s_700wind_2026-08-06.zarr) · `gs://africa-forecasting-data/data/2026-08-06/ECMWF_s2s_700wind_2026-08-06.zarr`
-- **ECMWF_s2s_Tminmax_2026-08-06.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-06/ECMWF_s2s_Tminmax_2026-08-06.zarr) · `gs://africa-forecasting-data/data/2026-08-06/ECMWF_s2s_Tminmax_2026-08-06.zarr`
-- **ECMWF_s2s_daily_vars_2026-08-06.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-06/ECMWF_s2s_daily_vars_2026-08-06.zarr) · `gs://africa-forecasting-data/data/2026-08-06/ECMWF_s2s_daily_vars_2026-08-06.zarr`
-- **ECMWF_s2s_precip_2026-08-06.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-06/ECMWF_s2s_precip_2026-08-06.zarr) · `gs://africa-forecasting-data/data/2026-08-06/ECMWF_s2s_precip_2026-08-06.zarr`
-- **gefs_kenya.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-06/gefs/gefs_kenya.zarr) · `gs://africa-forecasting-data/data/2026-08-06/gefs/gefs_kenya.zarr`
-- **medium_range_precip.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-06/medium_range_precip.zarr) · `gs://africa-forecasting-data/data/2026-08-06/medium_range_precip.zarr`
+- [index.md](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-06/index.md)
