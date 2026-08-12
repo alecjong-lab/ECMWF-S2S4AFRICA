@@ -1455,20 +1455,20 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
         ds=ensemble_mean(ds)
         if isinstance(add_contour, (xr.DataArray, xr.Dataset)):
             add_contour=ensemble_mean(add_contour)
-        
+
     ds=lon_convert(ds)
 
     #if only a single step is selected, make sure rest of code still works
     if 'step' not in ds.dims and 'step' in ds.coords:
         ds = ds.expand_dims(step=[ds.step.values])
-        
+
     #plot the change in a variable
     if change==True:
         ds=diff_ds(ds.sel(step=forecast_timestep),len(forecast_timestep))
         # if len(np.atleast_1d(forecast_timestep))>5:
         forecast_timestep=ds.step.values
         units=str(ds[variable].units)+'/week'
-    
+
     #define vmax and vmin to ensure plots have same color scale
     if units==None:
             units=ds[variable].units
@@ -1485,7 +1485,7 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
     else:
         vmax=None
         vmin=None
-            
+
     #logic to check if there is only one forcast step or if there are more
     steps = np.atleast_1d(forecast_timestep)  # Converts single value to an array
     #logic to check how many columns should be made
@@ -1501,42 +1501,47 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
         lon_min, lon_max, lat_min, lat_max
     )
 
-    fig_width = single_width * ncols 
+    fig_width = single_width * ncols
     fig_height = single_height * nrows
-    fig, axes = plt.subplots(nrows, ncols, figsize=(fig_width, fig_height),sharex=True,sharey=True,subplot_kw={'projection': ccrs.PlateCarree()})
+    # constrained_layout reserves colorbar space as a fraction of the row(s)
+    # it's attached to, rather than the whole figure, so it no longer needs
+    # to be hand-tuned per nrows the way the add_axes offsets did.
+    fig, axes = plt.subplots(nrows, ncols, figsize=(fig_width, fig_height),sharex=True,sharey=True,constrained_layout=True,subplot_kw={'projection': ccrs.PlateCarree()})
     axes = np.array(axes).reshape(nrows, ncols)  # Ensure axes is 2D
     axes = axes.flatten()  # Flatten for easy iteration
-    
+
     for i, s in enumerate(np.atleast_1d(forecast_timestep)):
         ax = axes[i]
         contour,lines=plot_variable(ds,variable,s,vmax,vmin,cities=cities,cmap=cmap,ax=ax,add_contour=add_contour,contourlevels=contourlevels,contourcmap=contourcmap,contourwidths=contourwidths,fontsize=fontsize,norm=norm)
     for j in range(num_steps, len(axes)):
         axes[j].set_visible(False) #delete extra empty plots
-    fig.tight_layout() 
-    cbar_ax = fig.add_axes([0.15, -0.04 , 0.7, 0.01+ 0.02/nrows])  # [left, bottom, width, height]
-    cbar = fig.colorbar(contour, cax=cbar_ax, orientation='horizontal',fraction=5)
+
+    used_axes = axes[:num_steps].tolist()
+    # colorbar length (shrink * axes-group width) and thickness (length /
+    # aspect) both grow with ncols since ax=used_axes spans the group; scale
+    # aspect by ncols and by shrink so thickness stays constant regardless of
+    # panel count or how wide the bar is set to.
+    base_shrink, base_aspect_per_col = 0.6, 18
+    # shrink is relative to the axes-group width, which is narrow at
+    # ncols=1 — interpolate from wide (ncols=1) down to the tuned
+    # multi-panel value (ncols=4) so a single plot isn't left skinny.
+    shrink_at_ncols1, shrink_at_ncols4 = 0.85, 0.6
+    cbar_shrink = shrink_at_ncols1 - (shrink_at_ncols1 - shrink_at_ncols4) * (ncols - 1) / 3
+    cbar_aspect = base_aspect_per_col * ncols * (cbar_shrink / base_shrink)
+    # pad is likewise a fraction of the axes group's height, which grows
+    # with nrows; scale it down by nrows so the gap stays a constant size.
+    cbar_pad = 0.05 / nrows
+    cbar = fig.colorbar(contour, ax=used_axes, orientation='horizontal', location='bottom', shrink=cbar_shrink, pad=cbar_pad, aspect=cbar_aspect)
     try:
         cbar.set_label(ds[variable].GRIB_name+f' [{units}]')
     except:
         cbar.set_label(ds[variable].long_name+f' [{units}]')
 
-    #manage the location of the colorbar
+    #second colorbar for the overlaid contour lines, stacked below the first
     if lines!=None:
-        pos = cbar.ax.get_position()  # Bbox in figure coordinates
-        # Shift down by some fraction of the height
-        height = pos.height * 0.8   # make second cbar smaller
-        gap    = 4 * pos.height  # gap between label and second bar
-
-        new_pos = [
-            pos.x0,
-            pos.y0 - height - gap,
-            pos.width,
-            height
-        ]
-        
-        cax2 = fig.add_axes(new_pos)
-        cbar2 = fig.colorbar(lines, cax=cax2, orientation='horizontal')
+        cbar2 = fig.colorbar(lines, ax=used_axes, orientation='horizontal', location='bottom', shrink=cbar_shrink, pad=cbar_pad, aspect=cbar_aspect)
         cbar2.set_label(add_contour.attrs['GRIB_name']+f"[{add_contour.attrs['units']}]")
+
     return fig
 
 def quiver_plot_variable(ds,name_u,name_v,forecast_timestep,cmap='virdis',level=None,fontsize=13,scale=40):
