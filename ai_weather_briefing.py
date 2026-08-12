@@ -7,6 +7,7 @@ from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import MSO_AUTO_SIZE, PP_ALIGN
 from pptx.oxml.ns import qn
+import requests
 
 prefix=os.environ["MAIN_PATH"]
 
@@ -113,11 +114,25 @@ text = summary
 slide_text = text.split("---SLIDE---")
 
 types = ["date", 'ECMWF_raw', 'GEFS_raw', "ECMWF_dwn", "ECMWFmed_raw",
-         "ECMWF_tercile", "ECMWF_efi", "ECMWF_p50", "ECMWF_p50anom", "sum"]
+         "ECMWF_tercile", "ECMWF_efi", "ECMWF_p50", "ECMWF_p50anom", "sum","waves"]
 plots = ['hold', 'weekly_precip', "gefs_weekly_precip", "weekly_precip_downscaled",
          "weekly_medium_range_precip", "chance_of_above_or_below", "efi_sot_precip",
-         "50th_percentile_exedance", "anomaly_from_50th"]
+         "50th_percentile_exedance", "anomaly_from_50th","summary"]
 plots_path = [f"plots/Kenya/{date_str}/weekly/{i}.png" for i in plots]
+
+wave_map_path = f"plots/Kenya/{date_str}/weekly/wave_map.png"
+os.makedirs(os.path.dirname(wave_map_path), exist_ok=True)
+wave_map_resp = requests.get("https://ncics.org/pub/mjo/v2/map/olr.cfs.all.global.7.png", timeout=30)
+wave_map_resp.raise_for_status()
+with open(wave_map_path, "wb") as f:
+    f.write(wave_map_resp.content)
+
+hov_moller_path = f"plots/Kenya/{date_str}/weekly/hov_moller.png"
+os.makedirs(os.path.dirname(hov_moller_path), exist_ok=True)
+hov_moller_resp = requests.get("https://ncics.org/pub/mjo/v2/hov/olr.cfs.eqtr.png", timeout=30)
+hov_moller_resp.raise_for_status()
+with open(hov_moller_path, "wb") as f:
+    f.write(hov_moller_resp.content)
 
 for i, t in enumerate(types):
     slide = prs.slides[i]
@@ -137,5 +152,14 @@ for i, t in enumerate(types):
             left, top, width, height = shape.left, shape.top, shape.width, shape.height
             shape._element.getparent().remove(shape._element)
             slide.shapes.add_picture(plots_path[i], left, top, width, height)
+        elif shape.name == "wave_map":
+            left, top, width, height = shape.left, shape.top, shape.width, shape.height
+            shape._element.getparent().remove(shape._element)
+            slide.shapes.add_picture(wave_map_path, left, top, width, height)
+        elif shape.name == "hov_moller":
+            left, top, width, height = shape.left, shape.top, shape.width, shape.height
+            shape._element.getparent().remove(shape._element)
+            slide.shapes.add_picture(hov_moller_path, left, top, width, height)
+
 
 prs.save(f"s2s_briefing_{date_str}.pptx")
