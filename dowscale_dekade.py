@@ -280,13 +280,20 @@ for country in countries_to_downscale:
         da = da.rio.set_spatial_dims(x_dim="longitude", y_dim="latitude")
         # set the CRS (assuming plain lat/lon WGS84 — adjust if not)
         da = da.rio.write_crs("EPSG:4326", inplace=False)
-        da=da.rio.write_nodata(np.nan, inplace=True)
+        daily_downscaled=da.rio.write_nodata(np.nan, inplace=True)
 
-        da.rio.to_raster(
+        daily_downscaled.rio.to_raster(
             f'{data_path}/daily_downscaled_kenya.tif',
             tags={
                 "band_dim_name": "day",
             },
+        )
+
+        ds_to_plot_daily=daily_downscaled.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2)).isel(step=slice(0,28))
+        gef.plot_panel_and_save(
+            ds_to_plot_daily.transpose('latitude','longitude','step'),'tp',gef.cmap,fs,
+            f'plots/{country}/{date_str}/weekly/weekly_precip_downscaled_disaggregated_daily.png',
+            vmin=0
         )
 
         rescaled_forecast = rescaled_forecast.rio.write_crs("EPSG:4326")
