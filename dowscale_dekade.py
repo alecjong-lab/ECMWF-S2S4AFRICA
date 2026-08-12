@@ -196,10 +196,10 @@ if (int(month),int(day)) in forecast_files.keys():
             )
 
 weekly_bboxes = {
-    "Kenya": {"lat1": 7, "lon1": 33, "lat2": -6, "lon2": 42},
-    "Kenya_plus":{"lat1": 7.5, "lon1":27, "lat2": -7.5, "lon2": 43},
-    "Ghana":{"lat1": 12, "lon1": -4, "lat2": 4, "lon2": 2},
-    "Ghana_plus": {"lat1": 12, "lon1": -4.5, "lat2": 4, "lon2": 3},
+    "Kenya":      {"lat1": 6,  "lon1":33,  "lat2": -5,  "lon2": 42 },
+    "Kenya_plus": {"lat1": 7.5,"lon1":27,  "lat2": -7.5,"lon2": 43 },
+    "Ghana":      {"lat1": 12, "lon1":-3.5,"lat2": 4,   "lon2": 1.5},
+    "Ghana_plus": {"lat1": 12, "lon1":-4.5,"lat2": 4,   "lon2": 3  },
 }
 
 countries_to_downscale= os.environ["WEEK_COUNTRIES"].split(',')
@@ -276,7 +276,7 @@ for country in countries_to_downscale:
     if country=='Kenya':
         daily_downscaled=gef.disaggregate_weekly_to_daily(rescaled_forecast.tp, data.tp.mean('number'))
         # make sure dims are named/ordered as rioxarray expects
-        da = daily_downscaled.tp.drop_vars({'surface','time','year','rank'}) 
+        da = daily_downscaled.tp.drop_vars({'surface','year','rank'}) 
         da = da.rio.set_spatial_dims(x_dim="longitude", y_dim="latitude")
         # set the CRS (assuming plain lat/lon WGS84 — adjust if not)
         da = da.rio.write_crs("EPSG:4326", inplace=False)
@@ -288,6 +288,8 @@ for country in countries_to_downscale:
                 "band_dim_name": "day",
             },
         )
+
+        daily_downscaled=daily_downscaled.to_dataset(name='tp')
 
         ds_to_plot_daily=daily_downscaled.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2)).isel(step=slice(0,28))
         gef.plot_panel_and_save(
