@@ -12,6 +12,7 @@
 - [Zambia plots — 2026-08-12](plots/Zambia/2026-08-12/index.md)
 - [Botswana plots — 2026-08-12](plots/Botswana/2026-08-12/index.md)
 - [Kenya plots — 2026-08-12](plots/Kenya/2026-08-12/index.md)
+- [Diagnostics plots — 2026-08-12](plots/diagnostics/2026-08-12/index.md)
 - [Domain-wide data — 2026-08-12](data/2026-08-12/index.md)
 - [Kenya plots — 2026-08-11](plots/Kenya/2026-08-11/index.md)
 - [Domain-wide data — 2026-08-11](data/2026-08-11/index.md)
@@ -29,4 +30,3 @@
 - [Zimbabwe plots — 2026-08-10](plots/Zimbabwe/2026-08-10/index.md)
 - [Ghana plots — 2026-08-10](plots/Ghana/2026-08-10/index.md)
 - [Madagascar plots — 2026-08-10](plots/Madagascar/2026-08-10/index.md)
-- [Botswana plots — 2026-08-10](plots/Botswana/2026-08-10/index.md)
