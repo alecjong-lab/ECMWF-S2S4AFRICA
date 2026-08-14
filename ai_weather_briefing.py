@@ -114,7 +114,7 @@ text = summary
 slide_text = text.split("---SLIDE---")
 
 types = ["date", 'ECMWF_raw', 'GEFS_raw', "ECMWF_dwn", "ECMWFmed_raw",
-         "ECMWF_tercile", "ECMWF_efi", "ECMWF_p50", "ECMWF_p50anom", "sum","waves"]
+         "ECMWF_tercile", "ECMWF_efi", "ECMWF_p50", "ECMWF_p50anom", "sum","waves","IOD"]
 plots = ['hold', 'weekly_precip', "gefs_weekly_precip", "weekly_precip_downscaled",
          "weekly_medium_range_precip", "chance_of_above_or_below", "efi_sot_precip",
          "50th_percentile_exedance", "anomaly_from_50th","summary"]
@@ -133,6 +133,8 @@ hov_moller_resp = requests.get("https://ncics.org/pub/mjo/v2/hov/olr.cfs.eqtr.pn
 hov_moller_resp.raise_for_status()
 with open(hov_moller_path, "wb") as f:
     f.write(hov_moller_resp.content)
+
+IOD_path=f"plots/diagnostics/{date_str}/monthly/ECMWF_s2s_10wind_sst_anomaly_{date_str}.png"
 
 for i, t in enumerate(types):
     slide = prs.slides[i]
@@ -160,6 +162,10 @@ for i, t in enumerate(types):
             left, top, width, height = shape.left, shape.top, shape.width, shape.height
             shape._element.getparent().remove(shape._element)
             slide.shapes.add_picture(hov_moller_path, left, top, width, height)
+        elif shape.name == "IO_state":
+            left, top, width, height = shape.left, shape.top, shape.width, shape.height
+            shape._element.getparent().remove(shape._element)
+            slide.shapes.add_picture(IOD_path, left, top, width, height)
 
 
 prs.save(f"s2s_briefing_{date_str}.pptx")

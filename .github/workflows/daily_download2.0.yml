@@ -85,6 +85,14 @@ jobs:
           COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"
           AI_ACTIVE: 'True'
 
+      - name: Generate Indian Ocean state plot
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python IndianOceanState.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+
       - name: Generate GEFS plots
         continue-on-error: true
         working-directory: main_repo

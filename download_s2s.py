@@ -78,6 +78,20 @@ daily_file = (
     "ECMWF_s2s_{ftype}_CAPE_tcw_t2m_d2m_RH_42days_7N-32E-6S-43E.grib"
 )
 
+daily_leadtime_hours = [
+    "0_24","24_48","48_72","72_96","96_120",
+    "120_144","144_168","168_192","192_216",
+    "216-240","240_264","264_288","288_312",
+    "312_336","336_360","360_384","384_408",
+    "408_432","432_456","456_480","480_504",
+    "504_528","528_552","552_576","576_600",
+    "600_624","624_648","648_672","672_696",
+    "696_720","720_744","744_768","768_792",
+    "792_816","816_840","840_864","864_888",
+    "888_912","912_936","936-960","960_984",
+    "984_1008"
+]
+
 edit_request_daily_vars = {
     "level_type": "single_level",
     "variable": [
@@ -86,19 +100,7 @@ edit_request_daily_vars = {
         "convective_available_potential_energy",
         "total_column_water"
     ],
-    "leadtime_hour": [
-        "0_24","24_48","48_72","72_96","96_120",
-        "120_144","144_168","168_192","192_216",
-        "216-240","240_264","264_288","288_312",
-        "312_336","336_360","360_384","384_408",
-        "408_432","432_456","456_480","480_504",
-        "504_528","528_552","552_576","576_600",
-        "600_624","624_648","648_672","672_696",
-        "696_720","720_744","744_768","768_792",
-        "792_816","816_840","840_864","864_888",
-        "888_912","912_936","936-960","960_984",
-        "984_1008"
-    ],
+    "leadtime_hour": daily_leadtime_hours,
 }
 
 # ========================================================
@@ -168,6 +170,41 @@ edit_request_500wind_vars = {
     "leadtime_hour": ["0/to/984/by/24"],
 }
 
+# ========================================================
+# 10m WIND (separate bounding box)
+# ========================================================
+
+alt_bounding_box = [20, 45, -20, 120]
+
+wind10_alt_file = (
+    "ECMWF_s2s_{ftype}_10wind_42days_20N-45E-20S-120E.grib"
+)
+
+edit_request_10wind_alt_vars = {
+    "level_type": "single_level",
+    "variable": [
+        "10_m_u_component_of_wind",
+        "10_m_v_component_of_wind"
+    ],
+    "leadtime_hour": ["0/to/1008/by/24"],
+    "area": alt_bounding_box,
+}
+
+# ========================================================
+# SST (daily averaged, separate bounding box)
+# ========================================================
+
+sst_file = (
+    "ECMWF_s2s_{ftype}_sst_42days_20N-45E-20S-120E.grib"
+)
+
+edit_request_sst_vars = {
+    "level_type": "single_level",
+    "variable": ["sea_surface_temperature"],
+    "leadtime_hour": daily_leadtime_hours,
+    "area": alt_bounding_box,
+}
+
 # ============================================================
 # DOWNLOAD + COMBINE EACH VARIABLE GROUP
 # Each group is only downloaded/recombined if its zarr isn't already
@@ -181,6 +218,8 @@ groups = [
     (Tminmax_file, f"ECMWF_s2s_Tminmax_{date_str}", edit_request_Tminmax_vars),
     (wind700_file, f"ECMWF_s2s_700wind_{date_str}", edit_request_700wind_vars),
     (wind500_file, f"ECMWF_s2s_500wind_{date_str}", edit_request_500wind_vars),
+    (wind10_alt_file, f"ECMWF_s2s_10wind_alt_{date_str}", edit_request_10wind_alt_vars),
+    (sst_file, f"ECMWF_s2s_sst_{date_str}", edit_request_sst_vars),
 ]
 
 for filename, zarr_name, edit_request in groups:

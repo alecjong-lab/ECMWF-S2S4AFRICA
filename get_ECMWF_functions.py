@@ -2277,3 +2277,60 @@ def dry_spell_probability(da, threshold, spell_length_threshold, time_dim="step"
     prob.attrs['GRIB_name']=f'chance of dry spell longer than {spell_length_threshold}'
     prob.attrs['units']='%'
     return prob, spell_lengths
+
+def plot_wind_and_sst_anomaly(ds_wind, ds_sst,u_var='u10',v_var='v10',sst_var='sst',lon_name='longitude',lat_name='latitude',extent=(45, 120, -20, 20),quiver_step=1,quiver_scale=100,sst_cmap='RdBu_r',sst_vmin=-2,sst_vmax=2,figsize=(20, 20),):
+    """
+    Plot low-level wind vectors and SST anomalies in two stacked panels
+    over the same domain, with a highlighted box (e.g. an index region).
+
+    Parameters
+    ----------
+    ds_wind : xarray.Dataset
+        Must contain u_var, v_var, lon_name, lat_name.
+    ds_sst : xarray.Dataset or xarray.DataArray
+        Must contain sst_var (if Dataset) with lon_name, lat_name.
+    """
+
+    fig, ax = plt.subplots(
+        1, figsize=figsize,
+        subplot_kw={'projection': ccrs.PlateCarree()}
+    )
+
+    lon = ds_wind[lon_name]
+    lat = ds_wind[lat_name]
+    LON, LAT = np.meshgrid(lon, lat)
+
+    U = ds_wind[u_var]
+    V = ds_wind[v_var]
+
+    # ---------- Panel 1: wind vectors ----------
+    ax.coastlines()
+    ax.add_feature(cfeature.BORDERS, linestyle=':')
+    ax.add_feature(cfeature.LAND, facecolor='lightgray')
+    ax.set_extent(extent, crs=ccrs.PlateCarree())
+
+    gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray',alpha=0.7, linestyle='--')
+    gl.top_labels = False
+    gl.right_labels = False
+    # gl.xlabel_style = {'size': 10}
+    # gl.ylabel_style = {'size': 10}
+
+    LON_sub = LON[::quiver_step, ::quiver_step]
+    LAT_sub = LAT[::quiver_step, ::quiver_step]
+    U_sub = U[::quiver_step, ::quiver_step]
+    V_sub = V[::quiver_step, ::quiver_step]
+
+    sst_data = ds_sst[sst_var] if hasattr(ds_sst, sst_var) else ds_sst
+
+    sst_lon = sst_data[lon_name]
+    sst_lat = sst_data[lat_name]
+
+    cf = ax.pcolormesh(sst_lon, sst_lat, sst_data,transform=ccrs.PlateCarree(),cmap=sst_cmap, vmin=sst_vmin, vmax=sst_vmax, shading='auto')
+    ax.set_title(f'Projected state over the Indian Ocean {str(ds_wind.time.values)[:10]} until {str(ds_wind.time.values+pd.Timedelta('28d'))[:10]} (10m winds and sst anomalies)')
+    cbar = fig.colorbar(cf, ax=ax, orientation='horizontal',
+                         pad=0.03, shrink=0.6)
+    cbar.set_label('SST Anomaly (°C)')
+    ax.quiver(LON_sub, LAT_sub, U_sub, V_sub,transform=ccrs.PlateCarree(), scale=quiver_scale)
+
+    fig.tight_layout()
+    return fig, ax

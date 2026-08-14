@@ -20,6 +20,7 @@ jobs:
       DATA_DIR: website_data
       OUTPUT_DIR: data
       BUCKET: africa-forecasting-data
+      KENYA_BUCKET: kenya-forecasting-data
       CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
       TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
       TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
@@ -50,13 +51,27 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run download script
+        uses: nick-fields/retry@v3
         continue-on-error: true
-        working-directory: main_repo
-        run: |
-          python download_s2s.py
         env:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
           DATE_STR: "${{ inputs.date_str }}"
+        with:
+          timeout_minutes: 45
+          max_attempts: 3
+          command: |
+            cd main_repo
+            python download_s2s.py
+
+      - name: Fetch forecast
+        working-directory: main_repo
+        run: |
+          uv run fetch_dynamical.py \
+            --dataset noaa-gefs-forecast-35-day\
+            --date ${{ inputs.date_str }} \
+            --countries "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"\
+            --variable precipitation_surface \
+            --output ./data/${{ inputs.date_str }}/gefs/
 
       - name: Generate plots
         continue-on-error: true
@@ -66,9 +81,27 @@ jobs:
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           WEBSITE_PATH: ${{ github.workspace }}/website_branch/
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY}}
           COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"
           AI_ACTIVE: 'True'
+          DATE_STR: "${{ inputs.date_str }}"
+
+      - name: Generate Indian Ocean state plot
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python IndianOceanState.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: "${{ inputs.date_str }}"
+
+      - name: Generate GEFS plots
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python plot_gefs.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn"
           DATE_STR: "${{ inputs.date_str }}"
 
       - name: Perform downscaling
@@ -77,8 +110,19 @@ jobs:
         run: |
           python dowscale_dekade.py
         env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
           DEKADE_COUNTRIES: "Kenya,Great_Horn,Ethiopia"
           WEEK_COUNTRIES: "Kenya,Ghana"
+          DATE_STR: "${{ inputs.date_str }}"
+
+      - name: Generate AI weather briefing
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python ai_weather_briefing.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           DATE_STR: "${{ inputs.date_str }}"
 
       # ── Convert NetCDF → JSON and update catalog ─────────────────
@@ -128,8 +172,10 @@ jobs:
             > ../uploaded_plots.txt
           fi
 
-      # ── Upload only .zarr stores to the data/ folder ──────────────
-      - name: Upload zarr data to GCS
+      # ── Upload .zarr stores and other data files (e.g. .tif) to the data/ folder ──
+      # NetCDF (.nc), GRIB (.grib/.idx), and markdown (.md) files are intermediate/
+      # local-only and are always skipped.
+      - name: Upload zarr and other data files to GCS
         continue-on-error: true
         working-directory: main_repo
         run: |
@@ -143,8 +189,57 @@ jobs:
               # generate_artifact_index.py collapses on ".zarr" to a single folder link.
               echo "data/${rel_path}" >> ../uploaded_data.txt
             done
+
+            # Any other file (e.g. .tif geotiffs) outside the .zarr stores, skipping
+            # NetCDF, GRIB, and markdown.
+            find "$OUTPUT_DIR" -type d -iname "*.zarr" -prune -o -type f \
+              ! -iname "*.nc" ! -iname "*.grib" ! -iname "*.idx" ! -iname "*.md" \
+              -print | while read -r file_path; do
+              rel_path="${file_path#"$OUTPUT_DIR"/}"
+              echo "Uploading $file_path -> gs://${BUCKET}/data/${rel_path}"
+              gcloud storage cp "$file_path" "gs://${BUCKET}/data/${rel_path}"
+              echo "data/${rel_path}" >> ../uploaded_data.txt
+            done
           else
             echo "No $OUTPUT_DIR directory found, skipping."
+          fi
+
+      # ── Stage Kenya-only plots + cropped zarr data ────────────────
+      - name: Stage Kenya bucket contents
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          STAGE_DIR="kenya_bucket_staging/${{ inputs.date_str }}"
+          mkdir -p "$STAGE_DIR"
+          for sub in weekly dekadal monthly; do
+            src="plots/Kenya/${{ inputs.date_str }}/$sub"
+            if [ -d "$src" ]; then
+              mkdir -p "$STAGE_DIR/$sub"
+              cp -r "$src"/. "$STAGE_DIR/$sub/"
+            fi
+          done
+          mkdir -p "$STAGE_DIR/data"
+          if [ -d "$OUTPUT_DIR/${{ inputs.date_str }}/gefs" ]; then
+            mkdir -p "$STAGE_DIR/data/gefs"
+            cp -r "$OUTPUT_DIR/${{ inputs.date_str }}/gefs/gefs_kenya.zarr" "$STAGE_DIR/data/gefs/" 2>/dev/null || true
+          fi
+          if [ -d "$OUTPUT_DIR/${{ inputs.date_str }}/geotifs_kenya" ]; then
+            cp -r "$OUTPUT_DIR/${{ inputs.date_str }}/geotifs_kenya" "$STAGE_DIR/data/"
+          fi
+          python crop_kenya_zarr.py \
+            --data-dir "$OUTPUT_DIR/${{ inputs.date_str }}" \
+            --output "$STAGE_DIR/data"
+
+      # ── Upload Kenya-only bucket contents ─────────────────────────
+      - name: Upload to Kenya bucket
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          STAGE_DIR="kenya_bucket_staging/${{ inputs.date_str }}"
+          if [ -d "$STAGE_DIR" ]; then
+            gcloud storage rsync -r "$STAGE_DIR" "gs://${KENYA_BUCKET}/${{ inputs.date_str }}" --exclude='.*index\.md$'
+          else
+            echo "No Kenya staging directory found, skipping."
           fi
 
       # ── Generate markdown index for everything just uploaded ─────
@@ -186,3 +281,6 @@ jobs:
             git commit -m "chore: update ncdf data and catalog [$(date -u +'%Y-%m-%d %H:%M UTC')]"
             git push origin website
           fi
+
+      - name: Remove website worktree
+        run: rm -rf website_branch
