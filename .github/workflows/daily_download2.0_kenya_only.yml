@@ -71,6 +71,14 @@ jobs:
             --countries "Kenya"\
             --variable precipitation_surface \
             --output ./data/${{ inputs.date_str }}/gefs/
+        
+      - name: Generate Indian Ocean state plot
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python IndianOceanState.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
 
       - name: Generate plots
         continue-on-error: true
