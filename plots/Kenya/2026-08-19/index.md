@@ -20,6 +20,12 @@
 - [weekly_change_in_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/weekly/weekly_change_in_precip.png)
 - [weekly_medium_range_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/weekly/weekly_medium_range_precip.png)
 - [weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/weekly/weekly_precip.png)
+- [weekly_precip_downscaled.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/weekly/weekly_precip_downscaled.png)
+- [weekly_precip_downscaled_anomaly.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/weekly/weekly_precip_downscaled_anomaly.png)
+- [weekly_precip_downscaled_anomaly_clipped.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/weekly/weekly_precip_downscaled_anomaly_clipped.png)
+- [weekly_precip_downscaled_clipped.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/weekly/weekly_precip_downscaled_clipped.png)
+- [weekly_precip_downscaled_disaggregated_daily.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/weekly/weekly_precip_downscaled_disaggregated_daily.png)
+- [County-level precipitation maps](https://console.cloud.google.com/storage/browser/africa-forecasting-data/plots/Kenya/2026-08-19/weekly/counties)
 
 ### 10m-wind
 
@@ -159,3 +165,5 @@
 - [meteogram_Mombasa.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/monthly/meteogram_Mombasa.png)
 - [meteogram_Nairobi.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/monthly/meteogram_Nairobi.png)
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/monthly/monthly_precip.png)
+- [monthly_precip_downscaled.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/monthly/monthly_precip_downscaled.png)
+- [monthly_precip_downscaled_anomaly.png](https://storage.googleapis.com/africa-forecasting-data/plots/Kenya/2026-08-19/monthly/monthly_precip_downscaled_anomaly.png)

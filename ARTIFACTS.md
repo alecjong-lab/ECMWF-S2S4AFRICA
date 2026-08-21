@@ -1,5 +1,8 @@
 # Recent Artifacts
 
+- [Kenya plots — 2026-08-19](plots/Kenya/2026-08-19/index.md)
+- [Domain-wide data — 2026-08-19](data/2026-08-19/index.md)
+- [Diagnostics plots — 2026-08-12](plots/diagnostics/2026-08-12/index.md)
 - [Great_horn plots — 2026-08-19](plots/Great_Horn/2026-08-19/index.md)
 - [Malawi plots — 2026-08-19](plots/Malawi/2026-08-19/index.md)
 - [Ethiopia plots — 2026-08-19](plots/Ethiopia/2026-08-19/index.md)
@@ -11,10 +14,7 @@
 - [Namibia plots — 2026-08-19](plots/Namibia/2026-08-19/index.md)
 - [Zambia plots — 2026-08-19](plots/Zambia/2026-08-19/index.md)
 - [Botswana plots — 2026-08-19](plots/Botswana/2026-08-19/index.md)
-- [Kenya plots — 2026-08-19](plots/Kenya/2026-08-19/index.md)
 - [Diagnostics plots — 2026-08-19](plots/diagnostics/2026-08-19/index.md)
-- [Domain-wide data — 2026-08-19](data/2026-08-19/index.md)
-- [Diagnostics plots — 2026-08-12](plots/diagnostics/2026-08-12/index.md)
 - [Great_horn plots — 2026-08-18](plots/Great_Horn/2026-08-18/index.md)
 - [Malawi plots — 2026-08-18](plots/Malawi/2026-08-18/index.md)
 - [Ethiopia plots — 2026-08-18](plots/Ethiopia/2026-08-18/index.md)
