@@ -144,6 +144,12 @@ if (int(month),int(day)) in forecast_files.keys():
         )
 
         if country=='Kenya':
+            kenya_dekade = rescaled_forecast.sortby('latitude', ascending=False).sel(
+                longitude=slice(dekade_bboxes['Kenya']['lon1'], dekade_bboxes['Kenya']['lon2']),
+                latitude=slice(dekade_bboxes['Kenya']['lat1'], dekade_bboxes['Kenya']['lat2']),
+            )
+            kenya_dekade.to_netcdf(f'data/{date_str}/data_dekade_Kenya_downscaled.nc')
+
             ##### update the dekadal forecast timeseries per administrative district
             df = pd.read_csv("data/Kenya2026.csv",index_col='Feature')
             mask = regionmask.mask_geopandas(
@@ -246,6 +252,13 @@ for country in countries_to_downscale:
     extended_fclim=xr.concat([reforecast_clims_ds,data_to_add],dim='year')
 
     rescaled_forecast = gef.build_rescaled_forecast(extended_fclim, chirps_weeks_ds, data_weekly, upscale_factor=upscale_factor)
+
+    if country == 'Kenya':
+        kenya_weekly = rescaled_forecast.sel(
+            longitude=slice(weekly_bboxes['Kenya']['lon1'], weekly_bboxes['Kenya']['lon2']),
+            latitude=slice(weekly_bboxes['Kenya']['lat1'], weekly_bboxes['Kenya']['lat2']),
+        )
+        kenya_weekly.to_netcdf(f'data/{date_str}/data_weekly_Kenya_downscaled.nc')
 
     rescaled_forecast_month = rescaled_forecast.isel(step=slice(0,4)).sum('step',keep_attrs=True).assign_coords(step=rescaled_forecast.isel(step=3).step).expand_dims('step')
 
