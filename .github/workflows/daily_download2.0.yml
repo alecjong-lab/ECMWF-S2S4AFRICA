@@ -200,7 +200,7 @@ jobs:
             echo "No $OUTPUT_DIR directory found, skipping."
           fi
 
-      # ── Stage Kenya-only plots + cropped zarr data ────────────────
+      # ── Stage Kenya-only plots, downscaled NetCDF, and cropped zarr data ──
       - name: Stage Kenya bucket contents
         continue-on-error: true
         working-directory: main_repo
@@ -221,6 +221,11 @@ jobs:
           fi
           if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" ]; then
             cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" "$STAGE_DIR/data/"
+          fi
+          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" ]; then
+            find "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" -maxdepth 1 \
+              -type f -iname '*Kenya*downscaled*.nc' \
+              -exec cp -v {} "$STAGE_DIR/data/" \;
           fi
           python crop_kenya_zarr.py \
             --data-dir "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" \
