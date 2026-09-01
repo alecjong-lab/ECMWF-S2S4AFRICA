@@ -205,6 +205,21 @@ edit_request_sst_vars = {
     "area": alt_bounding_box,
 }
 
+# ========================================================
+# PRECIPITATION (alt bounding box, Indian Ocean)
+# ========================================================
+
+precip_alt_file = (
+    "ECMWF_s2s_{ftype}_forecast_precip_46days_20N-45E-20S-120E.grib"
+)
+
+edit_request_precip_alt = {
+    "level_type": "single_level",
+    "variable": ["total_precipitation"],
+    "leadtime_hour": ["0/to/1104/by/168"],
+    "area": [20, 30, -20, 120],
+}
+
 # ============================================================
 # DOWNLOAD + COMBINE EACH VARIABLE GROUP
 # Each group is only downloaded/recombined if its zarr isn't already
@@ -220,6 +235,7 @@ groups = [
     (wind500_file, f"ECMWF_s2s_500wind_{date_str}", edit_request_500wind_vars),
     (wind10_alt_file, f"ECMWF_s2s_10wind_alt_{date_str}", edit_request_10wind_alt_vars),
     (sst_file, f"ECMWF_s2s_sst_{date_str}", edit_request_sst_vars),
+    (precip_alt_file, f"ECMWF_s2s_precip_alt_{date_str}", edit_request_precip_alt),
 ]
 
 for filename, zarr_name, edit_request in groups:

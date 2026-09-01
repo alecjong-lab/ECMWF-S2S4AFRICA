@@ -23,3 +23,5 @@ gcsfs
 dynamical_catalog
 uv  
 python-pptx
+icechunk
+

@@ -25,6 +25,7 @@ import requests
 from cfgrib.xarray_to_grib import to_grib
 import matplotlib.colors as mcolors
 import xml.etree.ElementTree as ET
+import icechunk
 
 colors = ["white","wheat","lightgreen", "green","lightblue", "blue","yellow","orange", "red","purple"]
 cmap = LinearSegmentedColormap.from_list("wgbrp", colors)
@@ -797,6 +798,15 @@ def week_mean(ds):
     new_times = w_mean.step + pd.Timedelta(days=6)
     w_mean = w_mean.assign_coords(step=new_times)
     return w_mean
+
+def week_sum(ds):
+    #"calculate weekly sum"
+    if int(len(np.atleast_1d(ds.step.values))/7)<1:
+        raise ValueError(f'⚠️The dataset contains less than 1 week of data⚠️')
+    w_sum=ds.isel(step=slice(0,int(len(ds.step)/7)*7)).resample(step='7D').sum()
+    new_times = w_sum.step + pd.Timedelta(days=6)
+    w_sum = w_sum.assign_coords(step=new_times)
+    return w_sum
 
 def lon_convert(ds,cut=True):
     #"Convert from 0-360 to -180-180"
@@ -2334,3 +2344,68 @@ def plot_wind_and_sst_anomaly(ds_wind, ds_sst,u_var='u10',v_var='v10',sst_var='s
 
     fig.tight_layout()
     return fig, ax
+
+def load_reforecasts(forecast_day, var_group, var, grid='1p5latx1p5lon',
+                      bbox={"lat1": 90, "lon1": -180, "lat2": -90, "lon2": 178.5},
+                      levels=None,time_range=28):
+    '''To build a S2S m-climate like ECMWF you need the reforecasts that cover a 5 init time window around the closest 
+    init day and month to the date that you give. Reforecast are produced for every odd day basically. 
+    Load the needed reforecasts for the Planette's ECMWF IFS S2S Reforecast Data icechunk data.
+    after reforecasts have been loaded then a mclimate can be constructed from it.
+    
+    inputs:
+    forecast_day: day for which to find the needed hindcasts to construct a model climatology in format "YYYY-MM-DD"
+    var_group: either 'pressure' or 'single'
+    var: the variable(s) that need selection 
+    grid: grid resolution, either 1p5latx1p5lon for land or 1platx1plon for ocean
+    see https://github.com/PlanetteAI/planette_ifs_archive for full list of level types and variables
+    bbox: a dictionary containing the lat lon boundaries like {"lat1": Northenmost,"lon1": Westernmost,"lat2": Southernmost, "lon2": Easternmost}.
+    Example for Kenya: {"lat1": 6,     "lon1": 33,   "lat2": -5,    "lon2": 42}
+    levels: list of pressure levels to select, only needed for pressure level variables
+    time_range: number of lead days to select, default is 28 days
+    More variables, pressure levels and larger bounding boxes will result in a longer execution time and more memmory needed. So be cautious about choosing. 
+    '''
+    # early guard: pressure levels only make sense for pressure-level variables
+    if var_group == 'single' and levels is not None:
+        raise ValueError("Cannot choose pressure levels on single level variables")
+
+    # 1. Open Icechunk repo on S3 (public bucket — no AWS credentials required)
+    storage = icechunk.s3_storage(
+        bucket="planette-ifs-46-day",
+        prefix="reforecasts",
+        region="us-east-2",
+        anonymous=True,
+    )
+    repo = icechunk.Repository.open(storage)
+    store = repo.readonly_session("main").store
+
+    # 2. Open a Zarr group
+    ds = xr.open_zarr(
+        store,
+        group=f"{var_group}/{grid}",
+        consolidated=False,
+        chunks={},
+    )
+    ds = ds.assign_coords(lead=ds.lead + pd.Timedelta(days=1)).rename({"lead": "step",'lat':'latitude','lon':'longitude'})
+
+    # find the closest day and month to the forecast day that is given, we compare with 2010 but it could be any year from 2006 to 2024
+    closest_day_month = str(ds.sel(init_time=f'2010-{str(forecast_day)[5:]}', method='nearest').init_time.values)[5:10]
+    # add years to the middle day which the window needs to be created around
+    hindcast_dates = [f'{i}-{closest_day_month}' for i in np.arange(2006, 2025)]
+    # find the index of these middle dates so that we can construct the 5 day window
+    index_per_hindcastdate = [ds.get_index('init_time').get_loc(hindcast_date) for hindcast_date in hindcast_dates]
+    # construct the 5 init time window, so that we hindcasts can be selected
+    all_indices = [idx for i in index_per_hindcastdate for idx in range(i - 2, i + 3)]
+
+    if var_group == 'pressure' and levels is not None:
+        # only load the required data into memory for further calculation
+        reforecasts = ds[var].isel(init_time=all_indices).sel(
+            longitude=slice(bbox['lon1'], bbox['lon2']), latitude=slice(bbox['lat1'], bbox['lat2'])
+        ).sel(pressure_level=levels).isel(step=slice(0,time_range)).compute()
+    else:
+        # only load the required data into memory for further calculation
+        reforecasts = ds[var].isel(init_time=all_indices).sel(
+            longitude=slice(bbox['lon1'], bbox['lon2']), latitude=slice(bbox['lat1'], bbox['lat2'])
+        ).isel(step=slice(0,time_range)).compute()
+
+    return reforecasts
