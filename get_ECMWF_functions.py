@@ -2347,7 +2347,7 @@ def plot_wind_and_sst_anomaly(ds_wind, ds_sst,u_var='u10',v_var='v10',sst_var='s
 
 def load_reforecasts(forecast_day, var_group, var, grid='1p5latx1p5lon',
                       bbox={"lat1": 90, "lon1": -180, "lat2": -90, "lon2": 178.5},
-                      levels=None,time_range=28):
+                      levels=None,time_range=slice(0,28)):
     '''To build a S2S m-climate like ECMWF you need the reforecasts that cover a 5 init time window around the closest 
     init day and month to the date that you give. Reforecast are produced for every odd day basically. 
     Load the needed reforecasts for the Planette's ECMWF IFS S2S Reforecast Data icechunk data.
@@ -2401,11 +2401,11 @@ def load_reforecasts(forecast_day, var_group, var, grid='1p5latx1p5lon',
         # only load the required data into memory for further calculation
         reforecasts = ds[var].isel(init_time=all_indices).sel(
             longitude=slice(bbox['lon1'], bbox['lon2']), latitude=slice(bbox['lat1'], bbox['lat2'])
-        ).sel(pressure_level=levels).isel(step=slice(0,time_range)).compute()
+        ).sel(pressure_level=levels).isel(step=time_range).compute()
     else:
         # only load the required data into memory for further calculation
         reforecasts = ds[var].isel(init_time=all_indices).sel(
             longitude=slice(bbox['lon1'], bbox['lon2']), latitude=slice(bbox['lat1'], bbox['lat2'])
-        ).isel(step=slice(0,time_range)).compute()
+        ).isel(step=time_range).compute()
 
     return reforecasts
