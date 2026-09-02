@@ -215,6 +215,9 @@ jobs:
             find "$OUTPUT_DIR/${{ inputs.date_str }}" -maxdepth 1 \
               -type f -iname '*Kenya*downscaled*.nc' \
               -exec cp -v {} "$STAGE_DIR/data/" \;
+            find "$OUTPUT_DIR/${{ inputs.date_str }}" -maxdepth 1 \
+              -type f -iname 'daily_downscaled_kenya.tif' \
+              -exec cp -v {} "$STAGE_DIR/data/" \;
           fi
           python crop_kenya_zarr.py \
             --data-dir "$OUTPUT_DIR/${{ inputs.date_str }}" \
