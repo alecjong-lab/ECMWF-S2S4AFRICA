@@ -2288,6 +2288,112 @@ def dry_spell_probability(da, threshold, spell_length_threshold, time_dim="step"
     prob.attrs['units']='%'
     return prob, spell_lengths
 
+def _rainfall_onset_nd(block, wet_thresh, wet_days, dry_thresh, dry_days, search_days, time_dim="step"):
+    """
+    Core onset-date search, vectorized over every leading (batch) dim at once
+    (same style as _max_consecutive_below_nd above).
+
+    block : ndarray, shape (..., n_time) — time_dim must be the last axis,
+        daily rainfall accumulation (same units as wet_thresh/dry_thresh)
+
+    Returns the 0-based time index of the onset day per gridpoint/member/etc
+    (float, NaN where no qualifying onset was found within the series),
+    shape (...).
+    """
+    n_time = block.shape[-1]
+    print(n_time)
+    dry = block < dry_thresh
+
+    onset_idx = np.full(block.shape[:-1], np.nan)
+    found = np.zeros(block.shape[:-1], dtype=bool)
+
+    # last candidate start day that still leaves room for both the wet-spell
+    # window and the full dry-spell search window
+    t_max = n_time - max(wet_days, search_days)
+    for t in range(0, t_max + 1):
+        wet_window = block[..., t:t + wet_days]
+        wet_sum = wet_window.sum(axis=-1)
+        wet_nan = np.isnan(wet_window).any(axis=-1)
+        candidate = (wet_sum > wet_thresh) & ~wet_nan
+
+        # max consecutive dry-day run within the next search_days days
+        counter = np.zeros(block.shape[:-1])
+        max_run = np.zeros(block.shape[:-1])
+        for w in range(search_days):
+            counter = (counter + 1) * dry[..., t + w]
+            np.maximum(max_run, counter, out=max_run)
+        dry_nan = np.isnan(block[..., t:t + search_days]).any(axis=-1)
+        no_dry_spell = (max_run < dry_days) & ~dry_nan
+
+        qualifies = candidate & no_dry_spell & ~found
+        onset_idx = np.where(qualifies, t, onset_idx)
+        found = found | qualifies
+
+    return onset_idx
+
+def rainfall_onset_date(da, wet_spell_thresh=20.0, wet_spell_days=3, dry_spell_thresh=1.0,
+                         dry_spell_days=7, search_days=21, time_dim="step", valid_time=None):
+    """
+    Rainy season onset, computed per grid cell (and any other batch dims,
+    e.g. ensemble member or year) from a daily rainfall accumulation series.
+
+    Definition: the onset is the first day of a wet spell where the total
+    rainfall accumulated over `wet_spell_days` consecutive days (default 3)
+    exceeds `wet_spell_thresh` mm (default 20mm), provided there is no dry
+    spell of `dry_spell_days` or more consecutive days (default 7; a dry day
+    is one with rainfall below `dry_spell_thresh`, default 1mm) within the
+    following `search_days` days (default 21, counted from the first day of
+    the wet spell).
+
+    da : xr.DataArray of daily rainfall accumulation (mm/day), with a
+        time_dim (default "step", matching this file's forecast-lead-time
+        convention — a timedelta64[ns] "time since initialization" coord)
+        plus any batch dims (latitude, longitude, number, year, ...). Use
+        day_mean/acum_to_instant first if the source data is sub-daily or
+        cumulative.
+    valid_time : optional xr.DataArray of absolute dates (datetime64) sharing
+        time_dim, e.g. `ds.time + ds.step`. If given, the result is the
+        absolute onset date instead of the raw time_dim value (e.g. elapsed
+        step/lead time since initialization).
+
+    Returns an xr.DataArray of onset times (same dtype as time_dim's
+    coordinate, or as `valid_time` if given; NaT where no onset was found
+    within the series), with time_dim removed.
+    """
+    onset_idx = xr.apply_ufunc(
+        _rainfall_onset_nd,
+        da,
+        input_core_dims=[[time_dim]],
+        kwargs=dict(
+            wet_thresh=wet_spell_thresh,
+            wet_days=wet_spell_days,
+            dry_thresh=dry_spell_thresh,
+            dry_days=dry_spell_days,
+            search_days=search_days,
+            time_dim=time_dim
+        ),
+        output_dtypes=[float],
+    )
+
+    time_values = valid_time.values if valid_time is not None else da[time_dim].values
+    idx = onset_idx.values
+    valid = ~np.isnan(idx)
+    idx_int = np.where(valid, idx, 0).astype(int)
+    nat = np.array('NaT', dtype=time_values.dtype)
+    onset_times = np.where(valid, time_values[idx_int], nat)
+
+    onset_date = xr.DataArray(onset_times, dims=onset_idx.dims, coords=onset_idx.coords, name='onset_date')
+    onset_date.attrs['long_name'] = (
+        'rainy season onset date' if valid_time is not None else
+        'rainy season onset (time since initialization)'
+    )
+    onset_date.attrs['description'] = (
+        f'first day of a {wet_spell_days}-day wet spell with >{wet_spell_thresh}mm total rainfall, '
+        f'with no dry spell of >={dry_spell_days} consecutive days (<{dry_spell_thresh}mm/day) '
+        f'in the following {search_days} days'
+    )
+    return onset_date
+
 def plot_wind_and_sst_anomaly(ds_wind, ds_sst,u_var='u10',v_var='v10',sst_var='sst',lon_name='longitude',lat_name='latitude',extent=(45, 120, -20, 20),quiver_step=1,quiver_scale=100,sst_cmap='RdBu_r',sst_vmin=-2,sst_vmax=2,figsize=(20, 20),):
     """
     Plot low-level wind vectors and SST anomalies in two stacked panels
