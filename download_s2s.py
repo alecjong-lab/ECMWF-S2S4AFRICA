@@ -220,6 +220,41 @@ edit_request_precip_alt = {
     "area": [20, 30, -20, 120],
 }
 
+# ========================================================
+# TOTAL COLUMN WATER (Indian Ocean domain)
+# ========================================================
+
+indian_ocean_bounding_box = [20, -30, -20, 120]
+
+tcw_file = (
+    "ECMWF_s2s_{ftype}_tcw_46days_20N-30W-20S-120E.grib"
+)
+
+edit_request_tcw = {
+    "level_type": "single_level",
+    "variable": ["total_column_water"],
+    "leadtime_hour": daily_leadtime_hours,
+    "area": indian_ocean_bounding_box,
+}
+
+# ========================================================
+# 300-1000 hPa SPECIFIC HUMIDITY & U WIND (Indian Ocean domain)
+# ========================================================
+
+q_u_leadtime_hours = [str(h) for h in range(0, 1105, 24)]
+
+q_u_file = (
+    "ECMWF_s2s_{ftype}_q_u_46days_20N-30W-20S-120E.grib"
+)
+
+edit_request_q_u = {
+    "level_type": "pressure",
+    "level_value": ["300_hpa", "500_hpa", "700_hpa", "850_hpa", "925_hpa", "1000_hpa"],
+    "variable": ["specific_humidity", "u_component_of_wind"],
+    "leadtime_hour": q_u_leadtime_hours,
+    "area": indian_ocean_bounding_box,
+}
+
 # ============================================================
 # DOWNLOAD + COMBINE EACH VARIABLE GROUP
 # Each group is only downloaded/recombined if its zarr isn't already
@@ -236,6 +271,8 @@ groups = [
     (wind10_alt_file, f"ECMWF_s2s_10wind_alt_{date_str}", edit_request_10wind_alt_vars),
     (sst_file, f"ECMWF_s2s_sst_{date_str}", edit_request_sst_vars),
     (precip_alt_file, f"ECMWF_s2s_precip_alt_{date_str}", edit_request_precip_alt),
+    (tcw_file, f"ECMWF_s2s_tcw_{date_str}", edit_request_tcw),
+    (q_u_file, f"ECMWF_s2s_q_u_{date_str}", edit_request_q_u),
 ]
 
 for filename, zarr_name, edit_request in groups:
