@@ -113,30 +113,77 @@ prs = Presentation("WeatherbriefingKenya_template2.pptx")
 text = summary
 slide_text = text.split("---SLIDE---")
 
-types = ["date", 'ECMWF_raw', 'GEFS_raw', "ECMWF_dwn", "ECMWFmed_raw",
-         "ECMWF_tercile", "ECMWF_efi", "ECMWF_p50", "ECMWF_p50anom", "sum","waves","IOD"]
+slide_types = ["date", 'ECMWF_raw', 'GEFS_raw', "ECMWF_dwn", "ECMWFmed_raw",
+               "ECMWF_tercile", "ECMWF_efi", "ECMWF_p50", "ECMWF_p50anom", "sum", "waves", "IOD"]
 plots = ['hold', 'weekly_precip', "gefs_weekly_precip", "weekly_precip_downscaled",
          "weekly_medium_range_precip", "chance_of_above_or_below", "efi_sot_precip",
-         "50th_percentile_exedance", "anomaly_from_50th","summary"]
-plots_path = [f"plots/Kenya/{date_str}/weekly/{i}.png" for i in plots]
+         "50th_percentile_exedance", "anomaly_from_50th", "summary"]
 
-wave_map_path = f"plots/Kenya/{date_str}/weekly/wave_map.png"
-os.makedirs(os.path.dirname(wave_map_path), exist_ok=True)
-wave_map_resp = requests.get("https://ncics.org/pub/mjo/v2/map/olr.cfs.all.global.7.png", timeout=30)
-wave_map_resp.raise_for_status()
-with open(wave_map_path, "wb") as f:
-    f.write(wave_map_resp.content)
+kenya_path = f"plots/Kenya/{date_str}"
+diagnostics_path = f"plots/diagnostics/{date_str}/monthly"
 
-hov_moller_path = f"plots/Kenya/{date_str}/weekly/hov_moller.png"
-os.makedirs(os.path.dirname(hov_moller_path), exist_ok=True)
-hov_moller_resp = requests.get("https://ncics.org/pub/mjo/v2/hov/olr.cfs.eqtr.png", timeout=30)
-hov_moller_resp.raise_for_status()
-with open(hov_moller_path, "wb") as f:
-    f.write(hov_moller_resp.content)
+# only the first len(plots) slide types have a "{type}_plot" shape
+plot_paths = {t: f"{kenya_path}/weekly/{p}.png" for t, p in zip(slide_types, plots)}
 
-IOD_path=f"plots/diagnostics/{date_str}/monthly/ECMWF_s2s_10wind_sst_anomaly_{date_str}.png"
+def download_to(url, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+    with open(path, "wb") as f:
+        f.write(resp.content)
 
-for i, t in enumerate(types):
+wave_map_path = f"{kenya_path}/weekly/wave_map.png"
+download_to("https://ncics.org/pub/mjo/v2/map/olr.cfs.all.global.7.png", wave_map_path)
+
+hov_moller_path = f"{kenya_path}/weekly/hov_moller.png"
+download_to("https://ncics.org/pub/mjo/v2/hov/olr.cfs.eqtr.png", hov_moller_path)
+
+# Indian Ocean moisture diagnostics (see IndianOceanState.py)
+IOD_path = f"{diagnostics_path}/ECMWF_s2s_10wind_sst_anomaly_{date_str}.png"
+IO_ivt_path = f"{diagnostics_path}/ECMWF_s2s_ivt_u_{date_str}.png"
+IO_TCWV_anom_path = f"{diagnostics_path}/ECMWF_s2s_tcw_anomaly_{date_str}.png"
+IO_precip_anom_path = f"{diagnostics_path}/ECMWF_s2s_precip_anomaly_{date_str}.png"
+IO_precip_anom_std_path = f"{diagnostics_path}/ECMWF_s2s_precip_std_anomaly_{date_str}.png"
+
+# rainy season onset maps (see run_rainfall_onset.py)
+onsetecmwf_path = f"{kenya_path}/onset/onset_s2s.png"
+onsetgefs_path = f"{kenya_path}/onset/onset_gefs.png"
+
+# dry/wet spell probability & median length maps (see plot_s2s.py)
+median_wet_path = f"{kenya_path}/monthly/median_wetspell_length.png"
+wet5_path = f"{kenya_path}/monthly/prob_wetspell_5days.png"
+wet7_path = f"{kenya_path}/monthly/prob_wetspell_7days.png"
+median_dry_path = f"{kenya_path}/monthly/median_dryspell_length.png"
+dry5_path = f"{kenya_path}/monthly/prob_dryspell_5days.png"
+dry7_path = f"{kenya_path}/monthly/prob_dryspell_7days.png"
+
+exceed20mm_path = f"{kenya_path}/weekly/chance_higherthan_20mm.png"
+
+picture_paths = {
+    "wave_map": wave_map_path,
+    "hov_moller": hov_moller_path,
+    "IO_state": IOD_path,
+    "IO_ivt": IO_ivt_path,
+    "IO_TCWV_anom": IO_TCWV_anom_path,
+    "IO_precip_anom": IO_precip_anom_path,
+    "IO_precip_anom_std": IO_precip_anom_std_path,
+    "Onset_ECMWF": onsetecmwf_path,
+    "Onset_GEFS": onsetgefs_path,
+    "median_wet": median_wet_path,
+    "wet5": wet5_path,
+    "wet7": wet7_path,
+    "median_dry": median_dry_path,
+    "dry5": dry5_path,
+    "dry7": dry7_path,
+    "exceed20mm": exceed20mm_path,
+}
+
+def replace_picture(slide, shape, image_path):
+    left, top, width, height = shape.left, shape.top, shape.width, shape.height
+    shape._element.getparent().remove(shape._element)
+    slide.shapes.add_picture(image_path, left, top, width, height)
+
+for i, t in enumerate(slide_types):
     slide = prs.slides[i]
     for shape in slide.shapes:
         if shape.name == f"{t}_text":
@@ -145,27 +192,14 @@ for i, t in enumerate(types):
                 day = dt_obj.day
                 suffix = ("th" if 11 <= day <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th"))
                 formatted_date = f"{dt_obj.strftime('%B')} {day}{suffix}, {dt_obj.strftime('%Y')}"
-                set_slide_text(shape, formatted_date, font_size=35, font_name='Karla Medium',align=PP_ALIGN.CENTER)
-            elif t =='sum':
+                set_slide_text(shape, formatted_date, font_size=35, font_name='Karla Medium', align=PP_ALIGN.CENTER)
+            elif t == 'sum':
                 set_slide_text(shape, slide_text[i], font_size=17)
             else:
                 set_slide_text(shape, slide_text[i], font_size=13)
         elif shape.name == f"{t}_plot":
-            left, top, width, height = shape.left, shape.top, shape.width, shape.height
-            shape._element.getparent().remove(shape._element)
-            slide.shapes.add_picture(plots_path[i], left, top, width, height)
-        elif shape.name == "wave_map":
-            left, top, width, height = shape.left, shape.top, shape.width, shape.height
-            shape._element.getparent().remove(shape._element)
-            slide.shapes.add_picture(wave_map_path, left, top, width, height)
-        elif shape.name == "hov_moller":
-            left, top, width, height = shape.left, shape.top, shape.width, shape.height
-            shape._element.getparent().remove(shape._element)
-            slide.shapes.add_picture(hov_moller_path, left, top, width, height)
-        elif shape.name == "IO_state":
-            left, top, width, height = shape.left, shape.top, shape.width, shape.height
-            shape._element.getparent().remove(shape._element)
-            slide.shapes.add_picture(IOD_path, left, top, width, height)
-
+            replace_picture(slide, shape, plot_paths[t])
+        elif shape.name in picture_paths:
+            replace_picture(slide, shape, picture_paths[shape.name])
 
 prs.save(f"s2s_briefing_{date_str}.pptx")
