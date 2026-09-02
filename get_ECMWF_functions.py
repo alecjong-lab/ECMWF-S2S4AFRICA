@@ -26,6 +26,7 @@ from cfgrib.xarray_to_grib import to_grib
 import matplotlib.colors as mcolors
 import xml.etree.ElementTree as ET
 import icechunk
+import operator
 
 colors = ["white","wheat","lightgreen", "green","lightblue", "blue","yellow","orange", "red","purple"]
 cmap = LinearSegmentedColormap.from_list("wgbrp", colors)
@@ -448,12 +449,19 @@ def set_extent_from_dataset(ds):
     lon1 = ds.longitude.min().values
     return lat1, lat2, lon1, lon2
 
-def clip_to_shapefile(ds, shapefile_path, reproject_gdf=True, transpose=False, sortby_lat=False, crs="EPSG:4326"):
-    """Clip a CRS-tagged dataset to the (optionally reprojected) geometries in a shapefile."""
+def clip_to_shapefile(ds, shapefile_path, reproject_gdf=True, transpose=False, sortby_lat=False, crs="EPSG:4326",
+                       all_touched=False):
+    """
+    Clip a CRS-tagged dataset to the (optionally reprojected) geometries in a shapefile.
+
+    all_touched : keep every grid cell the shapefile geometry touches, not just
+        cells whose center falls inside it. Set True on coarse grids (e.g. S2S's
+        1.5deg) where center-only clipping drops most border/coastal cells.
+    """
     gdf = gpd.read_file(shapefile_path).set_crs(crs)
     if reproject_gdf:
         gdf = gdf.to_crs(ds.rio.crs)
-    clipped = ds.rio.clip(gdf.geometry, gdf.crs, drop=True)
+    clipped = ds.rio.clip(gdf.geometry, gdf.crs, drop=True, all_touched=all_touched)
     if transpose:
         clipped = clipped.transpose('latitude', 'longitude', 'step')
     if sortby_lat:
@@ -2237,56 +2245,79 @@ def disaggregate_weekly_to_daily(
 
     return result.to_dataset()
 
-def _max_consecutive_below_nd(block, threshold):
+def _max_consecutive_nd(block, threshold, comparison=operator.lt):
     """
     Core logic, vectorized over every leading (batch) dim at once.
 
     block : ndarray, shape (..., n_time) — time_dim must be the last axis
     threshold : float, precip threshold (same units as block)
+    comparison : callable, e.g. operator.lt (dry) or operator.gt (wet),
+        applied as comparison(block, threshold)
 
     Loops only over n_time (small, e.g. tens of steps) instead of over
     every gridpoint/member combination (which can be huge); each loop
     iteration is a single numpy op over the whole batch.
     """
-    below = block < threshold
+    meets = comparison(block, threshold)
     has_nan = np.isnan(block).any(axis=-1)
 
     counter = np.zeros(block.shape[:-1], dtype=float)
     max_consecutive = np.zeros(block.shape[:-1], dtype=float)
     for t in range(block.shape[-1]):
-        counter = (counter + 1) * below[..., t]
+        counter = (counter + 1) * meets[..., t]
         np.maximum(max_consecutive, counter, out=max_consecutive)
 
     max_consecutive[has_nan] = np.nan
     return max_consecutive
 
-def dry_spell_length(da, threshold, time_dim="step"):
+def _spell_length(da, threshold, comparison=operator.lt, time_dim="step"):
     """
-    Max consecutive-days-below-threshold ("dry spell length") for each
+    Max consecutive-days-meeting-condition ("spell length") for each
     gridpoint/member/etc, computed along time_dim.
 
     da : xr.DataArray, e.g. dims (time, lat, lon) or (time, member, lat, lon)
     threshold : float, precip threshold (same units as da)
+    comparison : callable, e.g. operator.lt (dry) or operator.gt (wet)
     """
     return xr.apply_ufunc(
-        _max_consecutive_below_nd,
+        _max_consecutive_nd,
         da,
         threshold,
+        kwargs={"comparison": comparison},
         input_core_dims=[[time_dim], []],
         output_dtypes=[float],
     )
 
-def dry_spell_probability(da, threshold, spell_length_threshold, time_dim="step", member_dim="number"):
+def _spell_probability(da, threshold, spell_length_threshold, comparison, spell_name,
+                        time_dim="step", member_dim="number"):
     """
-    Probability (fraction of ensemble members) that a dry spell of
+    Probability (fraction of ensemble members) that a spell of
     length >= spell_length_threshold occurs.
     """
-    spell_lengths = dry_spell_length(da, threshold, time_dim=time_dim)  # dims: (member, lat, lon, ...)
+    spell_lengths = _spell_length(da, threshold, comparison, time_dim=time_dim)  # dims: (member, lat, lon, ...)
     exceeds = spell_lengths >= spell_length_threshold
-    prob = exceeds.mean(dim=member_dim, skipna=True)
-    prob.attrs['GRIB_name']=f'chance of dry spell longer than {spell_length_threshold}'
-    prob.attrs['units']='%'
+    prob = exceeds.mean(dim=member_dim, skipna=True) * 100  # convert to percent
+    prob.attrs['GRIB_name'] = f'chance of {spell_name} spell longer than {spell_length_threshold}'
+    prob.attrs['units'] = '%'
     return prob, spell_lengths
+
+# --- Dry spell wrappers (unchanged interface) ---
+
+def dry_spell_length(da, threshold, time_dim="step"):
+    return _spell_length(da, threshold, operator.lt, time_dim=time_dim)
+
+def dry_spell_probability(da, threshold, spell_length_threshold, time_dim="step", member_dim="number"):
+    return _spell_probability(da, threshold, spell_length_threshold, operator.lt, "dry",
+                               time_dim=time_dim, member_dim=member_dim)
+
+# --- Wet spell wrappers ---
+
+def wet_spell_length(da, threshold, time_dim="step"):
+    return _spell_length(da, threshold, operator.gt, time_dim=time_dim)
+
+def wet_spell_probability(da, threshold, spell_length_threshold, time_dim="step", member_dim="number"):
+    return _spell_probability(da, threshold, spell_length_threshold, operator.gt, "wet",
+                               time_dim=time_dim, member_dim=member_dim)
 
 def _rainfall_onset_nd(block, wet_thresh, wet_days, dry_thresh, dry_days, search_days, time_dim="step"):
     """
@@ -2301,7 +2332,6 @@ def _rainfall_onset_nd(block, wet_thresh, wet_days, dry_thresh, dry_days, search
     shape (...).
     """
     n_time = block.shape[-1]
-    print(n_time)
     dry = block < dry_thresh
 
     onset_idx = np.full(block.shape[:-1], np.nan)
