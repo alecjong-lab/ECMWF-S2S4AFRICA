@@ -112,6 +112,27 @@ jobs:
           DEKADE_COUNTRIES: "Kenya,Great_Horn,Ethiopia"
           WEEK_COUNTRIES: "Kenya,Ghana"
 
+      - name: Run rainfall onset
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          IFS=',' read -ra countries <<< "$COUNTRIES"
+          for country in "${countries[@]}"; do
+            echo "Rainfall onset: $country"
+            COUNTRY="$country" python run_rainfall_onset.py || true
+          done
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          COUNTRIES: "Kenya"
+
+      - name: Replot precip with shared color scale
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python replot_precip_shared_colorscale.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+
       - name: Generate AI weather briefing
         continue-on-error: true
         working-directory: main_repo
