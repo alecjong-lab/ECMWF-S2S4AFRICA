@@ -233,6 +233,11 @@ for country in countries:
         plt.savefig(f'{dekade_path}/chance_higherthan_25mm.png',bbox_inches='tight')
         plt.close()
 
+        exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot,'tp',20,comparison='greater')
+        fig=gef.panel_plot_variable(exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='jet',fontsize=fs,vmax=100,vmin=0)   
+        plt.savefig(f'{weekly_path}/chance_higherthan_20mm.png',bbox_inches='tight')
+        plt.close() 
+
         weekly_exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot,'tp',20,comparison='greater')
         fig=gef.panel_plot_variable(weekly_exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='jet',fontsize=fs,vmax=100,vmin=0)
         plt.savefig(f'{weekly_path}/weekly_chance_higherthan_20mm.png',bbox_inches='tight')
