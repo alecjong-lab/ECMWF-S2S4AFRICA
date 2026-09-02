@@ -50,17 +50,34 @@ data_monthly_cut_to_mclimate=data_monthly.sel(longitude=slice(m_climate_big.long
 ensemble_stats_tp=gef.ensemble_data(data_weekly_cut_to_mclimate,m_climate_big,'tp',quantiles=[75,50,25])
 ensemble_stats_tp_month=gef.ensemble_data(data_monthly_cut_to_mclimate,m_climate_big_month,'tp',quantiles=[75,50,25])
 
+#---probability of dry/wet spells of a given minimum length, and median wet spell length (mirrors the dry spell block above)---#
 precip=data.diff('step').tp.isel(step=slice(None,28))
 precip.attrs=data.tp.attrs
 
 hold_cdd=[gef.dry_spell_probability(precip, threshold=1.0, spell_length_threshold=i)[0] for i in range(28)]  # mm/day threshold
 stacked = xr.concat(hold_cdd, dim=xr.DataArray(np.arange(28), dims="spell_length", name="spell_length"))
 
-count_above = (stacked >= 0.5).sum(dim="spell_length")
+count_above = (stacked >= 50).sum(dim="spell_length")
 median_length = (count_above - 1).where(count_above > 0)  # count of True values minus 1 (0-indexing); NaN where prob never reaches 0.5
 median_length.attrs['GRIB_name']='Median dry spell length'
 median_length.attrs['units']='days'
 median_length=median_length.assign_coords({'step':precip.isel(step=-1).step}).to_dataset()
+
+last_step=precip.isel(step=-1).step.values
+
+dry_spell5=gef.dry_spell_probability(precip, threshold=1.0, spell_length_threshold=5)[0].assign_coords({'step':last_step}).to_dataset(name='tp')
+dry_spell7=gef.dry_spell_probability(precip, threshold=1.0, spell_length_threshold=7)[0].assign_coords({'step':last_step}).to_dataset(name='tp')
+wet_spell5=gef.wet_spell_probability(precip, threshold=1.0, spell_length_threshold=5)[0].assign_coords({'step':last_step}).to_dataset(name='tp')
+wet_spell7=gef.wet_spell_probability(precip, threshold=1.0, spell_length_threshold=7)[0].assign_coords({'step':last_step}).to_dataset(name='tp')
+
+hold_cwd=[gef.wet_spell_probability(precip, threshold=1.0, spell_length_threshold=i)[0] for i in range(28)]  # mm/day threshold
+stacked_wet = xr.concat(hold_cwd, dim=xr.DataArray(np.arange(28), dims="spell_length", name="spell_length"))
+
+count_above_wet = (stacked_wet >= 50).sum(dim="spell_length")
+median_wet_length = (count_above_wet - 1).where(count_above_wet > 0)  # count of True values minus 1 (0-indexing); NaN where prob never reaches 0.5
+median_wet_length.attrs['GRIB_name']='Median wet spell length'
+median_wet_length.attrs['units']='days'
+median_wet_length=median_wet_length.assign_coords({'step':last_step}).to_dataset()
 
 #-----precip medium range---------------------------------------------------------------------------------------#
 try:
@@ -142,7 +159,6 @@ for country in countries:
     monthly_path=f'{base_path}/monthly'
     weekly_temp_path=f'{weekly_path}/t2m/'
 
-
     os.makedirs(base_path, exist_ok=True)
     os.makedirs(weekly_path, exist_ok=True)
     os.makedirs(dekade_path, exist_ok=True)
@@ -215,6 +231,24 @@ for country in countries:
         exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot_dekade,'tp',25,comparison='greater')
         fig=gef.panel_plot_variable(exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
         plt.savefig(f'{dekade_path}/chance_higherthan_25mm.png',bbox_inches='tight')
+        plt.close()
+
+        weekly_exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot,'tp',20,comparison='greater')
+        fig=gef.panel_plot_variable(weekly_exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='jet',fontsize=fs,vmax=100,vmin=0)
+        plt.savefig(f'{weekly_path}/weekly_chance_higherthan_20mm.png',bbox_inches='tight')
+        plt.close()
+
+        #---dry/wet spell probability and median spell length maps---
+        for spell_ds, spell_name in [(dry_spell5,'dryspell_5days'),(dry_spell7,'dryspell_7days'),
+                                      (wet_spell5,'wetspell_5days'),(wet_spell7,'wetspell_7days')]:
+            ds_to_plot_spell=spell_ds.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
+            fig=gef.panel_plot_variable(ds_to_plot_spell,variable='tp',forecast_timestep=ds_to_plot_spell.step.values,cmap='jet',fontsize=fs,vmin=0,vmax=100)
+            plt.savefig(f'{monthly_path}/prob_{spell_name}.png',bbox_inches='tight')
+            plt.close()
+
+        ds_to_plot_cwd=median_wet_length.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
+        fig=gef.panel_plot_variable(ds_to_plot_cwd,variable='tp',forecast_timestep=ds_to_plot_cwd.step.values,cmap='jet',fontsize=fs,vmin=0)
+        plt.savefig(f'{monthly_path}/median_wetspell_length.png',bbox_inches='tight')
         plt.close()
 
         #-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
