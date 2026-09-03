@@ -164,7 +164,7 @@ exceed20mm_path = f"{kenya_path}/weekly/chance_higherthan_20mm.png"
 
 picture_paths = {
     "wave_map": wave_map_path,
-    "hov_moller": hov_moller_path,
+    "hov_meuller": hov_moller_path,
     "IO_state": IOD_path,
     "IO_ivt": IO_ivt_path,
     "IO_TCWV_anom": IO_TCWV_anom_path,
@@ -188,10 +188,10 @@ def replace_picture(slide, shape, image_path):
     shape._element.getparent().remove(shape._element)
     slide.shapes.add_picture(image_path, left, top, width, height)
 
-for i, t in enumerate(slide_types):
-    slide = prs.slides[i]
+for i, slide in enumerate(prs.slides):
+    t = slide_types[i] if i < len(slide_types) else None
     for shape in slide.shapes:
-        if shape.name == f"{t}_text":
+        if t is not None and shape.name == f"{t}_text":
             if t == 'date':
                 dt_obj = datetime.fromisoformat(date_str)
                 day = dt_obj.day
@@ -202,7 +202,7 @@ for i, t in enumerate(slide_types):
                 set_slide_text(shape, slide_text[i], font_size=17)
             else:
                 set_slide_text(shape, slide_text[i], font_size=13)
-        elif shape.name == f"{t}_plot":
+        elif t is not None and shape.name == f"{t}_plot":
             replace_picture(slide, shape, plot_paths[t])
         elif shape.name in picture_paths:
             replace_picture(slide, shape, picture_paths[shape.name])
