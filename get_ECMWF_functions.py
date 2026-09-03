@@ -2521,6 +2521,7 @@ def load_reforecasts(forecast_day, var_group, var, grid='1p5latx1p5lon',
         group=f"{var_group}/{grid}",
         consolidated=False,
         chunks={},
+        decode_timedelta=True,
     )
     ds = ds.assign_coords(lead=ds.lead + pd.Timedelta(days=1)).rename({"lead": "step",'lat':'latitude','lon':'longitude'})
 
