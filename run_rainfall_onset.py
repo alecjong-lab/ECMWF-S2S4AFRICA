@@ -45,7 +45,7 @@ bbox = bboxes[country]
 # same Kenya county shapefile dowscale_dekade.py clips the downscaled forecast to
 kenya_shapefile = "downscale_data/Kenya_Counties_KNSDI.shp"
 
-plot_dir = f'plots/{country}/{date_str}/onset'
+plot_dir = f'plots/{country}/{date_str}/monthly'
 os.makedirs(plot_dir, exist_ok=True)
 
 
@@ -188,24 +188,55 @@ def plot_onset_map(onset, bbox, year, title, save_path, forecast_start, n_time, 
                     lon2d, lat2d, pct_vals, levels=levels,
                     colors='red', linewidths=1.5, transform=ccrs.PlateCarree(),
                 )
-                # one label per level (on its longest segment), not one per
-                # disconnected patch -- sparse/patchy data can split a level
-                # into many small segments whose labels would otherwise
-                # cluster on top of each other
+                # one label per level, placed on its longest segment -- every
+                # level always gets a label here, even if that puts it close
+                # to a neighboring level's label (e.g. a steep gradient); the
+                # per-level pick already keeps a single disconnected-patch
+                # level from producing multiple cluttered labels. The first
+                # and last levels are pinned to the top (max-latitude) of
+                # their segment and the level(s) in between to the bottom
+                # (min-latitude), alternating vertical position to cut down
+                # on overlap between adjacent levels' labels. Horizontally,
+                # the first level is pushed to the rightmost point of that
+                # band and every other level to the leftmost, so a typical
+                # 3-level set spreads across top-right / bottom-left /
+                # top-left corners instead of clustering on one side.
+                n_levels = len(cs.allsegs)
                 label_pos = []
-                min_sep = 0.05 * max(bbox['lon2'] - bbox['lon1'], bbox['lat1'] - bbox['lat2'])
-                for segs in cs.allsegs:
+                for i, segs in enumerate(cs.allsegs):
                     longest = max((s for s in segs if len(s) >= 2), key=len, default=None)
                     if longest is None:
                         continue
-                    candidate = tuple(longest[len(longest) // 2])
-                    if all(np.hypot(candidate[0] - x, candidate[1] - y) >= min_sep for x, y in label_pos):
-                        label_pos.append(candidate)
+                    is_edge_level = i == 0 or i == n_levels - 1
+                    lat = longest[:, 1]
+                    target_lat = lat.max() if is_edge_level else lat.min()
+                    near_target = np.isclose(lat, target_lat, atol=(lat.max() - lat.min()) * 0.1 or 1e-6)
+                    candidates = longest[near_target]
+                    lon_idx = np.argmax(candidates[:, 0]) if i == 0 else np.argmin(candidates[:, 0])
+                    label_pos.append(tuple(candidates[lon_idx]))
 
                 if label_pos:
                     clabels = ax.clabel(cs, inline=True, fontsize=12, fmt='%d%%', colors='white', manual=label_pos)
-                    for lbl in clabels:
-                        lbl.set_bbox(dict(facecolor='black', edgecolor='none', pad=1.5))
+                    # nudge each label a little off its exact line position so
+                    # text doesn't sit flush on the contour, alternating left/
+                    # right by index for a bit of extra separation; clamped to
+                    # the axes' actual rendered extent (not the nominal bbox,
+                    # which can be wider than the data actually drawn) so a
+                    # label can never land outside the visible plot.
+                    xlim, ylim = ax.get_xlim(), ax.get_ylim()
+                    shift = 0.02 * (xlim[1] - xlim[0])
+                    # inset margin so a clamped label's text box doesn't get
+                    # cut off by the axes frame
+                    margin_x = 0.06 * (xlim[1] - xlim[0])
+                    margin_y = 0.06 * (ylim[1] - ylim[0])
+                    for i, lbl in enumerate(clabels):
+                        lbl.set_bbox(dict(facecolor='black', edgecolor='none', pad=1))
+                        lbl.set_rotation(0)
+                        x, y = lbl.get_position()
+                        dx = shift if i % 2 == 0 else -shift
+                        x = min(max(x + dx, xlim[0] + margin_x), xlim[1] - margin_x)
+                        y = min(max(y, ylim[0] + margin_y), ylim[1] - margin_y)
+                        lbl.set_position((x, y))
 
         if show_text:
             for i in range(lat2d.shape[0]):
@@ -271,6 +302,19 @@ try:
     universal_n_time = s2s_daily.sizes['step']
     plot_onset_map(onset_s2s, bbox, pd.Timestamp(s2s.time.values).year, title, f'{plot_dir}/onset_s2s.png',
                    forecast_start=universal_forecast_start, n_time=universal_n_time)
+
+    onset_s2s_accum = gef.rainfall_onset_date_accum(s2s_daily, time_dim='step', valid_time=valid_time)
+    clean_for_netcdf(onset_s2s_accum).to_netcdf(f'{data_path}/rainfall_onset_accum_s2s_{country}.nc')
+    summarize('S2S (accum)', onset_s2s_accum)
+
+    title_accum = (
+        f'S2S start of growing season — {country}\n'
+        f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
+        f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
+    )
+    plot_onset_map(onset_s2s_accum, bbox, pd.Timestamp(s2s.time.values).year, title_accum,
+                   f'{plot_dir}/onset_s2s_accum.png',
+                   forecast_start=universal_forecast_start, n_time=universal_n_time, search_days=30)
 except Exception as e:
     print(f"S2S: could not compute onset from {s2s_path} ({e}), skipping")
 
@@ -294,6 +338,20 @@ try:
     plot_onset_map(onset_gefs, bbox, pd.Timestamp(gefs.time.values).year, title, f'{plot_dir}/onset_gefs.png',
                    forecast_start=universal_forecast_start or pd.Timestamp(valid_time.min().values),
                    n_time=universal_n_time or gefs.tp.sizes['step'])
+
+    onset_gefs_accum = gef.rainfall_onset_date_accum(gefs.tp, time_dim='step', valid_time=valid_time)
+    clean_for_netcdf(onset_gefs_accum).to_netcdf(f'{data_path}/rainfall_onset_accum_gefs_{country}.nc')
+    summarize('GEFS (accum)', onset_gefs_accum)
+
+    title_accum = (
+        f'GEFS start of growing season — {country}\n'
+        f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
+        f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
+    )
+    plot_onset_map(onset_gefs_accum, bbox, pd.Timestamp(gefs.time.values).year, title_accum,
+                   f'{plot_dir}/onset_gefs_accum.png',
+                   forecast_start=universal_forecast_start or pd.Timestamp(valid_time.min().values),
+                   n_time=universal_n_time or gefs.tp.sizes['step'], search_days=30)
 except Exception as e:
     print(f"GEFS: could not compute onset from {gefs_path} ({e}), skipping")
 
@@ -324,6 +382,20 @@ if country == 'Kenya':
         plot_onset_map(onset_downscaled, bbox, pd.Timestamp(init_date).year, title, f'{plot_dir}/onset_downscaled.png',
                        forecast_start=universal_forecast_start or pd.Timestamp(valid_time.min().values),
                        n_time=universal_n_time or da.sizes['step'])
+
+        onset_downscaled_accum = gef.rainfall_onset_date_accum(da, time_dim='step', valid_time=valid_time)
+        clean_for_netcdf(onset_downscaled_accum).to_netcdf(f'{data_path}/rainfall_onset_accum_downscaled_{country}.nc')
+        summarize('downscaled (accum)', onset_downscaled_accum)
+
+        title_accum = (
+            f'Downscaled start of growing season — {country}\n'
+            f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
+            f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
+        )
+        plot_onset_map(onset_downscaled_accum, bbox, pd.Timestamp(init_date).year, title_accum,
+                       f'{plot_dir}/onset_downscaled_accum.png',
+                       forecast_start=universal_forecast_start or pd.Timestamp(valid_time.min().values),
+                       n_time=universal_n_time or da.sizes['step'], search_days=30)
     except Exception as e:
         print(f"downscaled: could not compute onset from {downscaled_path} ({e}), skipping")
 else:

@@ -145,9 +145,12 @@ IO_TCWV_anom_path = f"{diagnostics_path}/ECMWF_s2s_tcw_anomaly_{date_str}.png"
 IO_precip_anom_path = f"{diagnostics_path}/ECMWF_s2s_precip_anomaly_{date_str}.png"
 IO_precip_anom_std_path = f"{diagnostics_path}/ECMWF_s2s_precip_std_anomaly_{date_str}.png"
 
-# rainy season onset maps (see run_rainfall_onset.py)
-onsetecmwf_path = f"{kenya_path}/onset/onset_s2s.png"
-onsetgefs_path = f"{kenya_path}/onset/onset_gefs.png"
+# rainy season onset maps (see run_rainfall_onset.py) -- wet-spell/no-dry-spell
+# definition, and the two-stage cumulative-rainfall ("accum") definition
+onsetecmwf_path = f"{kenya_path}/monthly/onset_s2s.png"
+onsetgefs_path = f"{kenya_path}/monthly/onset_gefs.png"
+onsetecmwf_accum_path = f"{kenya_path}/monthly/onset_s2s_accum.png"
+onsetgefs_accum_path = f"{kenya_path}/monthly/onset_gefs_accum.png"
 
 # dry/wet spell probability & median length maps (see plot_s2s.py)
 median_wet_path = f"{kenya_path}/monthly/median_wetspell_length.png"
@@ -169,6 +172,8 @@ picture_paths = {
     "IO_precip_anom_std": IO_precip_anom_std_path,
     "Onset_ECMWF": onsetecmwf_path,
     "Onset_GEFS": onsetgefs_path,
+    "Onset_ECMWF_accum": onsetecmwf_accum_path,
+    "Onset_GEFS_accum": onsetgefs_accum_path,
     "median_wet": median_wet_path,
     "wet5": wet5_path,
     "wet7": wet7_path,

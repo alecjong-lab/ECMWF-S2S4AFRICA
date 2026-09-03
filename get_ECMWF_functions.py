@@ -2361,6 +2361,18 @@ def _rainfall_onset_nd(block, wet_thresh, wet_days, dry_thresh, dry_days, search
 
     return onset_idx
 
+def _onset_idx_to_date(onset_idx, time_values, valid_time):
+    """Shared by the onset-date definitions below: turns a float index-into-
+    time_dim (NaN where no onset found) into actual onset dates/times."""
+    time_values = valid_time.values if valid_time is not None else time_values
+    idx = onset_idx.values
+    valid = ~np.isnan(idx)
+    idx_int = np.where(valid, idx, 0).astype(int)
+    nat = np.array('NaT', dtype=time_values.dtype)
+    onset_times = np.where(valid, time_values[idx_int], nat)
+    return xr.DataArray(onset_times, dims=onset_idx.dims, coords=onset_idx.coords, name='onset_date')
+
+
 def rainfall_onset_date(da, wet_spell_thresh=20.0, wet_spell_days=3, dry_spell_thresh=1.0,
                          dry_spell_days=7, search_days=21, time_dim="step", valid_time=None):
     """
@@ -2405,14 +2417,7 @@ def rainfall_onset_date(da, wet_spell_thresh=20.0, wet_spell_days=3, dry_spell_t
         output_dtypes=[float],
     )
 
-    time_values = valid_time.values if valid_time is not None else da[time_dim].values
-    idx = onset_idx.values
-    valid = ~np.isnan(idx)
-    idx_int = np.where(valid, idx, 0).astype(int)
-    nat = np.array('NaT', dtype=time_values.dtype)
-    onset_times = np.where(valid, time_values[idx_int], nat)
-
-    onset_date = xr.DataArray(onset_times, dims=onset_idx.dims, coords=onset_idx.coords, name='onset_date')
+    onset_date = _onset_idx_to_date(onset_idx, da[time_dim].values, valid_time)
     onset_date.attrs['long_name'] = (
         'rainy season onset date' if valid_time is not None else
         'rainy season onset (time since initialization)'
@@ -2421,6 +2426,93 @@ def rainfall_onset_date(da, wet_spell_thresh=20.0, wet_spell_days=3, dry_spell_t
         f'first day of a {wet_spell_days}-day wet spell with >{wet_spell_thresh}mm total rainfall, '
         f'with no dry spell of >={dry_spell_days} consecutive days (<{dry_spell_thresh}mm/day) '
         f'in the following {search_days} days'
+    )
+    return onset_date
+
+
+def _rainfall_onset_accum_nd(block, period1_days, period1_thresh, period2_days, period2_thresh, time_dim="step"):
+    """
+    Core search for the two-stage cumulative-rainfall onset definition,
+    vectorized over every leading (batch) dim at once (same style as
+    _rainfall_onset_nd above).
+
+    block : ndarray, shape (..., n_time) — time_dim must be the last axis,
+        daily rainfall accumulation (same units as period1_thresh/period2_thresh)
+
+    Returns the 0-based time index of the onset day per gridpoint/member/etc
+    (float, NaN where no qualifying onset was found within the series),
+    shape (...).
+    """
+    n_time = block.shape[-1]
+    total_window = period1_days + period2_days
+
+    onset_idx = np.full(block.shape[:-1], np.nan)
+    found = np.zeros(block.shape[:-1], dtype=bool)
+
+    # last candidate start day that still leaves room for both windows
+    t_max = n_time - total_window
+    for t in range(0, t_max + 1):
+        first_window = block[..., t:t + period1_days]
+        first_sum = first_window.sum(axis=-1)
+        first_nan = np.isnan(first_window).any(axis=-1)
+
+        second_window = block[..., t + period1_days:t + total_window]
+        second_sum = second_window.sum(axis=-1)
+        second_nan = np.isnan(second_window).any(axis=-1)
+
+        qualifies = (
+            (first_sum >= period1_thresh) & (second_sum > period2_thresh)
+            & ~first_nan & ~second_nan & ~found
+        )
+        onset_idx = np.where(qualifies, t, onset_idx)
+        found = found | qualifies
+
+    return onset_idx
+
+
+def rainfall_onset_date_accum(da, period1_days=10, period1_thresh=20.0,
+                               period2_days=20, period2_thresh=20.0,
+                               time_dim="step", valid_time=None):
+    """
+    Alternative rainy season onset definition, computed per grid cell (and
+    any other batch dims) from a daily rainfall accumulation series.
+
+    Definition: the onset is the first day such that the following
+    `period1_days` days (default 10) accumulate at least `period1_thresh` mm
+    of rainfall (default 20mm), AND the `period2_days` days immediately after
+    that (default 20) accumulate more than `period2_thresh` mm (default
+    20mm). Unlike rainfall_onset_date, this has no explicit dry-spell check —
+    the confirmation window's own total rainfall is the only follow-through
+    condition.
+
+    da, valid_time : see rainfall_onset_date.
+
+    Returns an xr.DataArray of onset times (same dtype as time_dim's
+    coordinate, or as `valid_time` if given; NaT where no onset was found
+    within the series), with time_dim removed.
+    """
+    onset_idx = xr.apply_ufunc(
+        _rainfall_onset_accum_nd,
+        da,
+        input_core_dims=[[time_dim]],
+        kwargs=dict(
+            period1_days=period1_days,
+            period1_thresh=period1_thresh,
+            period2_days=period2_days,
+            period2_thresh=period2_thresh,
+            time_dim=time_dim
+        ),
+        output_dtypes=[float],
+    )
+
+    onset_date = _onset_idx_to_date(onset_idx, da[time_dim].values, valid_time)
+    onset_date.attrs['long_name'] = (
+        'rainy season onset date (accumulation definition)' if valid_time is not None else
+        'rainy season onset (accumulation definition, time since initialization)'
+    )
+    onset_date.attrs['description'] = (
+        f'first day where the following {period1_days} days accumulate >={period1_thresh}mm rainfall, '
+        f'and the {period2_days} days after that accumulate >{period2_thresh}mm'
     )
     return onset_date
 
