@@ -30,7 +30,7 @@ os.makedirs(save_path, exist_ok=True)
 INDIAN_OCEAN_EXTENT = (30, 120, -20, 20)
 
 
-def indian_ocean_basemap(ax, extent=INDIAN_OCEAN_EXTENT):
+def indian_ocean_basemap(ax, extent=INDIAN_OCEAN_EXTENT, left_labels=True, bottom_labels=True):
     """Coastlines, land/ocean shading, country borders, gridlines shared by every map here."""
     ax.set_extent(extent, crs=ccrs.PlateCarree())
     ax.add_feature(cfeature.OCEAN, facecolor='#eaf3fa', zorder=0)
@@ -41,6 +41,8 @@ def indian_ocean_basemap(ax, extent=INDIAN_OCEAN_EXTENT):
     gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.7, linestyle='--')
     gl.top_labels = False
     gl.right_labels = False
+    gl.left_labels = left_labels
+    gl.bottom_labels = bottom_labels
     return gl
 
 
@@ -85,6 +87,52 @@ def plot_moisture_anomaly_map(field, var, title, cbar_label, out_path, neg_color
 
     fig.tight_layout()
     plt.savefig(out_path, bbox_inches='tight')
+    plt.close(fig)
+
+
+def plot_moisture_anomaly_weekly_map(field, var, title, cbar_label, out_path, neg_colors, pos_colors,
+                                      extent=INDIAN_OCEAN_EXTENT, panel_height=7):
+    """4-panel (2x2) zero-centered diverging map of a weekly-resolved anomaly field (TCW / IVT),
+    one panel per week, sharing a single color scale and colorbar."""
+    vmin, vmax = gef.symmetric_vmin_vmax(field, var=var)
+    cmap, norm, levels = zero_centered_diverging_cmap(vmin, vmax, neg_colors, pos_colors)
+
+    # size the figure to the extent's aspect ratio so maps fill their panels
+    # instead of leaving empty vertical space (which pushes the suptitle away visually)
+    lon_min, lon_max, lat_min, lat_max = extent
+    aspect = (lon_max - lon_min) / (lat_max - lat_min)
+    figsize = (2 * panel_height * aspect, 2 * panel_height)
+
+    steps = field.step.values
+    # constrained_layout (unlike tight_layout) resolves spacing against the axes'
+    # actual aspect-locked size, so it doesn't leave a double gap between columns
+    fig, axes = plt.subplots(2, 2, figsize=figsize, subplot_kw={'projection': ccrs.PlateCarree()},
+                              constrained_layout=True)
+
+    cf = None
+    for i, ax in enumerate(axes.flat):
+        if i >= len(steps):
+            ax.axis('off')
+            continue
+        week = field.isel(step=i)
+        row, col = divmod(i, 2)
+        # only the left column / bottom row draw axis labels, so the other
+        # panels don't waste space repeating them in the middle of the grid
+        indian_ocean_basemap(ax, extent=extent, left_labels=(col == 0), bottom_labels=(row == 1))
+        cf = ax.pcolormesh(week['longitude'], week['latitude'], week[var],
+                            transform=ccrs.PlateCarree(), cmap=cmap, norm=norm, shading='auto')
+
+        # step marks the end of the day-mean valid day, i.e. it's 1 day past the
+        # week's true last day, so shift back a day before taking the 7-day window
+        week_end = pd.Timestamp(week.time.values) + pd.to_timedelta(week.step.values) - pd.Timedelta(days=1)
+        week_start = week_end - pd.Timedelta(days=6)
+        ax.set_title(f'Week {i + 1}: {week_start:%Y-%m-%d} to {week_end:%Y-%m-%d}')
+
+    fig.suptitle(title)
+    cbar = fig.colorbar(cf, ax=axes, orientation='horizontal', shrink=0.5, aspect=50, ticks=levels)
+    cbar.set_label(cbar_label)
+
+    plt.savefig(out_path)
     plt.close(fig)
 
 
@@ -162,17 +210,17 @@ plot_precip_anomaly(anom_precip, 'Precipitation Anomaly (mm)', f'ECMWF_s2s_preci
 plot_precip_anomaly(std_anom_precip, 'Standardized Precipitation Anomaly', f'ECMWF_s2s_precip_std_anomaly_{date_str}.png')
 
 # ========================================================
-# TCW ANOMALY (monthly mean over first 4 weekly steps)
+# TCW ANOMALY (per-week, first 4 weekly steps)
 # ========================================================
 IO_tcw=gef.week_mean(xr.open_zarr(f'{data_path}/ECMWF_s2s_tcw_{date_str}.zarr',consolidated=True).compute())
 m_climate_IO_tcw=gef.open_mclimate(IO_tcw,folder_path=f'{prefix}/m-climate/',var='tcw_global')
 
-anom_tcw=(IO_tcw-m_climate_IO_tcw).isel(step=slice(None,4)).mean('step')
+anom_tcw=(IO_tcw-m_climate_IO_tcw).isel(step=slice(None,4)).mean('number')
 
 period_end = str(anom_tcw.time.values + pd.Timedelta("28d"))[:10]
-tcw_title = f'Indian Ocean Monthly Total Column Water Anomaly | {str(anom_tcw.time.values)[:10]} until {period_end}'
+tcw_title = f'Indian Ocean Weekly Total Column Water Anomaly | {str(anom_tcw.time.values)[:10]} until {period_end}'
 
-plot_moisture_anomaly_map(
+plot_moisture_anomaly_weekly_map(
     anom_tcw, 'tcw', tcw_title,
     'Total Column Water Anomaly [kg m$^{-2}$]',
     save_path+f'ECMWF_s2s_tcw_anomaly_{date_str}.png',
