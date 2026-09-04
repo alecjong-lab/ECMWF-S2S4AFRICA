@@ -5,7 +5,7 @@ set -eo pipefail
 
 # ---------------------------------------------------------------- skill pins
 # weather-skills @dev — every step in this pipeline comes from this repo.
-WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev weather-skills"
+WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
 
 # chc-skills @dev — africa-itf, mjo-forecast-fetch, subc-mme-fetch,
 # iod-mode-index. Pinned per request; NOT used by this figure (see notes).

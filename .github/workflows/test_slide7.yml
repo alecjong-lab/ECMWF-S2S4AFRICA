@@ -15,28 +15,29 @@ jobs:
         with:
           version: "0.11.20"
 
-      - name: Run slide7.sh
-        continue-on-error: true
-        working-directory: ws_scripts
-        run: bash slide7.sh
+      # Already verified successful — commented out to skip re-running.
+      # - name: Run slide7.sh
+      #   continue-on-error: true
+      #   working-directory: ws_scripts
+      #   run: bash slide7.sh
 
-      - name: Run slide8.sh
-        continue-on-error: true
-        working-directory: ws_scripts
-        run: bash slide8.sh
+      # - name: Run slide8.sh
+      #   continue-on-error: true
+      #   working-directory: ws_scripts
+      #   run: bash slide8.sh
 
-      - name: Run slide9.sh
-        continue-on-error: true
-        working-directory: ws_scripts
-        env:
-          TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
-          TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
-        run: bash slide9.sh
+      # - name: Run slide9.sh
+      #   continue-on-error: true
+      #   working-directory: ws_scripts
+      #   env:
+      #     TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
+      #     TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
+      #   run: bash slide9.sh
 
-      - name: Run slide10.sh
-        continue-on-error: true
-        working-directory: ws_scripts
-        run: bash slide10.sh
+      # - name: Run slide10.sh
+      #   continue-on-error: true
+      #   working-directory: ws_scripts
+      #   run: bash slide10.sh
 
       - name: Run slide11.sh
         continue-on-error: true
@@ -46,30 +47,30 @@ jobs:
           ECMWF_DATASTORES_KEY: ${{ secrets.CDSAPI_KEY }}
         run: bash slide11.sh
 
-      - name: Run slide12.sh
-        continue-on-error: true
-        working-directory: ws_scripts
-        run: bash slide12.sh
+      # - name: Run slide12.sh
+      #   continue-on-error: true
+      #   working-directory: ws_scripts
+      #   run: bash slide12.sh
 
       - name: Run slide13.sh
         continue-on-error: true
         working-directory: ws_scripts
         run: bash slide13.sh
 
-      - name: Run slide14.sh
-        continue-on-error: true
-        working-directory: ws_scripts
-        run: bash slide14.sh
+      # - name: Run slide14.sh
+      #   continue-on-error: true
+      #   working-directory: ws_scripts
+      #   run: bash slide14.sh
 
-      - name: Run slide15.sh
-        continue-on-error: true
-        working-directory: ws_scripts
-        run: bash slide15.sh
+      # - name: Run slide15.sh
+      #   continue-on-error: true
+      #   working-directory: ws_scripts
+      #   run: bash slide15.sh
 
-      - name: Run slide171819.sh
-        continue-on-error: true
-        working-directory: ws_scripts
-        run: bash slide171819.sh
+      # - name: Run slide171819.sh
+      #   continue-on-error: true
+      #   working-directory: ws_scripts
+      #   run: bash slide171819.sh
 
       - name: Upload output plots
         uses: actions/upload-artifact@v4
