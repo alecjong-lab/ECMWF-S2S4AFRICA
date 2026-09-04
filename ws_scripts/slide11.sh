@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Kenya weekly rainfall totals, Aug-Dec:
-#   analog years + 2026 observed (CHIRPS) + ECMWF S2S ensemble spread & mean
+#   analog years + current-year observed (CHIRPS) + ECMWF S2S ensemble spread & mean
 set -eo pipefail
 
 # ---------------------------------------------------------------- skill pins
@@ -15,10 +15,16 @@ BBOX="5.506/33.893569/-4.67677/41.855083"
 GEOJSON="intermediate_results/kenya.geojson"
 mkdir -p intermediate_results
 
+# ---------------------------------------------------------------- dynamic dates
+TODAY=$(date -u +%Y-%m-%d)
+CUR_YEAR=$(date -u +%Y)
+END=$($WS chirps-fetch --probe-latest)      # latest available CHIRPS day
+INIT=$($WS ecmwf-fetch --probe-latest)      # latest available S2S init
+
 # ---------------------------------------------------------------- 0. inputs
-# Analog years for 2026 -> 1982 1997 2006 2015 2019 2023
+# Analog years for the current season -> 1982 1997 2006 2015 2019 2023
 # 1982 and 1997 are NOT fetched: CHIRPS v3.0 final only reaches back to 1998.
-$CHC analog-years --date 2026-09-03
+$CHC analog-years --date "$TODAY"
 
 # Kenya bbox + boundary polygon
 $WS resolve-region KEN --geojson "$GEOJSON"
@@ -31,16 +37,14 @@ for Y in 2006 2015 2019 2023; do
       --output "intermediate_results/chirps_${Y}.zarr"
 done
 
-# Current year: CHIRPS was published through 2026-08-31 at time of writing.
-# Re-probe instead of hardcoding if you rerun this later:
-#   END=$($WS chirps-fetch --probe-latest)
+# Current year: through the latest available CHIRPS day ($END).
 $WS chirps-fetch \
-    --start-time 2026-08-01 --end-time 2026-08-31 \
+    --start-time "${CUR_YEAR}-08-01" --end-time "$END" \
     --bbox "$BBOX" --workers 8 \
-    --output intermediate_results/chirps_2026.zarr
+    --output "intermediate_results/chirps_${CUR_YEAR}.zarr"
 
 # Clip to the Kenya polygon -> area-weighted national mean -> weekly totals
-for Y in 2006 2015 2019 2023 2026; do
+for Y in 2006 2015 2019 2023 "$CUR_YEAR"; do
   $WS clip-region \
       --input "intermediate_results/chirps_${Y}.zarr" \
       --geojson "$GEOJSON" \
@@ -64,10 +68,10 @@ done
 
 # --------------------------------------------------- 2. ECMWF S2S ensemble
 # Needs ECMWF_DATASTORES_URL and ECMWF_DATASTORES_KEY in the environment.
-# Real-time S2S is embargoed 2 days; 2026-09-01 was the latest init available.
-#   INIT=$($WS ecmwf-fetch --probe-latest)
+# Real-time S2S is embargoed 2 days; ecmwf-fetch --probe-latest ($INIT)
+# already accounts for that embargo, so no extra offset is needed here.
 $WS ecmwf-fetch \
-    --date 2026-09-01 --bbox "$BBOX" -v tp \
+    --date "$INIT" --bbox "$BBOX" -v tp \
     --output intermediate_results/s2s_raw.zarr
 
 $WS clip-region \
@@ -118,21 +122,21 @@ $WS plot-timeseries \
     --input intermediate_results/tot_2015.zarr \
     --input intermediate_results/tot_2019.zarr \
     --input intermediate_results/tot_2023.zarr \
-    --input intermediate_results/tot_2026.zarr \
+    --input "intermediate_results/tot_${CUR_YEAR}.zarr" \
     --input intermediate_results/s2s_final.zarr \
     --input intermediate_results/s2s_ensmean.zarr \
     --label 2006 \
     --label 2015 \
     --label 2019 \
     --label 2023 \
-    --label '2026 CHIRPS (observed)' \
-    --label 'ECMWF S2S 2026-09-01 (101 members)' \
+    --label "${CUR_YEAR} CHIRPS (observed)" \
+    --label "ECMWF S2S ${INIT} (101 members)" \
     --label 'ECMWF S2S ensemble mean' \
     --variable precip \
     --along number \
     --align-day-of-year \
     --style line \
-    --title 'Kenya weekly rainfall totals, Aug-Dec: analog years, 2026 observed, and ECMWF S2S ensemble' \
+    --title "Kenya weekly rainfall totals, Aug-Dec: analog years, ${CUR_YEAR} observed, and ECMWF S2S ensemble" \
     --ylabel 'Weekly rainfall total (mm)' \
     --trace 1:zorder=5 \
     --trace 2:zorder=5 \

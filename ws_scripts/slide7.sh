@@ -3,13 +3,22 @@ set -eo pipefail
 
 DEV="git+https://github.com/rhiza-research/forecasting-skills@dev"
 
+# Trailing 4 complete weeks ending on the latest available CHIRPS day.
+END=$(uvx --from "$DEV" forecasting-skills chirps-fetch --probe-latest)
+START=$(date -u -d "$END -27 days" +%Y-%m-%d)
+W2=$(date -u -d "$START +7 days" +%Y-%m-%d)
+W3=$(date -u -d "$START +14 days" +%Y-%m-%d)
+W4=$(date -u -d "$START +21 days" +%Y-%m-%d)
+START_LABEL=$(date -u -d "$START" +'%-d %b')
+END_LABEL=$(date -u -d "$END" +'%-d %b %Y')
+
 # Kenya boundary polygon (needed by clip-region)
 uvx --from "$DEV" forecasting-skills resolve-region KEN \
   --geojson kenya.geojson
 
 uvx --from "$DEV" forecasting-skills chirps-fetch \
   --bbox 5.506/33.893569/-4.67677/41.855083 \
-  --start-time 2026-08-04 --end-time 2026-08-31 \
+  --start-time "$START" --end-time "$END" \
   --workers 8 --output step1.zarr
 
 uvx --from "$DEV" forecasting-skills clip-region \
@@ -26,7 +35,7 @@ uvx --from "$DEV" forecasting-skills convert-to-totals \
 
 uvx --from "$DEV" forecasting-skills plot \
   --columns 4 --fontsize 13 --pair-on time --style heatmap \
-  --title 'CHIRPS weekly rainfall totals — Kenya (4 Aug – 31 Aug 2026)' \
+  --title "CHIRPS weekly rainfall totals — Kenya (${START_LABEL} – ${END_LABEL})" \
   --variable precip \
   --input step4.zarr --output chirps_kenya_weekly_rainfall.png
 
@@ -41,7 +50,7 @@ uvx --from "$DEV" forecasting-skills resolve-region KEN \
 
 uvx --from "$DEV" forecasting-skills chirps-fetch \
   --bbox "$BBOX" \
-  --start-time 2026-08-04 --end-time 2026-08-31 \
+  --start-time "$START" --end-time "$END" \
   --workers 8 --output step1.zarr
 
 uvx --from "$DEV" forecasting-skills clip-region \
@@ -56,14 +65,14 @@ uvx --from "$DEV" forecasting-skills aggregate-temporal \
 uvx --from "$CLIM" forecasting-skills clim-fetch \
   --dataset chirps --variable precip \
   --window 7 --align left \
-  --start-time 2026-08-04 --end-time 2026-08-31 \
+  --start-time "$START" --end-time "$END" \
   --bbox "$BBOX" \
   -o clim1.zarr
 
 uvx --from "$DEV" forecasting-skills select \
   --dim time \
-  --value 2026-08-04 --value 2026-08-11 \
-  --value 2026-08-18 --value 2026-08-25 \
+  --value "$START" --value "$W2" \
+  --value "$W3" --value "$W4" \
   --input clim1.zarr --output clim2.zarr
 
 uvx --from "$DEV" forecasting-skills rename \
@@ -86,6 +95,6 @@ uvx --from "$DEV" forecasting-skills rename \
 
 uvx --from "$DEV" forecasting-skills plot \
   --columns 4 --fontsize 13 --pair-on time --style heatmap \
-  --title 'CHIRPS weekly rainfall anomaly vs climatology — Kenya (4 Aug – 31 Aug 2026)' \
+  --title "CHIRPS weekly rainfall anomaly vs climatology — Kenya (${START_LABEL} – ${END_LABEL})" \
   --variable precip_anomaly \
   --input step6.zarr --output chirps_kenya_weekly_anomaly.png

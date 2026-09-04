@@ -4,6 +4,11 @@ set -eo pipefail
 S="uvx --from git+https://github.com/rhiza-research/forecasting-skills@dev forecasting-skills"
 mkdir -p intermediate_results
 
+# Trailing 30-day window ending on the latest available day for a station
+# already in this pipeline (TA00025, Nairobi/alts fetch below).
+END=$($S tahmo-fetch --station TA00025 --probe-latest)
+START=$(date -u -d "$END -29 days" +%Y-%m-%d)
+
 # ---------------------------------------------------------------
 # 1. Fetch. Two calls because the first pick of stations for
 #    Nairobi / Kisumu / Eldoret returned no data and were dropped;
@@ -12,14 +17,14 @@ mkdir -p intermediate_results
 $S tahmo-fetch \
   --station TA00134 --station TA00072 --station TA00146 \
   --station TA00026 --station TA00811 \
-  --start-time 2026-08-05 --end-time 2026-09-03 \
+  --start-time "$START" --end-time "$END" \
   --output intermediate_results/tahmo_cities.zarr
 
 $S tahmo-fetch \
   --station TA00025 --station TA00715 --station TA00182 --station TA00057 \
   --station TA00171 --station TA00374 --station TA00587 --station TA00807 \
   --station TA00808 --station TA00628 --station TA00274 \
-  --start-time 2026-08-05 --end-time 2026-09-03 \
+  --start-time "$START" --end-time "$END" \
   --output intermediate_results/tahmo_alts.zarr
 
 # ---------------------------------------------------------------
@@ -63,15 +68,17 @@ for c in nairobi mombasa kisumu nakuru eldoret; do
   IN_R="$IN_R --input intermediate_results/raw_$c.zarr"
 done
 LBL="--label Nairobi --label Mombasa --label Kisumu --label Nakuru --label Eldoret"
+START_LABEL=$(date -u -d "$START" +'%-d %b')
+END_LABEL=$(date -u -d "$END" +'%-d %b %Y')
 
 $S plot-timeseries $IN_P $LBL --variable precip --fontsize 13 \
-  --title 'TAHMO daily rainfall, 5 Kenyan cities (5 Aug - 3 Sep 2026)' \
+  --title "TAHMO daily rainfall, 5 Kenyan cities (${START_LABEL} - ${END_LABEL})" \
   --ylabel 'Daily rainfall [mm]' --output tahmo_kenya_cities_rainfall.png
 
 $S plot-timeseries $IN_R $LBL --variable temperature --fontsize 13 \
-  --title 'TAHMO daily mean temperature, 5 Kenyan cities (5 Aug - 3 Sep 2026)' \
+  --title "TAHMO daily mean temperature, 5 Kenyan cities (${START_LABEL} - ${END_LABEL})" \
   --ylabel 'Temperature [°C]' --output tahmo_kenya_cities_temperature.png
 
 $S plot-timeseries $IN_R $LBL --variable humidity --fontsize 13 \
-  --title 'TAHMO daily mean relative humidity, 5 Kenyan cities (5 Aug - 3 Sep 2026)' \
+  --title "TAHMO daily mean relative humidity, 5 Kenyan cities (${START_LABEL} - ${END_LABEL})" \
   --ylabel 'Relative humidity [fraction]' --output tahmo_kenya_cities_humidity.png

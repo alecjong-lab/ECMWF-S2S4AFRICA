@@ -3,13 +3,20 @@ set -eo pipefail
 
 SKILLS="git+https://github.com/rhiza-research/forecasting-skills@dev"
 
+# Trailing 4 complete weeks ending on the latest available CHIRPS day.
+END=$(uvx --from "$SKILLS" forecasting-skills chirps-fetch --probe-latest)
+START=$(date -u -d "$END -27 days" +%Y-%m-%d)
+AGG_END=$(date -u -d "$END +1 days" +%Y-%m-%d)
+CLIM_END=$(date -u -d "$START +21 days" +%Y-%m-%d)
+END_LABEL=$(date -u -d "$END" +'%Y-%m-%d')
+
 uvx --from "$SKILLS" forecasting-skills chirps-fetch \
   --bbox 17.998307/21.887843/-26.742192/51.13387 \
-  --start-time 2026-08-04 --end-time 2026-08-31 --workers 8 \
+  --start-time "$START" --end-time "$END" --workers 8 \
   --output step1.zarr
 
 uvx --from "$SKILLS" forecasting-skills aggregate-temporal \
-  --align left --end-time 2026-09-01 --method mean --period weekly \
+  --align left --end-time "$AGG_END" --method mean --period weekly \
   --input step1.zarr --output step2.zarr
 
 uvx --from "$SKILLS" forecasting-skills convert-to-totals \
@@ -17,7 +24,7 @@ uvx --from "$SKILLS" forecasting-skills convert-to-totals \
 
 uvx --from "$SKILLS" forecasting-skills plot \
   --columns 4 --rows 1 --fontsize 13 --pair-on time --style heatmap \
-  --title 'CHIRPS weekly rainfall totals, East Africa (4 weeks ending 2026-08-31)' \
+  --title "CHIRPS weekly rainfall totals, East Africa (4 weeks ending ${END_LABEL})" \
   --variable precip --input step3.zarr \
   --output chirps_east_africa_weekly_rainfall.png
 
@@ -29,7 +36,7 @@ CLIM_SKILLS="git+https://github.com/rhiza-research/forecasting-skills@mohini/ski
 # --- climatology baseline (mohini/skills) ---
 uvx --from "$CLIM_SKILLS" forecasting-skills clim-fetch \
   --dataset chirps --variable precip --window 7 --align left \
-  --start-time 2026-08-04 --end-time 2026-08-25 \
+  --start-time "$START" --end-time "$CLIM_END" \
   --bbox 17.998307/21.887843/-26.742192/51.13387 \
   --output chirps_clim_7d.zarr
 
@@ -40,11 +47,11 @@ uvx --from "$CLIM_SKILLS" forecasting-skills rename \
 # --- observations (dev) ---
 uvx --from "$SKILLS" forecasting-skills chirps-fetch \
   --bbox 17.998307/21.887843/-26.742192/51.13387 \
-  --start-time 2026-08-04 --end-time 2026-08-31 --workers 8 \
+  --start-time "$START" --end-time "$END" --workers 8 \
   --output step1.zarr
 
 uvx --from "$SKILLS" forecasting-skills aggregate-temporal \
-  --align left --end-time 2026-09-01 --method mean --period weekly \
+  --align left --end-time "$AGG_END" --method mean --period weekly \
   --input step1.zarr --output step2.zarr
 
 # --- anomaly (dev) ---
@@ -60,6 +67,6 @@ uvx --from "$SKILLS" forecasting-skills rename \
 
 uvx --from "$SKILLS" forecasting-skills plot \
   --columns 4 --rows 1 --fontsize 13 --pair-on time --style heatmap \
-  --title 'CHIRPS weekly rainfall anomaly vs climatology, East Africa (4 weeks ending 2026-08-31)' \
+  --title "CHIRPS weekly rainfall anomaly vs climatology, East Africa (4 weeks ending ${END_LABEL})" \
   --variable precip_anomaly --input step5.zarr \
   --output chirps_east_africa_weekly_anomaly.png
