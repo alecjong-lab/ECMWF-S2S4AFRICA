@@ -215,7 +215,7 @@ for country in countries_to_downscale:
         upscale_factor=30
     if country=='Ghana':
         upscale_factor=27
-    forecast_year = 2026
+    forecast_year = int(data.time.dt.year.values)
     all_dates = []
 
     # Loop months March (3)–December (12)
