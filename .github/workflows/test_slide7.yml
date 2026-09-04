@@ -16,7 +16,7 @@ jobs:
       - name: Run slide7.sh
         working-directory: ws_scripts
         env:
-          UV_CACHE_DIR: ~/.cache/uv
+          UV_NO_CACHE: "1"
         run: bash slide7.sh
 
       - name: Upload output plot
