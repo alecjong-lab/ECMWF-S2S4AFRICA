@@ -19,8 +19,8 @@ jobs:
         working-directory: ws_scripts
         run: bash slide7.sh
 
-      - name: Upload output plot
+      - name: Upload output plots
         uses: actions/upload-artifact@v4
         with:
-          name: chirps_kenya_weekly_anomaly
-          path: ws_scripts/chirps_kenya_weekly_anomaly.png
+          name: slide7-plots
+          path: ws_scripts/*.png
