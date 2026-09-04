@@ -4,3 +4,6 @@ set -eo pipefail
 
 uvx --from git+https://github.com/rhiza-research/chc-skills@dev chc-skills \
   mjo-forecast-fetch --bias-corrected --model gefs --output mjo_rmm_gefs.png
+
+uvx --from git+https://github.com/rhiza-research/chc-skills@dev chc-skills \
+  mjo-forecast-fetch --bias-corrected --model ecmwf --output mjo_rmm_ecmwf.png
