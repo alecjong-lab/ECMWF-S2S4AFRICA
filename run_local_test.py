@@ -33,8 +33,6 @@ STAGES = [
     "ai_weather_briefing",
 ]
 
-# STAGES= ["IndianOceanState"]
-
 def resolve_default_date():
     candidates = sorted(
         p.name for p in TEST_DIR.iterdir()

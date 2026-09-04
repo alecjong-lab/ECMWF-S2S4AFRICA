@@ -1980,7 +1980,7 @@ def ensemble_plots(ds_to_plot,m_climate,chances_to_exceed,anom_clims,tercile_cli
         plt.close()
 
     tercile_clims=tercile_clims.sel(longitude=slice(lon1, lon2),latitude=slice(lat1,lat2))
-    Below_or_above=tercile_clims.sel(cat='above-normal')-tercile_clims.sel(cat='below-normal')
+    Below_or_above=(tercile_clims.sel(cat='above-normal')-tercile_clims.sel(cat='below-normal'))
     Below_or_above[var].attrs={'GRIB_name': '       <---Below normal   or  Above normal--->', 'units': '%'}
     fig=panel_plot_variable(Below_or_above,var,Below_or_above.step.values,cmap='BrBG',fontsize=13,vmax=100,vmin=-100)
     plt.savefig(f'{save_path}/chance_of_above_or_below.png',bbox_inches='tight')
@@ -2572,6 +2572,69 @@ def plot_wind_and_sst_anomaly(ds_wind, ds_sst,u_var='u10',v_var='v10',sst_var='s
 
     fig.tight_layout()
     return fig, ax
+
+def plot_wind_and_sst_anomaly_weekly(ds_wind, ds_sst, title, out_path, u_var='u10', v_var='v10',
+                                      sst_var='sst', lon_name='longitude', lat_name='latitude',
+                                      extent=(45, 120, -20, 20), quiver_step=1, quiver_scale=100,
+                                      sst_cmap='RdBu_r', sst_vmin=-2, sst_vmax=2, panel_height=7):
+    """4-panel (2x2) weekly version of plot_wind_and_sst_anomaly: one wind vector / SST anomaly
+    panel per week, sharing a single color scale and colorbar. ds_wind/ds_sst must carry a
+    'step' dim (one entry per week)."""
+    lon_min, lon_max, lat_min, lat_max = extent
+    aspect = (lon_max - lon_min) / (lat_max - lat_min)
+    figsize = (2 * panel_height * aspect, 2 * panel_height)
+
+    steps = ds_wind.step.values
+    fig, axes = plt.subplots(2, 2, figsize=figsize, subplot_kw={'projection': ccrs.PlateCarree()},
+                              constrained_layout=True)
+
+    cf = None
+    for i, ax in enumerate(axes.flat):
+        if i >= len(steps):
+            ax.axis('off')
+            continue
+        wind_week = ds_wind.isel(step=i)
+        sst_week = ds_sst.isel(step=i) if 'step' in ds_sst.dims else ds_sst
+
+        ax.coastlines()
+        ax.add_feature(cfeature.BORDERS, linestyle=':')
+        ax.add_feature(cfeature.LAND, facecolor='lightgray')
+        ax.set_extent(extent, crs=ccrs.PlateCarree())
+
+        gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.7, linestyle='--')
+        gl.top_labels = False
+        gl.right_labels = False
+        row, col = divmod(i, 2)
+        gl.left_labels = (col == 0)
+        gl.bottom_labels = (row == 1)
+
+        lon = wind_week[lon_name]
+        lat = wind_week[lat_name]
+        LON, LAT = np.meshgrid(lon, lat)
+        U = wind_week[u_var]
+        V = wind_week[v_var]
+        LON_sub = LON[::quiver_step, ::quiver_step]
+        LAT_sub = LAT[::quiver_step, ::quiver_step]
+        U_sub = U[::quiver_step, ::quiver_step]
+        V_sub = V[::quiver_step, ::quiver_step]
+
+        sst_data = sst_week[sst_var] if hasattr(sst_week, sst_var) else sst_week
+        cf = ax.pcolormesh(sst_data[lon_name], sst_data[lat_name], sst_data,
+                            transform=ccrs.PlateCarree(), cmap=sst_cmap, vmin=sst_vmin, vmax=sst_vmax,
+                            shading='auto')
+        ax.quiver(LON_sub, LAT_sub, U_sub, V_sub, transform=ccrs.PlateCarree(), scale=quiver_scale)
+
+        # step marks the end of the day-mean valid day, i.e. it's 1 day past the
+        # week's true last day, so shift back a day before taking the 7-day window
+        week_end = pd.Timestamp(wind_week.time.values) + pd.to_timedelta(wind_week.step.values) - pd.Timedelta(days=1)
+        week_start = week_end - pd.Timedelta(days=6)
+        ax.set_title(f'Week {i + 1}: {week_start:%Y-%m-%d} to {week_end:%Y-%m-%d}')
+
+    fig.suptitle(title)
+    cbar = fig.colorbar(cf, ax=axes, orientation='horizontal', shrink=0.5, aspect=50)
+    cbar.set_label('SST Anomaly (°C)')
+    plt.savefig(out_path)
+    plt.close(fig)
 
 def load_reforecasts(forecast_day, var_group, var, grid='1p5latx1p5lon',
                       bbox={"lat1": 90, "lon1": -180, "lat2": -90, "lon2": 178.5},

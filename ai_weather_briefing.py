@@ -120,7 +120,7 @@ plots = ['hold', 'weekly_precip', "gefs_weekly_precip", "weekly_precip_downscale
          "50th_percentile_exedance", "anomaly_from_50th", "summary"]
 
 kenya_path = f"plots/Kenya/{date_str}"
-diagnostics_path = f"plots/diagnostics/{date_str}/monthly"
+diagnostics_path = f"plots/diagnostics/{date_str}/weekly"
 
 # only the first len(plots) slide types have a "{type}_plot" shape
 plot_paths = {t: f"{kenya_path}/weekly/{p}.png" for t, p in zip(slide_types, plots)}
