@@ -1,0 +1,21 @@
+name: Test slide7 CHIRPS anomaly plot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  slide7:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Run slide7.sh
+        working-directory: ws_scripts
+        run: bash slide7.sh
+
+      - name: Upload output plot
+        uses: actions/upload-artifact@v4
+        with:
+          name: chirps_kenya_weekly_anomaly
+          path: ws_scripts/chirps_kenya_weekly_anomaly.png
