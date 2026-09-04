@@ -15,6 +15,18 @@ jobs:
         with:
           version: "0.11.20"
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install python-pptx
+        run: pip install python-pptx
+
+      - name: Compute DATE_STR
+        id: date
+        run: echo "date=$(date -u -d '2 days ago' +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
       - name: Run slide7.sh
         continue-on-error: true
         working-directory: ws_scripts
@@ -71,8 +83,26 @@ jobs:
         working-directory: ws_scripts
         run: bash slide171819.sh
 
-      - name: Upload output plots
+      - name: Collect briefing plots
+        run: |
+          mkdir -p "plots/${{ steps.date.outputs.date }}/briefing_plots"
+          mv ws_scripts/*.png "plots/${{ steps.date.outputs.date }}/briefing_plots/" 2>/dev/null || true
+
+      - name: Build briefing3 pptx
+        continue-on-error: true
+        env:
+          DATE_STR: ${{ steps.date.outputs.date }}
+          MAIN_PATH: ${{ github.workspace }}
+        run: python populate_briefing_template3.py
+
+      - name: Upload briefing plots
         uses: actions/upload-artifact@v4
         with:
-          name: slide-plots
-          path: ws_scripts/*.png
+          name: briefing-plots
+          path: plots/${{ steps.date.outputs.date }}/briefing_plots/*.png
+
+      - name: Upload briefing pptx
+        uses: actions/upload-artifact@v4
+        with:
+          name: briefing-pptx
+          path: s2s_briefing3_*.pptx

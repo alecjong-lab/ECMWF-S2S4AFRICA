@@ -6,7 +6,9 @@ mkdir -p intermediate_results
 
 # Trailing 30-day window ending on the latest available day for a station
 # already in this pipeline (TA00025, Nairobi/alts fetch below).
-END=$($S tahmo-fetch --station TA00025 --probe-latest)
+# tahmo-fetch's underlying API client logs "API request: ..." lines to
+# stdout ahead of the actual probed date, so only the last line is real.
+END=$($S tahmo-fetch --station TA00025 --probe-latest | tail -n1)
 START=$(date -u -d "$END -29 days" +%Y-%m-%d)
 
 # ---------------------------------------------------------------
