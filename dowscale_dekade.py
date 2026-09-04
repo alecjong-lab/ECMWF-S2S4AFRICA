@@ -304,6 +304,16 @@ for country in countries_to_downscale:
 
         daily_downscaled=daily_downscaled.to_dataset(name='tp')
 
+        # Drop inherited dask/zarr chunk encoding (carried over from the source zarr
+        # stores this was derived from) so to_zarr picks fresh chunks instead of
+        # tripping its safe_chunks check on the new array shape.
+        for var in daily_downscaled.variables.values():
+            var.encoding.pop('chunks', None)
+            var.encoding.pop('preferred_chunks', None)
+        daily_downscaled.to_zarr(
+            f'{data_path}/daily_downscaled_kenya.zarr', mode='w', consolidated=True
+        )
+
         ds_to_plot_daily=daily_downscaled.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2)).isel(step=slice(0,28))
         gef.plot_panel_and_save(
             ds_to_plot_daily.transpose('latitude','longitude','step'),'tp',gef.cmap,fs,
