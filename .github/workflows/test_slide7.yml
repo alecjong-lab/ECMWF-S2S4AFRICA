@@ -10,6 +10,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Install dependencies
+        working-directory: main_repo
+        run: |
+          pip install -r requirements.txt
+
       - name: Run slide7.sh
         working-directory: ws_scripts
         run: bash slide7.sh
