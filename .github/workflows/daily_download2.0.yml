@@ -133,6 +133,72 @@ jobs:
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
 
+      # ── Weather-skills briefing plots (ws_scripts/slide*.sh) ──────
+      - name: Install uv for ws_scripts
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.20"
+
+      - name: Run slide7.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide7.sh
+
+      - name: Run slide8.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide8.sh
+
+      - name: Run slide9.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide9.sh
+
+      - name: Run slide10.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide10.sh
+
+      - name: Run slide11.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        env:
+          ECMWF_DATASTORES_URL: "https://ecds.ecmwf.int/api"
+          ECMWF_DATASTORES_KEY: ${{ secrets.CDSAPI_KEY }}
+        run: bash slide11.sh
+
+      - name: Run slide12.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide12.sh
+
+      - name: Run slide13.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide13.sh
+
+      - name: Run slide14.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide14.sh
+
+      - name: Run slide15.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide15.sh
+
+      - name: Run slide171819.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide171819.sh
+
+      - name: Collect briefing plots
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          mkdir -p "plots/briefing/${{ steps.ecmwf_date.outputs.date }}"
+          mv ws_scripts/*.png "plots/briefing/${{ steps.ecmwf_date.outputs.date }}/" 2>/dev/null || true
+
       - name: Generate AI weather briefing
         continue-on-error: true
         working-directory: main_repo
@@ -140,6 +206,7 @@ jobs:
           python ai_weather_briefing.py
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
 
       # ── Convert NetCDF → JSON and update catalog ─────────────────
