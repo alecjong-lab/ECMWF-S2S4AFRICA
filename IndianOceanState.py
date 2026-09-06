@@ -148,31 +148,50 @@ IO_sst_raw=xr.open_zarr(f'{data_path}/ECMWF_s2s_sst_{date_str}.zarr',consolidate
 IO_winds=IO_winds_raw.isel(step=slice(None,4*28+1)).mean('step')
 IO_sst=IO_sst_raw.isel(step=slice(None,4*28+1)).mean('step')
 
-# model climatology (median) to compare against - only available as a single
-# 28-day-mean reference (no per-week resolution), so the weekly anomaly below
-# is compared against this same monthly climatology
-IO_winds_mclimate=gef.open_mclimate(IO_winds,var='IO_10m_wind')
-IO_sst_mclimate=gef.open_mclimate(IO_sst,var='IO_sst')
+# model climatology (median) to compare against - older files are a single
+# 28-day-mean reference (no per-week resolution); newer ones carry a per-week
+# 'step' dim instead, so both cases are normalized below
+IO_winds_mclimate=gef.open_mclimate(IO_winds,var='IO_10m_wind').sel(quantile=0.5)
+IO_sst_mclimate=gef.open_mclimate(IO_sst,var='IO_sst').sel(quantile=0.5)
+
+# monthly climatology: mean over the per-week climatology when present,
+# otherwise it's already a single monthly value
+winds_mclimate_monthly = IO_winds_mclimate.mean('step') if 'step' in IO_winds_mclimate.dims else IO_winds_mclimate
+sst_mclimate_monthly = IO_sst_mclimate.mean('step') if 'step' in IO_sst_mclimate.dims else IO_sst_mclimate
 
 # ensemble-mean anomaly = forecast - climatological median
-anom_winds=IO_winds-IO_winds_mclimate.sel(quantile=0.5)
+anom_winds=IO_winds-winds_mclimate_monthly
 ds_to_plot_winds=anom_winds.mean('number')
 
-anom_sst=IO_sst-IO_sst_mclimate.sel(quantile=0.5)
+anom_sst=IO_sst-sst_mclimate_monthly
 ds_to_plot_sst=anom_sst.mean('number')
 
 fig, axes = gef.plot_wind_and_sst_anomaly(ds_to_plot_winds, ds_to_plot_sst)
 plt.savefig(monthly_save_path+f'ECMWF_s2s_10wind_sst_anomaly_{date_str}.png', bbox_inches='tight')
 plt.close(fig)
 
-# --- weekly (4-panel) version, per-week mean field vs. the same monthly climatology ---
+# --- weekly (4-panel) version, per-week mean field vs. a per-week climatology
+# when available (positionally aligned onto the forecast's own step labels,
+# since the two step conventions aren't guaranteed to share exact coordinate
+# values), else the same monthly climatology broadcast across every week ---
+def _align_weekly_mclimate(forecast_weekly, mclimate_median):
+    if 'step' not in mclimate_median.dims:
+        return forecast_weekly, mclimate_median
+    n = min(forecast_weekly.sizes['step'], mclimate_median.sizes['step'])
+    forecast_weekly = forecast_weekly.isel(step=slice(0, n))
+    mclimate_aligned = mclimate_median.isel(step=slice(0, n)).assign_coords(step=forecast_weekly.step.values)
+    return forecast_weekly, mclimate_aligned
+
 IO_winds_weekly=gef.week_mean(IO_winds_raw).isel(step=slice(None,4))
 IO_sst_weekly=gef.week_mean(IO_sst_raw).isel(step=slice(None,4))
 
-anom_winds_weekly=IO_winds_weekly-IO_winds_mclimate.sel(quantile=0.5)
+IO_winds_weekly, winds_mclimate_weekly = _align_weekly_mclimate(IO_winds_weekly, IO_winds_mclimate)
+IO_sst_weekly, sst_mclimate_weekly = _align_weekly_mclimate(IO_sst_weekly, IO_sst_mclimate)
+
+anom_winds_weekly=IO_winds_weekly-winds_mclimate_weekly
 ds_to_plot_winds_weekly=anom_winds_weekly.mean('number')
 
-anom_sst_weekly=IO_sst_weekly-IO_sst_mclimate.sel(quantile=0.5)
+anom_sst_weekly=IO_sst_weekly-sst_mclimate_weekly
 ds_to_plot_sst_weekly=anom_sst_weekly.mean('number')
 
 period_end = str(ds_to_plot_winds_weekly.time.values + pd.Timedelta("28d"))[:10]
