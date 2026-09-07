@@ -242,7 +242,7 @@ for t, text in zip(slide_types, slide_text):
         for shape in slide.shapes:
             if shape.name == f"{t}_text":
                 if t == 'date':
-                    set_slide_text(shape, formatted_date, font_size=35, font_name='Karla Medium', align=PP_ALIGN.CENTER)
+                    set_slide_text(shape, formatted_date, font_size=24, font_name='Karla Medium', align=PP_ALIGN.CENTER)
                 elif t == 'sum':
                     set_slide_text(shape, text, font_size=17)
                 else:

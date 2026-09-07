@@ -124,9 +124,9 @@ def plot_moisture_anomaly_weekly_map(field, var, title, cbar_label, out_path, ne
         cf = ax.pcolormesh(week['longitude'], week['latitude'], week[var],
                             transform=ccrs.PlateCarree(), cmap=cmap, norm=norm, shading='auto')
 
-        # step marks the end of the day-mean valid day, i.e. it's 1 day past the
-        # week's true last day, so shift back a day before taking the 7-day window
-        week_end = pd.Timestamp(week.time.values) + pd.to_timedelta(week.step.values) - pd.Timedelta(days=1)
+        # step is expected to already label the true last calendar day of the week
+        # (see the step-relabeling done where each caller's field is built)
+        week_end = pd.Timestamp(week.time.values) + pd.to_timedelta(week.step.values)
         week_start = week_end - pd.Timedelta(days=6)
         ax.set_title(f'Week {i + 1}: {week_start:%Y-%m-%d} to {week_end:%Y-%m-%d}')
 
@@ -210,6 +210,10 @@ gef.plot_wind_and_sst_anomaly_weekly(
 # acum_to_instant just un-accumulates them into per-week totals
 IO_precip=xr.open_zarr(f'{data_path}/ECMWF_s2s_precip_alt_{date_str}.zarr',consolidated=True).compute()
 IO_precip_weekly=gef.acum_to_instant(IO_precip).isel(step=slice(None,4)).mean('number')
+# the zarr's native accumulation steps (7, 14, 21, 28) land 1 day past each
+# week's true last day - relabel onto that day to match the convention
+# gef.week_mean/week_sum use everywhere else (e.g. reforecasts_weekly_persist below)
+IO_precip_weekly = IO_precip_weekly.assign_coords(step=IO_precip_weekly.step - pd.Timedelta(days=1))
 
 # reforecasts give the model climatology to compare the forecast against, kept
 # per-week (not summed) so a weekly anomaly can be computed alongside the monthly one
@@ -317,11 +321,21 @@ ivt_u.name = "ivt_u"
 ivt_u.attrs = {"units": "kg m-1 s-1", "long_name": "Vertically integrated zonal moisture transport"}
 
 ivt_weekly = ivt_u.to_dataset().isel(step=slice(None,4)).mean('number')
-ivt_plot = ivt_weekly.mean('step')
+ivt_monthly = ivt_weekly.mean('step')
 
-period_end = str(ivt_plot.time.values + pd.Timedelta("28d"))[:10]
-ivt_title = f'Indian Ocean Monthly Eastward Moisture Transport {str(ivt_plot.time.values)[:10]} until {period_end}'
-ivt_weekly_title = f'Indian Ocean Weekly Eastward Moisture Transport | {str(ivt_weekly.time.values)[:10]} until {period_end}'
+# model climatology (median) to compare against - the monthly reference has no
+# 'step' dim; the weekly one carries its native (non-week_mean) step labels, so
+# align it onto ivt_weekly's own step values like the wind/sst climatology above
+ivt_mclimate_monthly = gef.open_mclimate(ivt_monthly, folder_path=f'{prefix}/m-climate/', var='ivt_month').sel(quantile=0.5)
+ivt_mclimate_weekly = gef.open_mclimate(ivt_weekly, folder_path=f'{prefix}/m-climate/', var='ivt_week').sel(quantile=0.5)
+ivt_weekly, ivt_mclimate_weekly = _align_weekly_mclimate(ivt_weekly, ivt_mclimate_weekly)
+
+anom_ivt_monthly = ivt_monthly - ivt_mclimate_monthly
+anom_ivt_weekly = ivt_weekly - ivt_mclimate_weekly
+
+period_end = str(anom_ivt_monthly.time.values + pd.Timedelta("28d"))[:10]
+ivt_title = f'Indian Ocean Monthly Eastward Moisture Transport Anomaly {str(anom_ivt_monthly.time.values)[:10]} until {period_end}'
+ivt_weekly_title = f'Indian Ocean Weekly Eastward Moisture Transport Anomaly | {str(anom_ivt_weekly.time.values)[:10]} until {period_end}'
 
 ivt_colors = dict(
     neg_colors=["#8a29e1", "#0000fc", "#008b88", "#01fefd", "#afecee"],
@@ -329,14 +343,14 @@ ivt_colors = dict(
 )
 
 plot_moisture_anomaly_map(
-    ivt_plot, 'ivt_u', ivt_title,
-    'Zonal Moisture Transport [kg m$^{-1}$ s$^{-1}$]',
+    anom_ivt_monthly, 'ivt_u', ivt_title,
+    'Zonal Moisture Transport Anomaly [kg m$^{-1}$ s$^{-1}$]',
     monthly_save_path+f'ECMWF_s2s_ivt_u_{date_str}.png',
     **ivt_colors,
 )
 plot_moisture_anomaly_weekly_map(
-    ivt_weekly, 'ivt_u', ivt_weekly_title,
-    'Zonal Moisture Transport [kg m$^{-1}$ s$^{-1}$]',
+    anom_ivt_weekly, 'ivt_u', ivt_weekly_title,
+    'Zonal Moisture Transport Anomaly [kg m$^{-1}$ s$^{-1}$]',
     weekly_save_path+f'ECMWF_s2s_ivt_u_{date_str}.png',
     **ivt_colors,
 )

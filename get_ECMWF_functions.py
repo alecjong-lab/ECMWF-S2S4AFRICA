@@ -2624,9 +2624,9 @@ def plot_wind_and_sst_anomaly_weekly(ds_wind, ds_sst, title, out_path, u_var='u1
                             shading='auto')
         ax.quiver(LON_sub, LAT_sub, U_sub, V_sub, transform=ccrs.PlateCarree(), scale=quiver_scale)
 
-        # step marks the end of the day-mean valid day, i.e. it's 1 day past the
-        # week's true last day, so shift back a day before taking the 7-day window
-        week_end = pd.Timestamp(wind_week.time.values) + pd.to_timedelta(wind_week.step.values) - pd.Timedelta(days=1)
+        # step already labels the true last calendar day of the week (gef.week_mean
+        # relabels its 7-day resample bins onto that day), so no further shift is needed
+        week_end = pd.Timestamp(wind_week.time.values) + pd.to_timedelta(wind_week.step.values)
         week_start = week_end - pd.Timedelta(days=6)
         ax.set_title(f'Week {i + 1}: {week_start:%Y-%m-%d} to {week_end:%Y-%m-%d}')
 
