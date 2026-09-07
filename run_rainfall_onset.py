@@ -164,6 +164,29 @@ def plot_onset_map(onset, bbox, year, title, save_path, forecast_start, n_time, 
         transform=ccrs.PlateCarree(), add_colorbar=False,
     )
 
+    # gridpoints where only a small minority of ensemble members actually found
+    # an onset are unreliable -- fade them out rather than drawing them as a
+    # solid, equally-confident-looking color. Cells xarray already masked
+    # (mean_doy is NaN, e.g. no onset at all) are left alone since matplotlib
+    # already renders those as fully transparent.
+    if pct_valid is not None:
+        mean_doy_ll = mean_doy.transpose('latitude', 'longitude')
+        pct_valid_ll = pct_valid.transpose('latitude', 'longitude')
+        low_confidence = ((pct_valid_ll < 10) & mean_doy_ll.notnull()).values.ravel()
+
+        mesh.update_scalarmappable()
+        facecolors = mesh.get_facecolor()
+        facecolors[low_confidence, -1] = 0.5
+        mesh.set_facecolor(facecolors)
+        # Collection.draw() calls update_scalarmappable() on every draw, which
+        # would recompute facecolors from cmap(norm(array)) and wipe out the
+        # alpha edit above. Normally set_array(None) is the escape hatch (it
+        # makes update_scalarmappable() a no-op), but cartopy's GeoQuadMesh
+        # overrides both set_array/get_array to assume a real array and breaks
+        # on None -- so just neutralize this instance's update_scalarmappable
+        # instead of touching the array.
+        mesh.update_scalarmappable = lambda: None
+
     ax.coastlines(resolution='10m', linewidth=0.8)
     ax.add_feature(cfeature.BORDERS, linewidth=0.6)
     gl = ax.gridlines(draw_labels=True, linewidth=0.3, color='gray', alpha=0.5, linestyle='--')
