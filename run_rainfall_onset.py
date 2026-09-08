@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
 from matplotlib.colors import ListedColormap, BoundaryNorm, LinearSegmentedColormap

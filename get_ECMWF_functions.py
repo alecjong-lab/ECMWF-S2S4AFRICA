@@ -7,6 +7,7 @@ import xarray as xr
 import cfgrib
 import geopandas as gpd
 import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import cartopy.crs as ccrs

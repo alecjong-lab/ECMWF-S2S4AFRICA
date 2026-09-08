@@ -3,6 +3,8 @@ import os
 import argparse
 from datetime import datetime, timedelta
 from dateutil import parser as dateparser
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
