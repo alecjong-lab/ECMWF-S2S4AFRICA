@@ -206,24 +206,51 @@ gef.plot_wind_and_sst_anomaly_weekly(
 # PRECIPITATION ANOMALY (monthly total and per-week, first 4 weekly steps)
 # ========================================================
 
-# alt-region precip zarr has weekly-accumulated steps already, so
-# acum_to_instant just un-accumulates them into per-week totals
+# alt-region precip zarr is now downloaded daily (cumulative-since-init, same as
+# the main precip_file group) so climate_indices_timeseries.py can build a daily
+# rainfall index from it - reconstruct the same weekly-accumulation-mark subset
+# (steps at 7-day multiples) that this plot's numbers have always been built from,
+# the same way plot_s2s.py picks its own weekly steps out of the daily main precip
 IO_precip=xr.open_zarr(f'{data_path}/ECMWF_s2s_precip_alt_{date_str}.zarr',consolidated=True).compute()
+IO_precip_step_hours=(IO_precip.step.values*1e-9/3600).astype('int')
+IO_precip_weekly_marks=IO_precip.step.values[IO_precip_step_hours % 168 == 0]
+IO_precip=IO_precip.sel(step=IO_precip_weekly_marks)
 IO_precip_weekly=gef.acum_to_instant(IO_precip).isel(step=slice(None,4)).mean('number')
 # the zarr's native accumulation steps (7, 14, 21, 28) land 1 day past each
 # week's true last day - relabel onto that day to match the convention
 # gef.week_mean/week_sum use everywhere else (e.g. reforecasts_weekly_persist below)
 IO_precip_weekly = IO_precip_weekly.assign_coords(step=IO_precip_weekly.step - pd.Timedelta(days=1))
 
-# reforecasts give the model climatology to compare the forecast against, kept
-# per-week (not summed) so a weekly anomaly can be computed alongside the monthly one
-reforecasts=gef.load_reforecasts(date_str,'single',var='pr',bbox={'lat1': 20, 'lon1': 30, 'lat2': -20, 'lon2': 120})
-reforecasts_weekly_persist=gef.week_sum(reforecasts.isel(step=slice(0,28))*60*60*24)
+# model climatology for Indian Ocean precip - cached under m-climate/IO_precip/ so it's
+# only rebuilt from reforecasts (a live S3 pull) when nothing close enough already exists
+# on disk, the same as the precomputed m-climate/* folders used for the other variables
+io_precip_mclimate_path = gef.find_cached_mclimate(date_str, 'IO_precip', folder_path=f'{prefix}/m-climate/', max_gap_days=3)
+if io_precip_mclimate_path:
+    print(f"Using cached Indian Ocean precip climatology: {io_precip_mclimate_path}")
+    io_precip_mclimate = xr.open_dataset(io_precip_mclimate_path, engine="netcdf4", decode_timedelta=True) \
+        .sortby('latitude', ascending=False)
+else:
+    # reforecasts give the model climatology to compare the forecast against, kept
+    # per-week (not summed) so a weekly anomaly can be computed alongside the monthly one
+    reforecasts, reforecast_center_day = gef.load_reforecasts(date_str,'single',var='pr',bbox={'lat1': 20, 'lon1': 30, 'lat2': -20, 'lon2': 120})
+    reforecasts_weekly_persist=gef.week_sum(reforecasts.isel(step=slice(0,28))*60*60*24)
+    reforecasts_monthly=reforecasts_weekly_persist.sum('step')
+
+    io_precip_mclimate = xr.Dataset({
+        'tp': reforecasts_weekly_persist.quantile(0.5, {'number', 'init_time'}).isel(step=slice(0, 4)),
+        'tp_std': reforecasts_weekly_persist.std({'number', 'init_time'}).isel(step=slice(0, 4)),
+        'tp_monthly': reforecasts_monthly.quantile(0.5, {'number', 'init_time'}),
+        'tp_monthly_std': reforecasts_monthly.std({'number', 'init_time'}),
+    })
+    # label with the reforecast archive's actual center date, not date_str, since
+    # the 5-init-time window is built around the nearest day reforecasts exist for
+    reforecast_center_date = f"{date_str[:4]}-{reforecast_center_day}"
+    print(f"Reforecast window for IO_precip is centered on {reforecast_center_day} (nearest to {date_str[5:]})")
+    gef.save_mclimate(io_precip_mclimate, reforecast_center_date, 'IO_precip', folder_path=f'{prefix}/m-climate/')
 
 # --- monthly: climatological median/spread of the summed (monthly-total) reforecasts ---
-reforecasts_monthly=reforecasts_weekly_persist.sum('step')
-mclimate_IO_monthly_precip=reforecasts_monthly.quantile(0.5,{'number','init_time'})
-std_IO_monthly_precip=reforecasts_monthly.std({'number','init_time'})
+mclimate_IO_monthly_precip=io_precip_mclimate.tp_monthly
+std_IO_monthly_precip=io_precip_mclimate.tp_monthly_std
 
 precip_total=IO_precip_weekly.sum('step')
 anom_precip=precip_total-mclimate_IO_monthly_precip           # raw anomaly (mm)
@@ -250,12 +277,12 @@ plot_moisture_anomaly_map(
 # --- weekly: climatological median/spread kept per-week, positionally aligned onto
 # IO_precip_weekly's own step labels since the two step conventions aren't guaranteed
 # to share exact coordinate values ---
-n_precip_weeks = min(len(IO_precip_weekly.step), len(reforecasts_weekly_persist.step))
+n_precip_weeks = min(len(IO_precip_weekly.step), len(io_precip_mclimate.step))
 IO_precip_weekly = IO_precip_weekly.isel(step=slice(0, n_precip_weeks))
 
-mclimate_IO_weekly_precip = reforecasts_weekly_persist.quantile(0.5, {'number', 'init_time'}) \
+mclimate_IO_weekly_precip = io_precip_mclimate.tp \
     .isel(step=slice(0, n_precip_weeks)).assign_coords(step=IO_precip_weekly.step.values)
-std_IO_weekly_precip = reforecasts_weekly_persist.std({'number', 'init_time'}) \
+std_IO_weekly_precip = io_precip_mclimate.tp_std \
     .isel(step=slice(0, n_precip_weeks)).assign_coords(step=IO_precip_weekly.step.values)
 
 anom_precip_weekly = IO_precip_weekly - mclimate_IO_weekly_precip

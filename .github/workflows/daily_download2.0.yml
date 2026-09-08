@@ -93,6 +93,14 @@ jobs:
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
 
+      - name: Generate climate indices timeseries
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python climate_indices_timeseries.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+
       - name: Generate GEFS plots
         continue-on-error: true
         working-directory: main_repo
@@ -357,6 +365,21 @@ jobs:
           git status
           git diff --cached --stat
           git diff --cached --quiet || git commit -m "Update artifact index [$(date -u +'%Y-%m-%d %H:%M UTC')]"
+          git push origin main
+
+      # ── Commit any newly-built model climatology (e.g. m-climate/IO_precip,
+      # m-climate/Nino34_sst) so it's cached in the repo instead of being rebuilt
+      # from a live reforecast pull on every scheduled run ──────────
+      - name: Commit model climatology to main branch
+        continue-on-error: true
+        run: |
+          cd main_repo
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- m-climate
+          git status
+          git diff --cached --stat
+          git diff --cached --quiet || git commit -m "Update model climatology cache [$(date -u +'%Y-%m-%d %H:%M UTC')]"
           git push origin main
 
       # ── Commit website branch (ncdf data + catalog JSON) ─────────

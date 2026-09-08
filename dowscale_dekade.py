@@ -251,7 +251,13 @@ for country in countries_to_downscale:
     data_to_add=data_weekly.assign_coords({"year":int(data_weekly.time.dt.year.values)}).mean('number').sel(longitude=slice(weekly_bboxes[country+'_plus']['lon1'],weekly_bboxes[country+'_plus']['lon2']),latitude=slice(weekly_bboxes[country+'_plus']['lat1'],weekly_bboxes[country+'_plus']['lat2']))
     extended_fclim=xr.concat([reforecast_clims_ds,data_to_add],dim='year')
 
-    rescaled_forecast = gef.build_rescaled_forecast(extended_fclim, chirps_weeks_ds, data_weekly, upscale_factor=upscale_factor)
+    rescaled_forecast_hold=[]
+    for member in data_weekly.number.values:
+        data_to_add=data_weekly.assign_coords({"year":int(data_weekly.time.dt.year.values)}).sel(number=member).sel(longitude=slice(weekly_bboxes[country+'_plus']['lon1'],weekly_bboxes[country+'_plus']['lon2']),latitude=slice(weekly_bboxes[country+'_plus']['lat1'],weekly_bboxes[country+'_plus']['lat2']))
+        extended_fclim=xr.concat([reforecast_clims_ds,data_to_add],dim='year')
+        rescaled_forecast_hold.append(gef.build_rescaled_forecast(extended_fclim, chirps_weeks_ds, data_weekly, upscale_factor=upscale_factor))
+
+    rescaled_forecast=xr.concat(rescaled_forecast_hold,dim='number')
 
     if country == 'Kenya':
         kenya_weekly = rescaled_forecast.sel(
@@ -271,39 +277,26 @@ for country in countries_to_downscale:
 
     cmap=gef.cmap
 
-    ds_to_plot=rescaled_forecast.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','step')
+    ds_to_plot=rescaled_forecast.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','number','step')
     gef.plot_panel_and_save(
         ds_to_plot,'tp',cmap,fs,
         f'plots/{country}/{date_str}/weekly/weekly_precip_downscaled.png',
-        vmax=int(ds_to_plot.quantile(0.99).tp.values)
+        vmax=int(ds_to_plot.quantile(0.95).tp.values)
     )
 
+    CE_Kenya_dwnscaled_timeseries=rescaled_forecast.sel(longitude=slice(36,42),latitude=slice(5,-5)).mean({'longitude','latitude'})
+    CE_Kenya_dwnscaled_timeseries.to_zarr(f'{data_path}/CE_Kenya_dwnscaled_timeseries.zarr', mode='w', consolidated=True)
+
     os.makedirs(f'plots/{country}/{date_str}/monthly/', exist_ok=True)
-    ds_to_plot_month=rescaled_forecast_month.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','step')
+    ds_to_plot_month=rescaled_forecast_month.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','number','step')
     gef.plot_panel_and_save(
         ds_to_plot_month,'tp',cmap,fs,
         f'plots/{country}/{date_str}/monthly/monthly_precip_downscaled.png',
-        vmax=int(ds_to_plot_month.quantile(0.99).tp.values)
+        vmax=int(ds_to_plot_month.quantile(0.95).tp.values)
     )
 
     if country=='Kenya':
         daily_downscaled=gef.disaggregate_weekly_to_daily(rescaled_forecast.tp, data.tp.mean('number'))
-        # make sure dims are named/ordered as rioxarray expects
-        da = daily_downscaled.tp.drop_vars({'surface','year','rank'}) 
-        da = da.rio.set_spatial_dims(x_dim="longitude", y_dim="latitude")
-        # set the CRS (assuming plain lat/lon WGS84 — adjust if not)
-        da = da.rio.write_crs("EPSG:4326", inplace=False)
-        daily_downscaled=da.rio.write_nodata(np.nan, inplace=True)
-
-        daily_downscaled.rio.to_raster(
-            f'{data_path}/daily_downscaled_kenya.tif',
-            tags={
-                "band_dim_name": "day",
-            },
-        )
-
-        daily_downscaled=daily_downscaled.to_dataset(name='tp')
-
         # Drop inherited dask/zarr chunk encoding (carried over from the source zarr
         # stores this was derived from) so to_zarr picks fresh chunks instead of
         # tripping its safe_chunks check on the new array shape.
@@ -314,7 +307,7 @@ for country in countries_to_downscale:
             f'{data_path}/daily_downscaled_kenya.zarr', mode='w', consolidated=True
         )
 
-        ds_to_plot_daily=daily_downscaled.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2)).isel(step=slice(0,28))
+        ds_to_plot_daily=daily_downscaled.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2)).isel(step=slice(0,28)).mean('number')
         gef.plot_panel_and_save(
             ds_to_plot_daily.transpose('latitude','longitude','step'),'tp',gef.cmap,fs,
             f'plots/{country}/{date_str}/weekly/weekly_precip_downscaled_disaggregated_daily.png',
@@ -332,7 +325,7 @@ for country in countries_to_downscale:
 
         anomaly = gef.compute_rainfall_anomaly(rescaled_forecast, chirps_weeks_ds)
 
-        ds_to_plot=anomaly.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','step')
+        ds_to_plot=anomaly.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','number','step')
         vmin,vmax=gef.symmetric_vmin_vmax(ds_to_plot)
         gef.plot_panel_and_save(
             ds_to_plot,'tp','BrBG',fs,
@@ -343,7 +336,7 @@ for country in countries_to_downscale:
         chirps_weeks_ds_month=chirps_weeks_ds.isel(step=slice(0,4)).sum('step',keep_attrs=True).assign_coords(step=chirps_weeks_ds.isel(step=3).step).expand_dims('step')
         anomaly_month = gef.compute_rainfall_anomaly(rescaled_forecast_month, chirps_weeks_ds_month)
 
-        ds_to_plot_anom_month=anomaly_month.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','step')
+        ds_to_plot_anom_month=anomaly_month.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','number','step')
         vmin,vmax=gef.symmetric_vmin_vmax(ds_to_plot_anom_month)
         gef.plot_panel_and_save(
             ds_to_plot_anom_month,'tp','BrBG',fs,
@@ -363,12 +356,12 @@ for country in countries_to_downscale:
         gef.plot_admin1_county_breakdown(
             rescaled_forecast, chirps_weeks_ds, states1,
             save_dir=f'plots/Kenya/{date_str}/weekly/counties',
-            transpose_first=True
+            transpose_first=False
         )
 
         try:
             promt_unformat3={}
-            rescaled_forecast_kenya=rescaled_forecast.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2']))
+            rescaled_forecast_kenya=rescaled_forecast.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).mean('number')
             for region in states1_regions['region'].unique():
                 promt_raw=gef.clip_by_overlap(rescaled_forecast_kenya.tp, regions_kenya, region, threshold=0.15).mean({'latitude','longitude'})
                 promt_raw_dict=[{'raw_precip_mm':round(float(v),2)} for v in promt_raw]

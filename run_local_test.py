@@ -1,9 +1,9 @@
 """
-Run plot_s2s.py / IndianOceanState.py / plot_gefs.py / dowscale_dekade.py /
-run_rainfall_onset.py / replot_precip_shared_colorscale.py / ai_weather_briefing.py
-locally against pre-downloaded fixture data under test/, instead of the real download
-scripts or GitHub Actions. Mirrors the relevant steps of .github/workflows/daily_download2.0.yml,
-in the same order.
+Run plot_s2s.py / IndianOceanState.py / climate_indices_timeseries.py / plot_gefs.py /
+dowscale_dekade.py / run_rainfall_onset.py / replot_precip_shared_colorscale.py /
+ai_weather_briefing.py locally against pre-downloaded fixture data under test/, instead
+of the real download scripts or GitHub Actions. Mirrors the relevant steps of
+.github/workflows/daily_download2.0.yml, in the same order.
 
 Usage:
     python run_local_test.py --setup-only          # build test/run/ sandbox only
@@ -26,6 +26,7 @@ SANDBOX = TEST_DIR / "run"
 STAGES = [
     "plot_s2s",
     "IndianOceanState",
+    "climate_indices_timeseries",
     "plot_gefs",
     "dowscale_dekade",
     "run_rainfall_onset",

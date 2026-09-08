@@ -246,6 +246,20 @@ def open_forecast(date_str,name,path=None):
     ds=xr.concat([pf_daily_var,cf_daily_var],dim='number')
 
     return ds
+def nan_gaussian_filter(arr, sigma):
+    nan_mask = np.isnan(arr)
+    arr_filled = np.where(nan_mask, 0, arr)
+    
+    # smooth the data (with nans as 0) and the valid-data mask
+    smoothed = gaussian_filter(arr_filled, sigma=sigma)
+    weights = gaussian_filter((~nan_mask).astype(float), sigma=sigma)
+    
+    with np.errstate(invalid="ignore", divide="ignore"):
+        result = smoothed / weights
+    
+    # keep it nan where there was no valid data nearby at all
+    result[weights == 0] = np.nan
+    return result
 
 def rank_upscale_and_align(
     source_da,
@@ -366,12 +380,22 @@ def rank_upscale_and_align(
     output_dtypes=[aligned.dtype],
     )
     
+    
     # ---- Sort target ----
     # select the last year as this will be the forecast: smoothed.isel(year=-1)
     # then we clipi the values so the rank cannot be larger than the amount of years in the climatology: .clip(min=None,max=len(target_da['rank'])-1)
     sorted_target = target_da.isel(rank=smoothed.isel(year=-1).clip(min=None,max=len(target_da['rank'])-1))
 
-    return sorted_target.T
+    sorted_target = xr.apply_ufunc(
+    nan_gaussian_filter,
+    sorted_target,
+    kwargs={"sigma": 0.4},
+    input_core_dims=[["latitude", "longitude"]],
+    output_core_dims=[["latitude", "longitude"]],
+    vectorize=True,
+    output_dtypes=[aligned.dtype],
+    )
+    return sorted_target+target_da.isel(rank=0)*0
 
 def stack_climatology_steps(files, target_steps, base_path='', apply_rank_sort=False, bbox=None):
     """
@@ -463,7 +487,7 @@ def clip_to_shapefile(ds, shapefile_path, reproject_gdf=True, transpose=False, s
         gdf = gdf.to_crs(ds.rio.crs)
     clipped = ds.rio.clip(gdf.geometry, gdf.crs, drop=True, all_touched=all_touched)
     if transpose:
-        clipped = clipped.transpose('latitude', 'longitude', 'step')
+        clipped = clipped.transpose('latitude', 'longitude','number','step')
     if sortby_lat:
         clipped = clipped.sortby('latitude', ascending=False)
     return clipped
@@ -1109,6 +1133,48 @@ def open_mclimate(daily_all_vars,folder_path=f'{os.getcwd()}/m-climate/',var="T_
     m_climate = xr.open_dataset(folder_path+file, engine="netcdf4",decode_timedelta=True)
     
     return m_climate.sortby('latitude',ascending=False)
+
+def find_cached_mclimate(date_str, var, folder_path=f'{os.getcwd()}/m-climate/', max_gap_days=None):
+    """Find the m-climate/<var>/m-climate_*.nc file closest (by month-day, like
+    open_mclimate) to date_str. Returns its path, or None if the folder doesn't exist
+    or is empty, or (when max_gap_days is given) the closest file is further than that
+    many days away and so too stale to reuse instead of rebuilding from reforecasts."""
+    folder = f"{folder_path}/{var}/"
+    if not os.path.isdir(folder):
+        return None
+
+    pattern = re.compile(r"m-climate_(\d{4})-(\d{2})-(\d{2})\.nc")
+    target = datetime(2000, int(date_str[5:7]), int(date_str[8:10]))
+
+    best_path, best_gap = None, None
+    for fname in os.listdir(folder):
+        match = pattern.search(fname)
+        if not match:
+            continue
+        file_date = datetime(2000, int(match.group(2)), int(match.group(3)))
+        gap = abs((file_date - target).days)
+        gap = min(gap, 365 - gap)  # wrap around the new year
+        if best_gap is None or gap < best_gap:
+            best_path, best_gap = folder + fname, gap
+
+    if best_path is None:
+        return None
+    if max_gap_days is not None and best_gap > max_gap_days:
+        return None
+    return best_path
+
+
+def save_mclimate(ds, date_str, var, folder_path=f'{os.getcwd()}/m-climate/'):
+    """Save a freshly-built climatology Dataset under m-climate/<var>/m-climate_<date_str>.nc,
+    the same layout open_mclimate/find_cached_mclimate read back later (for this date_str or
+    any other date whose month-day lands close by)."""
+    folder = f"{folder_path}/{var}/"
+    os.makedirs(folder, exist_ok=True)
+    out_path = f"{folder}m-climate_{date_str}.nc"
+    ds.compute().to_netcdf(out_path)
+    print(f"Saved {var} climatology: {out_path}")
+    return out_path
+
 
 def list_github_folder(var,repo="alecjong-lab/ECMWF-S2S4AFRICA"):
     url = f"https://api.github.com/repos/{repo}/contents/m-climate/{var}"
@@ -2654,7 +2720,12 @@ def load_reforecasts(forecast_day, var_group, var, grid='1p5latx1p5lon',
     Example for Kenya: {"lat1": 6,     "lon1": 33,   "lat2": -5,    "lon2": 42}
     levels: list of pressure levels to select, only needed for pressure level variables
     time_range: number of lead days to select, default is 28 days
-    More variables, pressure levels and larger bounding boxes will result in a longer execution time and more memmory needed. So be cautious about choosing. 
+    More variables, pressure levels and larger bounding boxes will result in a longer execution time and more memmory needed. So be cautious about choosing.
+
+    Returns (reforecasts, closest_day_month): the actual reforecast archive day (as
+    "MM-DD") the 5-init-time window is centered on, which can differ from forecast_day
+    since reforecasts only exist every ~2 days - use this (not forecast_day) to label
+    any climatology cached from the result, so the filename matches what it contains.
     '''
     # early guard: pressure levels only make sense for pressure-level variables
     if var_group == 'single' and levels is not None:
@@ -2700,4 +2771,4 @@ def load_reforecasts(forecast_day, var_group, var, grid='1p5latx1p5lon',
             longitude=slice(bbox['lon1'], bbox['lon2']), latitude=slice(bbox['lat1'], bbox['lat2'])
         ).isel(step=time_range).compute()
 
-    return reforecasts
+    return reforecasts, closest_day_month

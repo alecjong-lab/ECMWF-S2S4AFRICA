@@ -206,7 +206,31 @@ edit_request_sst_vars = {
 }
 
 # ========================================================
-# PRECIPITATION (alt bounding box, Indian Ocean)
+# SST (Nino3.4 monitoring domain): a narrow 5N-5S band but nearly the
+# full longitude circle, since the CDS "area" filter can't itself
+# express a box that crosses the antimeridian like Nino3.4 (170E-120W) -
+# fetch the whole band instead and select the wraparound box locally
+# ========================================================
+
+nino34_bounding_box = [5, -180, -5, 179.5]
+
+sst_nino34_file = (
+    "ECMWF_s2s_{ftype}_sst_nino34_42days_5N-180W-5S-180E.grib"
+)
+
+edit_request_sst_nino34_vars = {
+    "level_type": "single_level",
+    "variable": ["sea_surface_temperature"],
+    "leadtime_hour": daily_leadtime_hours,
+    "area": nino34_bounding_box,
+}
+
+# ========================================================
+# PRECIPITATION (alt bounding box, Indian Ocean) - daily cadence (like the
+# main precip_file group) so downstream code can build a daily timeseries;
+# previously this was fetched weekly-only (by/168) to cut download volume,
+# so anything reading the resulting zarr that assumed 7-day-spaced steps
+# needs to subselect those same weekly marks from the daily series itself
 # ========================================================
 
 precip_alt_file = (
@@ -216,7 +240,7 @@ precip_alt_file = (
 edit_request_precip_alt = {
     "level_type": "single_level",
     "variable": ["total_precipitation"],
-    "leadtime_hour": ["0/to/1104/by/168"],
+    "leadtime_hour": ["0/to/1104/by/24"],
     "area": [20, 30, -20, 120],
 }
 
@@ -270,6 +294,7 @@ groups = [
     (wind500_file, f"ECMWF_s2s_500wind_{date_str}", edit_request_500wind_vars),
     (wind10_alt_file, f"ECMWF_s2s_10wind_alt_{date_str}", edit_request_10wind_alt_vars),
     (sst_file, f"ECMWF_s2s_sst_{date_str}", edit_request_sst_vars),
+    (sst_nino34_file, f"ECMWF_s2s_sst_nino34_{date_str}", edit_request_sst_nino34_vars),
     (precip_alt_file, f"ECMWF_s2s_precip_alt_{date_str}", edit_request_precip_alt),
     (tcw_file, f"ECMWF_s2s_tcw_{date_str}", edit_request_tcw),
     (q_u_file, f"ECMWF_s2s_q_u_{date_str}", edit_request_q_u),
