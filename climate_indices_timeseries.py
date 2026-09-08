@@ -98,8 +98,8 @@ if os.path.isdir(sst_path):
 
     anomaly_series['IOD_West_SST_50-70E_10S-10N'] = series_from_da(
         box_mean(sst_anom, 10, -10, 50, 70), 'IOD_West_SST_anom')
-    anomaly_series['IOD_East_SST_80-110E_10S-0N'] = series_from_da(
-        box_mean(sst_anom, 0, -10, 80, 110), 'IOD_East_SST_anom')
+    anomaly_series['IOD_East_SST_90-110E_10S-0N'] = series_from_da(
+        box_mean(sst_anom, 0, -10, 90, 110), 'IOD_East_SST_anom')
 else:
     print(f"WARNING: {sst_path} not found, skipping IOD indices")
 
