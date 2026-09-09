@@ -86,8 +86,8 @@ if os.path.isdir(sst_path):
 
     series['IOD_West_SST_50-70E_10S-10N'] = series_from_da(
         box_mean(sst_c, 10, -10, 50, 70), 'IOD_West_SST')
-    series['IOD_East_SST_80-110E_10S-0N'] = series_from_da(
-        box_mean(sst_c, 0, -10, 80, 110), 'IOD_East_SST')
+    series['IOD_East_SST_90-110E_10S-0N'] = series_from_da(
+        box_mean(sst_c, 0, -10, 90, 110), 'IOD_East_SST')
 
     # anomaly vs. climatology only reaches weekly resolution (climatology is stored
     # per-week); subtract in Kelvin so the offset from any degC conversion cancels out
