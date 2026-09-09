@@ -85,8 +85,8 @@ jobs:
 
       - name: Collect briefing plots
         run: |
-          mkdir -p "plots/${{ steps.date.outputs.date }}/briefing_plots"
-          mv ws_scripts/*.png "plots/${{ steps.date.outputs.date }}/briefing_plots/" 2>/dev/null || true
+          mkdir -p "plots/briefing/${{ steps.date.outputs.date }}"
+          mv ws_scripts/*.png "plots/briefing/${{ steps.date.outputs.date }}/" 2>/dev/null || true
 
       - name: Build briefing3 pptx
         continue-on-error: true
@@ -99,7 +99,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: briefing-plots
-          path: plots/${{ steps.date.outputs.date }}/briefing_plots/*.png
+          path: plots/briefing/${{ steps.date.outputs.date }}/*.png
 
       - name: Upload briefing pptx
         uses: actions/upload-artifact@v4
