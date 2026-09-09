@@ -285,7 +285,8 @@ for country in countries_to_downscale:
     )
 
     CE_Kenya_dwnscaled_timeseries=rescaled_forecast.sel(longitude=slice(36,42),latitude=slice(5,-5)).mean({'longitude','latitude'})
-    CE_Kenya_dwnscaled_timeseries.to_zarr(f'{data_path}/CE_Kenya_dwnscaled_timeseries.zarr', mode='w', consolidated=True)
+    CE_Kenya_dwnscaled_timeseries_daily=gef.disaggregate_weekly_to_daily(CE_Kenya_dwnscaled_timeseries.tp,data.sel(longitude=slice(36,42),latitude=slice(5,-5)).mean({'longitude','latitude'}).tp)
+    CE_Kenya_dwnscaled_timeseries_daily.to_zarr(f'{data_path}/CE_Kenya_dwnscaled_timeseries_daily.zarr', mode='w', consolidated=True)
 
     os.makedirs(f'plots/{country}/{date_str}/monthly/', exist_ok=True)
     ds_to_plot_month=rescaled_forecast_month.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','number','step')
@@ -296,24 +297,6 @@ for country in countries_to_downscale:
     )
 
     if country=='Kenya':
-        daily_downscaled=gef.disaggregate_weekly_to_daily(rescaled_forecast.tp, data.tp.mean('number'))
-        # Drop inherited dask/zarr chunk encoding (carried over from the source zarr
-        # stores this was derived from) so to_zarr picks fresh chunks instead of
-        # tripping its safe_chunks check on the new array shape.
-        for var in daily_downscaled.variables.values():
-            var.encoding.pop('chunks', None)
-            var.encoding.pop('preferred_chunks', None)
-        daily_downscaled.to_zarr(
-            f'{data_path}/daily_downscaled_kenya.zarr', mode='w', consolidated=True
-        )
-
-        ds_to_plot_daily=daily_downscaled.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2)).isel(step=slice(0,28)).mean('number')
-        gef.plot_panel_and_save(
-            ds_to_plot_daily.transpose('latitude','longitude','step'),'tp',gef.cmap,fs,
-            f'plots/{country}/{date_str}/weekly/weekly_precip_downscaled_disaggregated_daily.png',
-            vmin=0
-        )
-
         rescaled_forecast = rescaled_forecast.rio.write_crs("EPSG:4326")
         ds_to_plot = gef.clip_to_shapefile(rescaled_forecast, kenya_counties_shp, transpose=True)
         gef.plot_panel_and_save(

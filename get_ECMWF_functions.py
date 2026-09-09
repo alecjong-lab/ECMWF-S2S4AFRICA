@@ -7,7 +7,7 @@ import xarray as xr
 import cfgrib
 import geopandas as gpd
 import matplotlib
-matplotlib.use('Agg')
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import cartopy.crs as ccrs
@@ -2253,9 +2253,10 @@ def disaggregate_weekly_to_daily(
     Parameters
     ----------
     rescaled_forecast : xr.DataArray
-        Weekly downscaled forecast, dims (longitude, latitude, step).
-        step is timedelta64[ns], spaced 7 days apart, on the fine
-        (downscaled) grid.
+        Weekly downscaled forecast, dims (longitude, latitude, step) for
+        gridded data or (step,) for a 1D timeseries. step is
+        timedelta64[ns], spaced 7 days apart, on the fine (downscaled)
+        grid/point.
     data : xr.DataArray
         Daily, ensemble-mean, ACCUMULATED ECMWF forecast on its native
         1.5-degree grid, dims (longitude, latitude, step). step is
@@ -2265,10 +2266,11 @@ def disaggregate_weekly_to_daily(
     -------
     xr.Dataset
         Daily disaggregated forecast on rescaled_forecast's grid, dims
-        (longitude, latitude, step), one step per lead day covered by
-        rescaled_forecast's weekly steps. Variable, longitude, and latitude
-        attrs are carried over from rescaled_forecast; step attrs are
-        carried over from data.
+        matching rescaled_forecast plus step, one step per lead day covered
+        by rescaled_forecast's weekly steps. Variable attrs and all shared
+        coord attrs are carried over from rescaled_forecast; step attrs are
+        carried over from data. Gridded (2D) output is not smoothed here —
+        apply gaussian_filter_ignore_nan to the result yourself if needed.
 
     Notes
     -----
@@ -2284,9 +2286,13 @@ def disaggregate_weekly_to_daily(
     # accumulated -> daily increments (drops step=0)
     daily = data.diff("step")
 
-    # nearest-neighbor match: every fine grid cell -> nearest 1.5deg cell
-    lon2d, lat2d = xr.broadcast(rescaled_forecast.longitude, rescaled_forecast.latitude)
-    daily_matched = daily.sel(longitude=lon2d, latitude=lat2d, method="nearest")
+    if "longitude" in rescaled_forecast.dims and "latitude" in rescaled_forecast.dims:
+        # nearest-neighbor match: every fine grid cell -> nearest 1.5deg cell
+        lon2d, lat2d = xr.broadcast(rescaled_forecast.longitude, rescaled_forecast.latitude)
+        daily_matched = daily.sel(longitude=lon2d, latitude=lat2d, method="nearest")
+    else:
+        # 1D timeseries: rescaled_forecast and data already refer to the same point
+        daily_matched = daily
 
     week_length = np.timedelta64(7, "D")
     pieces = []
@@ -2301,23 +2307,13 @@ def disaggregate_weekly_to_daily(
         pieces.append(fraction * rescaled_forecast.sel(step=w))
 
     result = xr.concat(pieces, dim="step").sortby("step")
-    
-    #apply gaussian filter to smooth away the obvious artifacts but keep data similar
-    result = xr.apply_ufunc(
-    gaussian_filter_ignore_nan,
-    result,
-    kwargs={"sigma": 1.3},
-    input_core_dims=[["latitude", "longitude"]],
-    output_core_dims=[["latitude", "longitude"]],
-    vectorize=True,
-    output_dtypes=[result.dtype],
-    )
-    
+
     # preserve attributes from the source weekly forecast (and daily step attrs)
     result.name = rescaled_forecast.name
     result.attrs = dict(rescaled_forecast.attrs)
-    result["longitude"].attrs = dict(rescaled_forecast.longitude.attrs)
-    result["latitude"].attrs = dict(rescaled_forecast.latitude.attrs)
+    for coord in rescaled_forecast.coords:
+        if coord != "step" and coord in result.coords:
+            result[coord].attrs = dict(rescaled_forecast[coord].attrs)
     result["step"].attrs = dict(data.step.attrs)
 
     return result.to_dataset()
