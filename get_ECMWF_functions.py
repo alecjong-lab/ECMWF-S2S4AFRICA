@@ -1135,6 +1135,16 @@ def open_mclimate(daily_all_vars,folder_path=f'{os.getcwd()}/m-climate/',var="T_
     
     return m_climate.sortby('latitude',ascending=False)
 
+def drop_extra_climatology_dims(mclimate, forecast, keep=('step',)):
+    """Average away any dims present in a climatology Dataset/DataArray but absent
+    from the forecast it's about to be compared against (and not explicitly being
+    kept, e.g. 'step' for per-week alignment). Guards against a climatology that
+    wasn't fully reduced when it was built (e.g. a leftover reforecast 'init_time'
+    window dim) silently broadcasting arithmetic against the forecast into an
+    extra dimension instead of raising a clear error at build time."""
+    extra_dims = [d for d in mclimate.dims if d not in forecast.dims and d not in keep]
+    return mclimate.mean(extra_dims) if extra_dims else mclimate
+
 def find_cached_mclimate(date_str, var, folder_path=f'{os.getcwd()}/m-climate/', max_gap_days=None):
     """Find the m-climate/<var>/m-climate_*.nc file closest (by month-day, like
     open_mclimate) to date_str. Returns its path, or None if the folder doesn't exist

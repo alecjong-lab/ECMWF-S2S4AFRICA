@@ -129,7 +129,7 @@ try:
     # dekadal code paths (weekly comes out as longitude/latitude/step, dekadal as
     # latitude/longitude/step) -- dowscale_dekade.py always transposes right before
     # plotting, so do the same here rather than assume an order.
-    kenya_weekly = xr.open_dataset(f'{data_path}/data_weekly_Kenya_downscaled.nc').transpose('latitude', 'longitude', 'step')
+    kenya_weekly = xr.open_dataset(f'{data_path}/data_weekly_Kenya_downscaled.nc').transpose('latitude', 'longitude','number', 'step')
     kenya_monthly = (kenya_weekly.isel(step=slice(0, 4)).sum('step', keep_attrs=True)
                       .assign_coords(step=kenya_weekly.isel(step=3).step).expand_dims('step'))
     downscaled_jobs.append(('Kenya', 'weekly', kenya_weekly, WEEKLY_BBOXES['Kenya'],
@@ -140,14 +140,14 @@ except FileNotFoundError as e:
     print(f'  [skip] Kenya weekly/monthly downscaled: {e}')
 
 try:
-    kenya_dekade = xr.open_dataset(f'{data_path}/data_dekade_Kenya_downscaled.nc').transpose('latitude', 'longitude', 'step')
+    kenya_dekade = xr.open_dataset(f'{data_path}/data_dekade_Kenya_downscaled.nc').transpose('latitude', 'longitude','number', 'step')
     downscaled_jobs.append(('Kenya', 'dekadal', kenya_dekade, DEKADE_BBOXES['Kenya'],
                              f'{plots_path}/Kenya/{date_str}/dekadal/dekadal_precip_downscaled.png'))
 except FileNotFoundError as e:
     print(f'  [skip] Kenya dekadal downscaled: {e}')
 
 try:
-    great_horn_dekade = xr.open_dataset(f'{data_path}/data_dekade_Great_Horn_downscaled.nc').transpose('latitude', 'longitude', 'step')
+    great_horn_dekade = xr.open_dataset(f'{data_path}/data_dekade_Great_Horn_downscaled.nc').transpose('latitude', 'longitude','number', 'step')
     downscaled_jobs.append(('Great_Horn', 'dekadal', great_horn_dekade, DEKADE_BBOXES['Great_Horn'],
                              f'{plots_path}/Great_Horn/{date_str}/dekadal/dekadal_precip_downscaled.png'))
 except FileNotFoundError as e:

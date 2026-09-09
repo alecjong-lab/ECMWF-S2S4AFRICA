@@ -154,6 +154,12 @@ IO_sst=IO_sst_raw.isel(step=slice(None,4*28+1)).mean('step')
 IO_winds_mclimate=gef.open_mclimate(IO_winds,var='IO_10m_wind').sel(quantile=0.5)
 IO_sst_mclimate=gef.open_mclimate(IO_sst,var='IO_sst').sel(quantile=0.5)
 
+# guard against a climatology file that wasn't fully reduced when it was built
+# (e.g. a leftover reforecast 'init_time' window dim) silently broadcasting the
+# anomaly below into an extra dimension that plot_wind_and_sst_anomaly can't plot
+IO_winds_mclimate = gef.drop_extra_climatology_dims(IO_winds_mclimate, IO_winds)
+IO_sst_mclimate = gef.drop_extra_climatology_dims(IO_sst_mclimate, IO_sst)
+
 # monthly climatology: mean over the per-week climatology when present,
 # otherwise it's already a single monthly value
 winds_mclimate_monthly = IO_winds_mclimate.mean('step') if 'step' in IO_winds_mclimate.dims else IO_winds_mclimate

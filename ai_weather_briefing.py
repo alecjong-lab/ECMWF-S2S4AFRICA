@@ -211,18 +211,30 @@ def replace_picture(slide, shape, image_path):
     shape._element.getparent().remove(shape._element)
     slide.shapes.add_picture(image_path, left, top, width, height)
 
+# Missing pictures that should block the whole send (rather than going out with a
+# stale template placeholder in that slide) are tracked here and checked just
+# before prs.save() below.
+required_missing = []
+
+# ws_scripts/slide*.sh-sourced pictures are still being wired into this pipeline
+# (see populate_briefing_template3.py) and aren't reliably populated every day yet,
+# so a missing one is tolerated (warn, keep the template placeholder) rather than
+# blocking the send like the core forecast/diagnostic pictures below.
+optional_picture_names = set(briefing_plot_names)
+
 # Picture-only shapes (no AI narration) — matched by exact shape name,
-# wherever in the deck that shape happens to live. Skip (warn, don't crash)
-# when the source file isn't there yet -- e.g. plots/{date}/briefing_plots
-# is only populated by ws_scripts/slide*.sh today, not yet by this pipeline.
+# wherever in the deck that shape happens to live.
 for slide in prs.slides:
     for shape in slide.shapes:
         if shape.name in picture_paths:
             path = picture_paths[shape.name]
             if os.path.exists(path):
                 replace_picture(slide, shape, path)
+            elif shape.name in optional_picture_names:
+                print(f"WARNING: missing optional picture for '{shape.name}': {path}", file=sys.stderr)
             else:
-                print(f"WARNING: missing picture for '{shape.name}': {path}", file=sys.stderr)
+                print(f"WARNING: missing required picture for '{shape.name}': {path}", file=sys.stderr)
+                required_missing.append(shape.name)
 
 dt_obj = datetime.fromisoformat(date_str)
 day = dt_obj.day
@@ -248,7 +260,12 @@ for t, text in zip(slide_types, slide_text):
                 else:
                     set_slide_text(shape, text, font_size=13)
             elif shape.name == f"{t}_plot":
-                replace_picture(slide, shape, plot_paths[t])
+                path = plot_paths[t]
+                if os.path.exists(path):
+                    replace_picture(slide, shape, path)
+                else:
+                    print(f"WARNING: missing required picture for '{shape.name}': {path}", file=sys.stderr)
+                    required_missing.append(shape.name)
 
 # Extra date-bearing shapes that don't follow the "{type}_text" naming
 # convention: "gen_date" has a "-date-" placeholder inline in a longer
@@ -268,5 +285,13 @@ for slide in prs.slides:
                 runs[0].text = f"{short_date} Outlook"
                 for run in runs[1:]:
                     run.text = ""
+
+if required_missing:
+    print(
+        f"ERROR: {len(required_missing)} required picture(s) missing, refusing to save "
+        f"a briefing with stale template placeholders: {', '.join(required_missing)}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 prs.save(f"s2s_briefing_{date_str}.pptx")
