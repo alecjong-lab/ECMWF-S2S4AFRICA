@@ -23,9 +23,10 @@ Every slide should independently cover all regions relevant to its data (see "Re
 7. **Extreme Forecast Index (EFI)** — see `EFI` below.
 8. **Probability of Exceeding the Median** — see `p50` below.
 9. **Ensemble Mean Anomaly** — see `p50anom` below.
-10. **Overall Summary** — much shorter than the other slides. This is not a per-region breakdown. Write it as exactly two paragraphs, separated by a blank line, in this order:
-    - **Forecast:** a short paragraph on what the forecast says (the dominant signal across the country) and whether the raw precipitation sources (ECMWF, GEFS, downscaled, medium-range, and any others provided) agree or where they diverge. Keep this to a few sentences, not a regional recap.
-    - **Indicators:** a short paragraph on the indicators provided in the zone statistics. For now this is rainy-season onset only — use the `onset` field (from the rainfall-onset action: first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days). State early, on time, late, or not indicated in this forecast window, and give the calendar date when present. Typical climatological onset is mid-March for the Long Rains and mid-October for the Short Rains. If a region is `not indicated in this forecast window`, say so; do not invent a date from weekly millimetres. Later indicators will share this paragraph; do not add a skill-caveat paragraph.
+10. **Overall Summary** — much shorter than the other slides. This is not a per-region breakdown. Write it in this order, with a blank line between each block:
+    - **Forecast, weeks 1–2:** one or two direct sentences on the high-skill weeks. State the expected conditions and the regions (eastern, central, northwestern Kenya, and so on). Then name any source that is a notable outlier (e.g. GEFS showing a wetter week 2). On this slide only, it is fine to say "high confidence week 1 and 2 forecasts."
+    - **Forecast, weeks 3–4:** one direct sentence on the less-skill weeks 3–4. On this slide only, it is fine to say "less confident week 3 and 4 forecasts."
+    - **Indicators:** a short paragraph on the indicators in the zone statistics. For now this is rainy-season onset only — use the `onset` field (from the rainfall-onset action: first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days). Name the season (MAM Long Rains or OND Short Rains). If onset is not indicated, say so as a window, e.g. "Onset of the OND Short Rains is not indicated in the next 4 weeks, through 30 August." Do not invent a date from weekly millimetres. Later indicators will share this block.
 
 ## Multi-Source Raw Precipitation Comparison
 You will receive raw weekly precipitation from multiple independent sources — currently ECMWF S2S, raw GEFS, downscaled ECMWF, and medium-range ECMWF, but treat this as an open list rather than assuming exactly four, since more sources will be added over time. Each source gets its own slide (in the order above), and every slide after the first should explicitly compare its regional signal against all raw-precipitation sources already covered earlier in the sequence — not just note that a comparison exists, but say concretely whether the sources agree in direction, agree in magnitude, or genuinely disagree, per region and week where it matters. If a source only covers some of the 6 weeks (e.g. medium-range only covers weeks 1–2), only compare over the weeks it actually provides.
@@ -50,7 +51,7 @@ The forecast skill degrades significantly beyond week 2.
 Never present weeks 5–6 with the same skill as weeks 1–2. Do not repeat identical regional descriptions across weeks — if conditions persist, say so explicitly rather than restating them. Week 3 is the one exception to "don't repeat": always give it its own explicit clause even when the answer is simply "persists," since week 3 is where skill starts dropping and that transition itself is worth tracking for the meeting.
 
 !important!
-Never mention confidence explicitly, but always frame confidence in terms of forecast skill and ensemble agreement.
+Never mention confidence explicitly on slides 2–9; frame it in terms of forecast skill and ensemble agreement. The Overall Summary slide is the exception: there, "high confidence" for weeks 1–2 and "less confident" for weeks 3–4 is the required wording.
 
 ## Variables
 **Raw precipitation (raw_precip / medium_range_precip):** Raw weekly precipitation in millimetres from a given source (ECMWF, GEFS, downscaled ECMWF, medium-range ECMWF, or any additional source provided), before any climatological comparison. Discuss signals directly in terms of the absolute mm amounts, and interpret them in light of the season (see "Seasonal Context") — a low mm total is unremarkable in the dry season but notable during the rains. Medium-range precipitation is only provided for weeks 1–2.
@@ -156,6 +157,8 @@ Highlands West of the Rift Valley: A clear dry signal in weeks 1–2 (p50anom=-8
 Coast: Above-normal rainfall likely in week 1 (p50anom=+100%, +9mm), followed by a return to near-normal in week 2, then a moderate but consistent wet tendency (p50anom=+52%, +4mm) from week 3 through week 6.
 
 ---SLIDE---
-A strong dry anomaly dominates the west and northwest, with a wetter coastal signal that eases after week 2. ECMWF, GEFS, the downscaled product, and the medium-range forecast agree on that contrast through week 2; the one disagreement is a wetter GEFS and medium-range signal over the western highlands.
+High confidence week 1 and 2 forecasts indicate dry conditions are expected in eastern, central, and northwestern Kenya. The GEFS model is a notable outlier, showing a wetter week 2 over the western highlands.
 
-Onset of the Short Rains is not indicated in this forecast window.
+Less confident week 3 and 4 forecasts indicate the dry signal persists in the northwest, with a weaker wet tendency along the coast.
+
+Onset of the OND Short Rains is not indicated in the next 4 weeks, through 30 August.
