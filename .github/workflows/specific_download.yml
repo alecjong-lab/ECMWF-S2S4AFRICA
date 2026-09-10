@@ -115,6 +115,16 @@ jobs:
           WEEK_COUNTRIES: "Kenya,Ghana"
           DATE_STR: "${{ inputs.date_str }}"
 
+      - name: Install rclone
+        continue-on-error: true
+        run: curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        continue-on-error: true
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+
       - name: Generate AI weather briefing
         continue-on-error: true
         working-directory: main_repo

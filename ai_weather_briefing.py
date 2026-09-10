@@ -8,17 +8,27 @@ from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import MSO_AUTO_SIZE, PP_ALIGN
 from pptx.oxml.ns import qn
+import json
+import shutil
+import subprocess
 import requests
 
 prefix=os.environ["MAIN_PATH"]
 
-# Public Google Slides template (weather_briefing_kenya_template).
-# Override with BRIEFING_TEMPLATE_ID, or skip the download with BRIEFING_TEMPLATE_PATH.
+# Google Slides template (weather_briefing_kenya_template). Downloaded via the
+# rclone gdrive remote (same RCLONE_CONFIG as s2s-emails.xlsx). The file can
+# stay private if that Google account has access. Override with
+# BRIEFING_TEMPLATE_ID, GOOGLE_DRIVE_TOKEN, or BRIEFING_TEMPLATE_PATH.
 TEMPLATE_SLIDES_ID = os.environ.get(
     "BRIEFING_TEMPLATE_ID", "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
 )
 TEMPLATE_EXPORT_URL = (
     f"https://docs.google.com/presentation/d/{TEMPLATE_SLIDES_ID}/export/pptx"
+)
+DRIVE_EXPORT_URL = (
+    f"https://www.googleapis.com/drive/v3/files/{TEMPLATE_SLIDES_ID}/export"
+    "?mimeType=application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    "&supportsAllDrives=true"
 )
 
 if "DATE_STR" in os.environ:
@@ -70,18 +80,71 @@ summary = response.text
 # with open(f'{prefix}/prompts/digest_{date_str}.txt', 'w') as f:
 #     f.write(summary)
 
-def download_slides_template(dest_path):
-    resp = requests.get(TEMPLATE_EXPORT_URL, timeout=120)
-    resp.raise_for_status()
-    if not resp.content.startswith(b"PK"):
+def _rclone_drive_token(remote="gdrive"):
+    subprocess.run(
+        ["rclone", "about", f"{remote}:"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    dump = subprocess.run(
+        ["rclone", "config", "dump"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    remotes = json.loads(dump.stdout)
+    token_raw = remotes[remote]["token"]
+    token = json.loads(token_raw) if isinstance(token_raw, str) else token_raw
+    access = token.get("access_token")
+    if not access:
+        raise RuntimeError("rclone gdrive remote has no access_token")
+    return access
+
+
+def _drive_access_token():
+    env_token = os.environ.get("GOOGLE_DRIVE_TOKEN")
+    if env_token:
+        return env_token
+    if shutil.which("rclone"):
+        return _rclone_drive_token(os.environ.get("BRIEFING_RCLONE_REMOTE", "gdrive"))
+    return None
+
+
+def _write_pptx(dest_path, content, source):
+    if not content.startswith(b"PK"):
         raise RuntimeError(
-            "Google Slides export did not return a pptx "
-            f"(got {resp.headers.get('content-type', 'unknown')} from {TEMPLATE_EXPORT_URL})"
+            f"Drive template export did not return a pptx (source={source})"
         )
     os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
     with open(dest_path, "wb") as f:
-        f.write(resp.content)
+        f.write(content)
     return dest_path
+
+
+def download_slides_template(dest_path):
+    token = None
+    try:
+        token = _drive_access_token()
+    except Exception as exc:
+        print(f"WARNING: could not get a Drive token ({exc})", file=sys.stderr)
+
+    if token:
+        resp = requests.get(
+            DRIVE_EXPORT_URL,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        return _write_pptx(dest_path, resp.content, "Drive API")
+
+    print(
+        "WARNING: no Drive credentials; falling back to the public Slides export URL",
+        file=sys.stderr,
+    )
+    resp = requests.get(TEMPLATE_EXPORT_URL, timeout=120)
+    resp.raise_for_status()
+    return _write_pptx(dest_path, resp.content, TEMPLATE_EXPORT_URL)
 
 
 def shape_keys(shape):
