@@ -41,10 +41,10 @@ colors = ["white","#ffff00","#ffcc00", "#ff9900","#ff6600", "#ff3300","#ff0000"]
 cmap_efi = LinearSegmentedColormap.from_list("wgbrp", colors)
 
 # # # namibia botswana
-lat1=-15
-lat2=-29.5
-lon1=11
-lon2=29
+lat1=6
+lat2=-5
+lon1=33
+lon2=42
 
 import xarray as xr
 import os
