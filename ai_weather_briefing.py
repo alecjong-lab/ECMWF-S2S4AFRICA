@@ -31,12 +31,21 @@ promt_unformat1=_load_or_empty(f"{prefix}/promt_unformat1.json")
 promt_unformat2=_load_or_empty(f"{prefix}/promt_unformat2.json")
 promt_unformat3=_load_or_empty(f"{prefix}/promt_unformat3.json")
 
+try:
+    promt_unformat1 = gef.add_onset_from_netcdf(
+        promt_unformat1, f"{prefix}/data/{date_str}/rainfall_onset_s2s_Kenya.nc"
+    )
+    gef.save_dict(promt_unformat1, f"{prefix}/promt_unformat1.json")
+except Exception as exc:
+    print(f"add_onset_from_netcdf failed: {exc}")
+
 promt_unformat= promt_unformat1 | promt_unformat2 | promt_unformat3
 user_prompt = f"""
 Forecast date: {date_str}
 Country: Kenya
 Month: {date_str[5:7]}
-Zone statistics (6-week forecast):
+Zone statistics (6-week forecast).
+Onset dates come from the rainfall-onset action (first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days), median over ensemble members and grid cells in each region. Do not infer onset from weekly totals.
 {gef.format_prompt_data(promt_unformat)}
 """
 

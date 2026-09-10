@@ -132,6 +132,7 @@ jobs:
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           COUNTRIES: "Kenya"
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
 
       - name: Replot precip with shared color scale
         continue-on-error: true
