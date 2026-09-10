@@ -8,8 +8,18 @@ from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import MSO_AUTO_SIZE, PP_ALIGN
 from pptx.oxml.ns import qn
+import requests
 
 prefix=os.environ["MAIN_PATH"]
+
+# Public Google Slides template (weather_briefing_kenya_template).
+# Override with BRIEFING_TEMPLATE_ID, or skip the download with BRIEFING_TEMPLATE_PATH.
+TEMPLATE_SLIDES_ID = os.environ.get(
+    "BRIEFING_TEMPLATE_ID", "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
+)
+TEMPLATE_EXPORT_URL = (
+    f"https://docs.google.com/presentation/d/{TEMPLATE_SLIDES_ID}/export/pptx"
+)
 
 if "DATE_STR" in os.environ:
     date_str=os.environ["DATE_STR"]
@@ -60,6 +70,53 @@ summary = response.text
 # with open(f'{prefix}/prompts/digest_{date_str}.txt', 'w') as f:
 #     f.write(summary)
 
+def download_slides_template(dest_path):
+    resp = requests.get(TEMPLATE_EXPORT_URL, timeout=120)
+    resp.raise_for_status()
+    if not resp.content.startswith(b"PK"):
+        raise RuntimeError(
+            "Google Slides export did not return a pptx "
+            f"(got {resp.headers.get('content-type', 'unknown')} from {TEMPLATE_EXPORT_URL})"
+        )
+    os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
+    with open(dest_path, "wb") as f:
+        f.write(resp.content)
+    return dest_path
+
+
+def shape_keys(shape):
+    """PowerPoint name plus Google Slides alt-text title/description.
+
+    A Slides → pptx export typically renames objects to 'Google Shape;…';
+    placeholder ids are preserved as cNvPr @title / @descr.
+    """
+    keys = []
+    seen = set()
+
+    def _add(value):
+        if not value:
+            return
+        value = value.strip()
+        if value and value not in seen:
+            seen.add(value)
+            keys.append(value)
+
+    _add(getattr(shape, "name", None))
+    for el in shape._element.iter():
+        if el.tag.endswith("}cNvPr"):
+            _add(el.get("title"))
+            _add(el.get("descr"))
+            break
+    return keys
+
+
+def first_mapped(shape, mapping):
+    for key in shape_keys(shape):
+        if key in mapping:
+            return key, mapping[key]
+    return None, None
+
+
 def set_slide_text(shape, text, font_size=12, font_name="Calibri", align=None):
     tf = shape.text_frame
     tf.clear()
@@ -109,7 +166,23 @@ def set_slide_text(shape, text, font_size=12, font_name="Calibri", align=None):
             run.font.size = Pt(font_size)
             run.font.name = font_name
 
-prs = Presentation("WeatherbriefingKenya_template3.pptx")
+template_path = os.environ.get("BRIEFING_TEMPLATE_PATH")
+if not template_path:
+    template_path = os.path.join(prefix, "WeatherbriefingKenya_template_download.pptx")
+    try:
+        download_slides_template(template_path)
+    except Exception as exc:
+        fallback = "WeatherbriefingKenya_template3.pptx"
+        if os.path.isfile(fallback):
+            print(
+                f"WARNING: Drive template download failed ({exc}); using {fallback}",
+                file=sys.stderr,
+            )
+            template_path = fallback
+        else:
+            raise
+
+prs = Presentation(template_path)
 text = summary
 slide_text = text.split("---SLIDE---")
 
@@ -222,19 +295,20 @@ required_missing = []
 # blocking the send like the core forecast/diagnostic pictures below.
 optional_picture_names = set(briefing_plot_names)
 
-# Picture-only shapes (no AI narration) — matched by exact shape name,
+# Picture-only shapes (no AI narration) — matched by shape name or alt text,
 # wherever in the deck that shape happens to live.
 for slide in prs.slides:
-    for shape in slide.shapes:
-        if shape.name in picture_paths:
-            path = picture_paths[shape.name]
-            if os.path.exists(path):
-                replace_picture(slide, shape, path)
-            elif shape.name in optional_picture_names:
-                print(f"WARNING: missing optional picture for '{shape.name}': {path}", file=sys.stderr)
-            else:
-                print(f"WARNING: missing required picture for '{shape.name}': {path}", file=sys.stderr)
-                required_missing.append(shape.name)
+    for shape in list(slide.shapes):
+        key, path = first_mapped(shape, picture_paths)
+        if key is None:
+            continue
+        if os.path.exists(path):
+            replace_picture(slide, shape, path)
+        elif key in optional_picture_names:
+            print(f"WARNING: missing optional picture for '{key}': {path}", file=sys.stderr)
+        else:
+            print(f"WARNING: missing required picture for '{key}': {path}", file=sys.stderr)
+            required_missing.append(key)
 
 dt_obj = datetime.fromisoformat(date_str)
 day = dt_obj.day
@@ -245,27 +319,34 @@ month_abbrevs = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
                   7: "Jul", 8: "Aug", 9: "Sept", 10: "Oct", 11: "Nov", 12: "Dec"}
 short_date = f"{day} {month_abbrevs[dt_obj.month]} {dt_obj.strftime('%Y')}"
 
-# AI-narrated slide types. Template3 no longer places "{type}_text"/
+# AI-narrated slide types. The Drive template no longer places "{type}_text"/
 # "{type}_plot" shapes at the same slide index as slide_types (they're
-# scattered among many new picture-only slides), so match by name across
-# the whole deck instead of assuming slide i holds slide_types[i].
-for t, text in zip(slide_types, slide_text):
-    for slide in prs.slides:
-        for shape in slide.shapes:
-            if shape.name == f"{t}_text":
-                if t == 'date':
-                    set_slide_text(shape, formatted_date, font_size=24, font_name='Karla Medium', align=PP_ALIGN.CENTER)
-                elif t == 'sum':
-                    set_slide_text(shape, text, font_size=17)
-                else:
-                    set_slide_text(shape, text, font_size=13)
-            elif shape.name == f"{t}_plot":
-                path = plot_paths[t]
-                if os.path.exists(path):
-                    replace_picture(slide, shape, path)
-                else:
-                    print(f"WARNING: missing required picture for '{shape.name}': {path}", file=sys.stderr)
-                    required_missing.append(shape.name)
+# scattered among many new picture-only slides), so match by name or alt text
+# across the whole deck instead of assuming slide i holds slide_types[i].
+narrated_text = {f"{t}_text": (t, body) for t, body in zip(slide_types, slide_text)}
+narrated_plot = {f"{t}_plot": t for t in slide_types if t in plot_paths}
+
+for slide in prs.slides:
+    for shape in list(slide.shapes):
+        text_key, spec = first_mapped(shape, narrated_text)
+        if spec is not None:
+            t, body = spec
+            if t == "date":
+                set_slide_text(shape, formatted_date, font_size=24, font_name="Karla Medium", align=PP_ALIGN.CENTER)
+            elif t == "sum":
+                set_slide_text(shape, body, font_size=17)
+            else:
+                set_slide_text(shape, body, font_size=13)
+            continue
+        plot_key, t = first_mapped(shape, narrated_plot)
+        if t is None:
+            continue
+        path = plot_paths[t]
+        if os.path.exists(path):
+            replace_picture(slide, shape, path)
+        else:
+            print(f"WARNING: missing required picture for '{plot_key}': {path}", file=sys.stderr)
+            required_missing.append(plot_key)
 
 # Extra date-bearing shapes that don't follow the "{type}_text" naming
 # convention: "gen_date" has a "-date-" placeholder inline in a longer
@@ -274,12 +355,13 @@ for t, text in zip(slide_types, slide_text):
 # formatting rather than going through set_slide_text.
 for slide in prs.slides:
     for shape in slide.shapes:
-        if shape.name == "gen_date":
+        keys = set(shape_keys(shape))
+        if "gen_date" in keys:
             for p in shape.text_frame.paragraphs:
                 for run in p.runs:
                     if "-date-" in run.text:
                         run.text = run.text.replace("-date-", formatted_date)
-        elif shape.name == "sum title":
+        elif "sum title" in keys:
             runs = shape.text_frame.paragraphs[0].runs
             if runs:
                 runs[0].text = f"{short_date} Outlook"
