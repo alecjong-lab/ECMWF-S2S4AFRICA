@@ -1,0 +1,127 @@
+# Manual dry-run of the Kenya briefing email/Drive path.
+# Skips ECMWF/GEFS downloads: reuses plots already on GCS for DATE_STR.
+name: Test Kenya briefing email
+
+on:
+  workflow_dispatch:
+    inputs:
+      date_str:
+        description: "Forecast date YYYY-MM-DD (blank = 2 days ago)"
+        required: false
+        default: ""
+      to_email:
+        description: "Only recipient for this test"
+        required: false
+        default: "genevieve@rhizaresearch.org"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  briefing-email:
+    runs-on: ubuntu-latest
+    env:
+      BUCKET: africa-forecasting-data
+      TEST_EMAIL: ${{ inputs.to_email || 'genevieve@rhizaresearch.org' }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Resolve forecast date
+        id: date
+        run: |
+          if [ -n "${{ inputs.date_str }}" ]; then
+            date="${{ inputs.date_str }}"
+          else
+            date="$(date -u -d '2 days ago' +%Y-%m-%d)"
+          fi
+          echo "date=$date" >> "$GITHUB_OUTPUT"
+          echo "Using DATE_STR=$date, emailing $TEST_EMAIL"
+
+      - name: Auth to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
+          service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
+          export_environment_variables: true
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Pull existing plots from GCS
+        continue-on-error: true
+        run: |
+          date="${{ steps.date.outputs.date }}"
+          for rel in \
+            "plots/Kenya/${date}" \
+            "plots/Great_Horn/${date}" \
+            "plots/diagnostics/${date}" \
+            "plots/briefing/${date}"
+          do
+            mkdir -p "$rel"
+            gcloud storage rsync -r "gs://${BUCKET}/${rel}" "$rel" || true
+          done
+          echo "Pulled plot dirs:"
+          find plots -type f -name '*.png' | head -50
+
+      - name: Install rclone
+        run: curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+
+      - name: Generate AI weather briefing
+        env:
+          MAIN_PATH: ${{ github.workspace }}/
+          DATE_STR: ${{ steps.date.outputs.date }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
+        run: python ai_weather_briefing.py
+
+      - name: Upload briefing artifact
+        if: hashFiles(format('s2s_briefing_{0}.pptx', steps.date.outputs.date)) != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-s2s-briefing
+          path: s2s_briefing_${{ steps.date.outputs.date }}.pptx
+
+      - name: Upload briefing to Drive and share
+        if: hashFiles(format('s2s_briefing_{0}.pptx', steps.date.outputs.date)) != ''
+        id: drive
+        continue-on-error: true
+        run: |
+          python publish_briefing_to_drive.py \
+            --file "s2s_briefing_${{ steps.date.outputs.date }}.pptx" \
+            --dest "gdrive:S2S_briefings/Kenya/" \
+            --emails "${{ env.TEST_EMAIL }}" \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Email test briefing
+        if: hashFiles(format('s2s_briefing_{0}.pptx', steps.date.outputs.date)) != ''
+        uses: dawidd6/action-send-mail@v16
+        with:
+          server_address: smtp.resend.com
+          server_port: 587
+          username: resend
+          password: ${{ secrets.RESEND_API_KEY }}
+          subject: "[TEST] Kenya S2S briefing ${{ steps.date.outputs.date }}"
+          to: ${{ env.TEST_EMAIL }}
+          from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
+          body: |
+            Test run of the Kenya briefing pipeline (not the subscriber list).
+            Date: ${{ steps.date.outputs.date }}
+            Drive copy: ${{ steps.drive.outputs.drive_url }}
+          reply_to: genevieve@rhizaresearch.org
+          attachments: s2s_briefing_${{ steps.date.outputs.date }}.pptx
