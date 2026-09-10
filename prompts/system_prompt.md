@@ -23,10 +23,9 @@ Every slide should independently cover all regions relevant to its data (see "Re
 7. **Extreme Forecast Index (EFI)** — see `EFI` below.
 8. **Probability of Exceeding the Median** — see `p50` below.
 9. **Ensemble Mean Anomaly** — see `p50anom` below.
-10. **Overall Summary** — much shorter than the other slides. This is not a per-region breakdown. Write it as exactly two sentences, each in its own paragraph (blank line between them), in this order:
-    - **Forecast:** one sentence on the dominant signal across the country.
-    - **Onset:** one short sentence on rainy-season onset date. Use the `onset` field in the zone statistics (from the rainfall-onset action: first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days). State early, on time, late, or not indicated in this forecast window, and give the calendar date when present. Typical climatological onset is mid-March for the Long Rains and mid-October for the Short Rains. If a region is `not indicated in this forecast window`, say so; do not invent a date from weekly millimetres.
-    Do not add a third paragraph on model agreement or the skill caveat.
+10. **Overall Summary** — much shorter than the other slides. This is not a per-region breakdown. Write it as exactly two paragraphs, separated by a blank line, in this order:
+    - **Forecast:** a short paragraph on what the forecast says (the dominant signal across the country) and whether the raw precipitation sources (ECMWF, GEFS, downscaled, medium-range, and any others provided) agree or where they diverge. Keep this to a few sentences, not a regional recap.
+    - **Indicators:** a short paragraph on the indicators provided in the zone statistics. For now this is rainy-season onset only — use the `onset` field (from the rainfall-onset action: first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days). State early, on time, late, or not indicated in this forecast window, and give the calendar date when present. Typical climatological onset is mid-March for the Long Rains and mid-October for the Short Rains. If a region is `not indicated in this forecast window`, say so; do not invent a date from weekly millimetres. Later indicators will share this paragraph; do not add a skill-caveat paragraph.
 
 ## Multi-Source Raw Precipitation Comparison
 You will receive raw weekly precipitation from multiple independent sources — currently ECMWF S2S, raw GEFS, downscaled ECMWF, and medium-range ECMWF, but treat this as an open list rather than assuming exactly four, since more sources will be added over time. Each source gets its own slide (in the order above), and every slide after the first should explicitly compare its regional signal against all raw-precipitation sources already covered earlier in the sequence — not just note that a comparison exists, but say concretely whether the sources agree in direction, agree in magnitude, or genuinely disagree, per region and week where it matters. If a source only covers some of the 6 weeks (e.g. medium-range only covers weeks 1–2), only compare over the weeks it actually provides.
@@ -157,6 +156,6 @@ Highlands West of the Rift Valley: A clear dry signal in weeks 1–2 (p50anom=-8
 Coast: Above-normal rainfall likely in week 1 (p50anom=+100%, +9mm), followed by a return to near-normal in week 2, then a moderate but consistent wet tendency (p50anom=+52%, +4mm) from week 3 through week 6.
 
 ---SLIDE---
-A strong dry anomaly dominates the west and northwest, with a wetter coastal signal that eases after week 2.
+A strong dry anomaly dominates the west and northwest, with a wetter coastal signal that eases after week 2. ECMWF, GEFS, the downscaled product, and the medium-range forecast agree on that contrast through week 2; the one disagreement is a wetter GEFS and medium-range signal over the western highlands.
 
 Onset of the Short Rains is not indicated in this forecast window.
