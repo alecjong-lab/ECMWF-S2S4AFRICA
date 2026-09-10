@@ -55,7 +55,7 @@ def drive_request(method, url, token, body=None):
         raise RuntimeError(f"Drive API {method} {url} failed ({exc.code}): {detail}") from exc
 
 
-def share_reader(file_id, email, token):
+def share_commenter(file_id, email, token):
     url = (
         f"https://www.googleapis.com/drive/v3/files/{file_id}/permissions"
         "?sendNotificationEmail=false&supportsAllDrives=true"
@@ -65,7 +65,7 @@ def share_reader(file_id, email, token):
             "POST",
             url,
             token,
-            {"role": "reader", "type": "user", "emailAddress": email},
+            {"role": "commenter", "type": "user", "emailAddress": email},
         )
         return "shared"
     except RuntimeError as exc:
@@ -86,7 +86,7 @@ def main():
     parser.add_argument(
         "--emails",
         default="",
-        help="Comma-separated addresses to grant reader access",
+        help="Comma-separated addresses to grant commenter access",
     )
     parser.add_argument("--remote", default="gdrive")
     args = parser.parse_args()
@@ -120,7 +120,7 @@ def main():
 
     emails = [e.strip() for e in args.emails.split(",") if e.strip()]
     for email in emails:
-        status = share_reader(file_id, email, token)
+        status = share_commenter(file_id, email, token)
         print(f"share {email}: {status}", file=sys.stderr)
 
     print(f"drive_file_id={file_id}")
