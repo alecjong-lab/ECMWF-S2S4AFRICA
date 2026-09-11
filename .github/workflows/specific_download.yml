@@ -115,6 +115,16 @@ jobs:
           WEEK_COUNTRIES: "Kenya,Ghana"
           DATE_STR: "${{ inputs.date_str }}"
 
+      - name: Install rclone
+        continue-on-error: true
+        run: curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        continue-on-error: true
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+          
       - name: Run rainfall onset
         continue-on-error: true
         working-directory: main_repo
@@ -133,6 +143,7 @@ jobs:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           DATE_STR: "${{ inputs.date_str }}"
+          BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
 
       # ── Convert NetCDF → JSON and update catalog ─────────────────
       - name: Convert NetCDF and update catalog

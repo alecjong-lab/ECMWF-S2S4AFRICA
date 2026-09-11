@@ -113,6 +113,16 @@ jobs:
           WEEK_COUNTRIES: "Kenya"
           DATE_STR: "${{ inputs.date_str }}"
 
+      - name: Install rclone
+        continue-on-error: true
+        run: curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        continue-on-error: true
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+          
       - name: Run rainfall onset
         continue-on-error: true
         working-directory: main_repo
@@ -131,6 +141,7 @@ jobs:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           DATE_STR: "${{ inputs.date_str }}"
+          BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
 
       # ── Convert NetCDF → JSON and update catalog ─────────────────
       - name: Convert NetCDF and update catalog
@@ -443,6 +454,33 @@ jobs:
 
           echo "list=$list" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout publish script
+        if: steps.check_plots.outputs.plots_ok == 'true'
+        uses: actions/checkout@v4
+        with:
+          path: repo_scripts
+
+      - name: Install rclone
+        if: steps.check_plots.outputs.plots_ok == 'true'
+        run: curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        if: steps.check_plots.outputs.plots_ok == 'true'
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+
+      - name: Upload Kenya briefing to Drive and share
+        if: steps.check_plots.outputs.plots_ok == 'true'
+        id: drive
+        continue-on-error: true
+        run: |
+          python repo_scripts/publish_briefing_to_drive.py \
+            --file "s2s_briefing_${{ inputs.date_str }}.pptx" \
+            --dest "gdrive:S2S_briefings/Kenya/" \
+            --emails "${{ matrix.emails }}" \
+            >> "$GITHUB_OUTPUT"
+
       - name: Email out generated plots for Kenya
         if: steps.check_plots.outputs.plots_ok == 'true'
         uses: dawidd6/action-send-mail@v16
@@ -455,8 +493,9 @@ jobs:
           to: ${{ matrix.emails }}
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            Attached are dekadal and weekly outlooks and historical station data related
-            to the subseasonal forecast. You can also browse the full archive (except for
-            the station data) at https://console.cloud.google.com/storage/browser/africa-forecasting-data .
+            Attached is today's Kenya S2S weather briefing and historical station data.
+            A copy is also on Google Drive: ${{ steps.drive.outputs.drive_url }}
+            You can browse the full plot archive (except station data) at
+            https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
           attachments: ${{ steps.attachments.outputs.list }}
