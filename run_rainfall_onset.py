@@ -83,6 +83,18 @@ def clean_for_netcdf(da):
     return da
 
 
+def stack_reforecast_years(onset_per_year):
+    """Combine a list of per-year onset DataArrays (each dims: number, latitude,
+    longitude) into one DataArray with a single 'number' dim covering every
+    (year, ensemble member) combination -- so plot_onset_map's existing
+    mean/'% of members found an onset' logic (which reduces over 'number')
+    doubles as an average over the reforecast climatology without changes."""
+    onset = xr.concat(onset_per_year, dim='year').rename({'number': 'member'})
+    if 'init_time' in onset.coords:
+        onset = onset.drop_vars('init_time')
+    return onset.stack(number=('year', 'member')).reset_index('number', drop=True)
+
+
 def build_discrete_cmap(vmin, vmax, n_shades=4):
     """Discrete colormap: 5 main color bands (sand, green, cyan, pink-purple, gray),
     each split into n_shades discrete light->dark steps.
@@ -328,6 +340,20 @@ try:
     plot_onset_map(onset_s2s, bbox, pd.Timestamp(s2s.time.values).year, title, f'{plot_dir}/onset_s2s.png',
                    forecast_start=universal_forecast_start, n_time=universal_n_time)
 
+    # ICPAC_10mm: same wet-spell definition, but a 10mm (not 20mm) 3-day wet-spell total
+    onset_s2s_icpac10mm = gef.rainfall_onset_date(s2s_daily, wet_spell_thresh=10.0, time_dim='step', valid_time=valid_time)
+    clean_for_netcdf(onset_s2s_icpac10mm).to_netcdf(f'{data_path}/rainfall_onset_icpac10mm_s2s_{country}.nc')
+    summarize('S2S (ICPAC_10mm)', onset_s2s_icpac10mm)
+
+    title_icpac10mm = (
+        f'S2S rainy season onset (ICPAC_10mm) — {country}\n'
+        f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
+        f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
+    )
+    plot_onset_map(onset_s2s_icpac10mm, bbox, pd.Timestamp(s2s.time.values).year, title_icpac10mm,
+                   f'{plot_dir}/onset_s2s_icpac10mm.png',
+                   forecast_start=universal_forecast_start, n_time=universal_n_time)
+
     onset_s2s_accum = gef.rainfall_onset_date_accum(s2s_daily, time_dim='step', valid_time=valid_time)
     clean_for_netcdf(onset_s2s_accum).to_netcdf(f'{data_path}/rainfall_onset_accum_s2s_{country}.nc')
     summarize('S2S (accum)', onset_s2s_accum)
@@ -342,6 +368,71 @@ try:
                    forecast_start=universal_forecast_start, n_time=universal_n_time, search_days=30)
 except Exception as e:
     print(f"S2S: could not compute onset from {s2s_path} ({e}), skipping")
+
+# ---- S2S reforecast climatology (ECMWF only -- GEFS/downscaled have no public
+# reforecast archive to build a climatology from) -----------------------------
+try:
+    # full 46-day horizon like the operational S2S branch above (not truncated to
+    # 28 days), since the accum definition needs the full search window near the
+    # end of the horizon
+    reforecast_pr = gef.load_reforecast(date_str, 'single', 'pr', bbox=bbox, time_range=slice(0, 46), all_years=True)
+    reforecast_daily = reforecast_pr * 86400
+    reforecast_daily.attrs = dict(reforecast_pr.attrs)
+    reforecast_daily.attrs['units'] = 'mm day-1'
+
+    # onset has to be computed one reforecast year at a time: rainfall_onset_date's
+    # absolute-date lookup assumes valid_time varies only along time_dim ("step"), so
+    # passing one valid_time covering every year at once (each with its own calendar
+    # dates) would misalign the lookup -- looping keeps each year's own 1-D valid_time
+    # correct, and the results are combined into a climatology afterward
+    hold_onset_clim, hold_onset_clim_icpac10mm, hold_onset_clim_accum = [], [], []
+    for y in range(len(reforecast_daily.init_time.values)):
+        year_da = reforecast_daily.isel(init_time=y)
+        valid_time_year = year_da.init_time + year_da.step
+
+        hold_onset_clim.append(gef.rainfall_onset_date(year_da, time_dim='step', valid_time=valid_time_year))
+        hold_onset_clim_icpac10mm.append(gef.rainfall_onset_date(year_da, wet_spell_thresh=10.0, time_dim='step', valid_time=valid_time_year))
+        hold_onset_clim_accum.append(gef.rainfall_onset_date_accum(year_da, time_dim='step', valid_time=valid_time_year))
+
+    onset_s2s_clim = stack_reforecast_years(hold_onset_clim)
+    clean_for_netcdf(onset_s2s_clim).to_netcdf(f'{data_path}/rainfall_onset_s2s_climatology_{country}.nc')
+    summarize('S2S climatology', onset_s2s_clim)
+
+    title = (
+        f'S2S climatological rainy season onset — {country}\n'
+        f'{onset_s2s_clim.sizes["number"]} reforecast year/member combinations, same calendar day as {date_str}'
+    )
+    plot_onset_map(onset_s2s_clim, bbox, pd.Timestamp(date_str).year, title, f'{plot_dir}/onset_s2s_climatology.png',
+                   forecast_start=universal_forecast_start or pd.Timestamp(valid_time_year.min().values),
+                   n_time=universal_n_time or reforecast_daily.sizes['step'])
+
+    onset_s2s_clim_icpac10mm = stack_reforecast_years(hold_onset_clim_icpac10mm)
+    clean_for_netcdf(onset_s2s_clim_icpac10mm).to_netcdf(f'{data_path}/rainfall_onset_icpac10mm_s2s_climatology_{country}.nc')
+    summarize('S2S climatology (ICPAC_10mm)', onset_s2s_clim_icpac10mm)
+
+    title_icpac10mm = (
+        f'S2S climatological rainy season onset (ICPAC_10mm) — {country}\n'
+        f'{onset_s2s_clim_icpac10mm.sizes["number"]} reforecast year/member combinations, same calendar day as {date_str}'
+    )
+    plot_onset_map(onset_s2s_clim_icpac10mm, bbox, pd.Timestamp(date_str).year, title_icpac10mm,
+                   f'{plot_dir}/onset_s2s_climatology_icpac10mm.png',
+                   forecast_start=universal_forecast_start or pd.Timestamp(valid_time_year.min().values),
+                   n_time=universal_n_time or reforecast_daily.sizes['step'])
+
+    onset_s2s_clim_accum = stack_reforecast_years(hold_onset_clim_accum)
+    clean_for_netcdf(onset_s2s_clim_accum).to_netcdf(f'{data_path}/rainfall_onset_accum_s2s_climatology_{country}.nc')
+    summarize('S2S climatology (accum)', onset_s2s_clim_accum)
+
+    title_accum = (
+        f'S2S climatological start of growing season — {country}\n'
+        f'{onset_s2s_clim_accum.sizes["number"]} reforecast year/member combinations, same calendar day as {date_str}'
+    )
+    plot_onset_map(onset_s2s_clim_accum, bbox, pd.Timestamp(date_str).year, title_accum,
+                   f'{plot_dir}/onset_s2s_climatology_accum.png',
+                   forecast_start=universal_forecast_start or pd.Timestamp(valid_time_year.min().values),
+                   n_time=universal_n_time or reforecast_daily.sizes['step'], search_days=30)
+except Exception as e:
+    print(f"S2S climatology: could not compute onset from reforecast archive ({e}), skipping")
 
 # ---- GEFS forecast ----------------------------------------------------------
 gefs_path = f'{data_path}/gefs/gefs_{country.lower()}.zarr'
@@ -361,6 +452,21 @@ try:
         f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
     )
     plot_onset_map(onset_gefs, bbox, pd.Timestamp(gefs.time.values).year, title, f'{plot_dir}/onset_gefs.png',
+                   forecast_start=universal_forecast_start or pd.Timestamp(valid_time.min().values),
+                   n_time=universal_n_time or gefs.tp.sizes['step'])
+
+    # ICPAC_10mm: same wet-spell definition, but a 10mm (not 20mm) 3-day wet-spell total
+    onset_gefs_icpac10mm = gef.rainfall_onset_date(gefs.tp, wet_spell_thresh=10.0, time_dim='step', valid_time=valid_time)
+    clean_for_netcdf(onset_gefs_icpac10mm).to_netcdf(f'{data_path}/rainfall_onset_icpac10mm_gefs_{country}.nc')
+    summarize('GEFS (ICPAC_10mm)', onset_gefs_icpac10mm)
+
+    title_icpac10mm = (
+        f'GEFS rainy season onset (ICPAC_10mm) — {country}\n'
+        f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
+        f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
+    )
+    plot_onset_map(onset_gefs_icpac10mm, bbox, pd.Timestamp(gefs.time.values).year, title_icpac10mm,
+                   f'{plot_dir}/onset_gefs_icpac10mm.png',
                    forecast_start=universal_forecast_start or pd.Timestamp(valid_time.min().values),
                    n_time=universal_n_time or gefs.tp.sizes['step'])
 
@@ -405,6 +511,21 @@ if country == 'Kenya':
             f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
         )
         plot_onset_map(onset_downscaled, bbox, pd.Timestamp(init_date).year, title, f'{plot_dir}/onset_downscaled.png',
+                       forecast_start=universal_forecast_start or pd.Timestamp(valid_time.min().values),
+                       n_time=universal_n_time or da.sizes['step'])
+
+        # ICPAC_10mm: same wet-spell definition, but a 10mm (not 20mm) 3-day wet-spell total
+        onset_downscaled_icpac10mm = gef.rainfall_onset_date(da, wet_spell_thresh=10.0, time_dim='step', valid_time=valid_time)
+        clean_for_netcdf(onset_downscaled_icpac10mm).to_netcdf(f'{data_path}/rainfall_onset_icpac10mm_downscaled_{country}.nc')
+        summarize('downscaled (ICPAC_10mm)', onset_downscaled_icpac10mm)
+
+        title_icpac10mm = (
+            f'Downscaled rainy season onset (ICPAC_10mm) — {country}\n'
+            f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
+            f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
+        )
+        plot_onset_map(onset_downscaled_icpac10mm, bbox, pd.Timestamp(init_date).year, title_icpac10mm,
+                       f'{plot_dir}/onset_downscaled_icpac10mm.png',
                        forecast_start=universal_forecast_start or pd.Timestamp(valid_time.min().values),
                        n_time=universal_n_time or da.sizes['step'])
 
