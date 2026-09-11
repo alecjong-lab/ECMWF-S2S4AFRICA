@@ -1,0 +1,475 @@
+name: Test Pipeline (manual)
+
+# Sandbox for trying out new/changed pipeline steps before they go into the
+# production workflows (daily_download2.0.yml, daily_download2.0_kenya_only.yml,
+# specific_download.yml). Runs the same core stages against a date/country list
+# you choose, and emails you the results directly instead of touching the
+# production GCS bucket, the subscriber sheet, or the main/website branches.
+#
+# Each stage can be turned off. A skipped stage pulls its known output for
+# DATE_STR from the (read-only) production GCS bucket instead of regenerating
+# it, so downstream stages/the email still have something to work with. Two
+# known gaps, both harmless (continue-on-error is set throughout so nothing
+# blocks the run):
+#   - dowscale_dekade.py reads data/<date>/data_{dekade,weekly}.nc, written
+#     fresh by plot_s2s.py and never uploaded to GCS. Skip plot_s2s while
+#     leaving downscale_dekade on and downscaling will just no-op.
+#   - run_rainfall_onset.py's data/<date>/rainfall_onset_s2s_Kenya.nc is never
+#     uploaded to GCS either. Skip rainfall_onset and ai_briefing's Kenya
+#     onset write-up will just be missing from the digest.
+#
+# Convention: when you add a new step here to test it, ask before also adding
+# it to the production workflow files, and ask again once it's been tested
+# whether it should go in.
+
+on:
+  workflow_dispatch:
+    inputs:
+      date_str:
+        description: "Forecast date (YYYY-MM-DD)"
+        required: true
+      countries:
+        description: "Comma-separated country list (e.g. Kenya,Ghana)"
+        required: true
+        default: "Kenya"
+      email:
+        description: "Where to send the test run results"
+        required: true
+      run_download:
+        description: "Download ECMWF S2S + GEFS forecast data"
+        type: boolean
+        default: true
+      run_plot_s2s:
+        description: "Generate plot_s2s.py weekly/dekadal/monthly plots"
+        type: boolean
+        default: true
+      run_indian_ocean_state:
+        description: "Generate Indian Ocean state plot"
+        type: boolean
+        default: true
+      run_climate_indices:
+        description: "Generate climate indices timeseries"
+        type: boolean
+        default: true
+      run_plot_gefs:
+        description: "Generate GEFS plots"
+        type: boolean
+        default: true
+      run_downscale_dekade:
+        description: "Perform downscaling"
+        type: boolean
+        default: true
+      run_rainfall_onset:
+        description: "Run rainfall onset"
+        type: boolean
+        default: true
+      run_briefing_slides:
+        description: "Run ws_scripts briefing slides (Kenya-only, ignores countries input)"
+        type: boolean
+        default: true
+      run_ai_briefing:
+        description: "Generate AI weather briefing (Kenya/Great_Horn-only, ignores countries input)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      OUTPUT_DIR: data
+      BUCKET: africa-forecasting-data
+      DATE_STR: ${{ inputs.date_str }}
+      COUNTRIES: ${{ inputs.countries }}
+      CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main_repo
+
+      - name: Check out website branch
+        uses: actions/checkout@v4
+        with:
+          ref: website
+          path: website_branch
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: main_repo
+        run: |
+          pip install -r requirements.txt
+
+      # ── Read-only GCS auth, used only to pull existing output for stages
+      # you've turned off below. Nothing in this workflow uploads. ─────
+      - name: Auth to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
+          service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
+          export_environment_variables: true
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      # ── Stage: download ────────────────────────────────────────────
+      - name: Run download script
+        if: ${{ inputs.run_download }}
+        uses: nick-fields/retry@v3
+        continue-on-error: true
+        env:
+          BOUNDING_BOX: "22.5,-21,-34.5,55.5"
+        with:
+          timeout_minutes: 45
+          max_attempts: 3
+          command: |
+            cd main_repo
+            python download_s2s.py
+
+      - name: Fetch forecast
+        if: ${{ inputs.run_download }}
+        working-directory: main_repo
+        run: |
+          uv run fetch_dynamical.py \
+            --dataset noaa-gefs-forecast-35-day\
+            --date ${{ inputs.date_str }} \
+            --countries "${{ inputs.countries }}"\
+            --variable precipitation_surface \
+            --output ./data/${{ inputs.date_str }}/gefs/
+
+      - name: Restore forecast data from GCS
+        if: ${{ !inputs.run_download }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          mkdir -p "data/${DATE_STR}"
+          gcloud storage rsync -r "gs://${BUCKET}/data/${DATE_STR}" "data/${DATE_STR}"
+
+      # ── Stage: plot_s2s ────────────────────────────────────────────
+      - name: Generate plots
+        if: ${{ inputs.run_plot_s2s }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python plot_s2s.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          WEBSITE_PATH: ${{ github.workspace }}/website_branch/
+          AI_ACTIVE: 'True'
+
+      - name: Restore plot_s2s plots from GCS
+        if: ${{ !inputs.run_plot_s2s }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          IFS=',' read -ra countries <<< "$COUNTRIES"
+          for country in "${countries[@]}"; do
+            for sub in weekly dekadal monthly; do
+              src="plots/$country/$DATE_STR/$sub"
+              mkdir -p "$src"
+              gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
+            done
+          done
+
+      # ── Stage: indian_ocean_state ─────────────────────────────────
+      - name: Generate Indian Ocean state plot
+        if: ${{ inputs.run_indian_ocean_state }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python IndianOceanState.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+
+      - name: Restore Indian Ocean state plot from GCS
+        if: ${{ !inputs.run_indian_ocean_state }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          mkdir -p "plots/diagnostics/${DATE_STR}"
+          gcloud storage rsync -r "gs://${BUCKET}/plots/diagnostics/${DATE_STR}" "plots/diagnostics/${DATE_STR}"
+
+      # ── Stage: climate_indices_timeseries ───────────────────────────
+      - name: Generate climate indices timeseries
+        if: ${{ inputs.run_climate_indices }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python climate_indices_timeseries.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+
+      - name: Restore climate indices timeseries from GCS
+        if: ${{ !inputs.run_climate_indices }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          mkdir -p "data/${DATE_STR}/diagnostics"
+          gcloud storage rsync -r "gs://${BUCKET}/data/${DATE_STR}/diagnostics" "data/${DATE_STR}/diagnostics"
+
+      # ── Stage: plot_gefs ───────────────────────────────────────────
+      - name: Generate GEFS plots
+        if: ${{ inputs.run_plot_gefs }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python plot_gefs.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+
+      - name: Restore GEFS plots from GCS
+        if: ${{ !inputs.run_plot_gefs }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          IFS=',' read -ra countries <<< "$COUNTRIES"
+          for country in "${countries[@]}"; do
+            for sub in weekly dekadal monthly; do
+              src="plots/$country/$DATE_STR/$sub"
+              mkdir -p "$src"
+              gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
+            done
+          done
+
+      # ── Stage: downscale_dekade ─────────────────────────────────────
+      # Needs data/<date>/data_{dekade,weekly}.nc, written fresh by plot_s2s
+      # above and never uploaded to GCS — if plot_s2s was skipped this stage
+      # will just no-op (continue-on-error), not restorable.
+      - name: Perform downscaling
+        if: ${{ inputs.run_downscale_dekade }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python dowscale_dekade.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DEKADE_COUNTRIES: ${{ inputs.countries }}
+          WEEK_COUNTRIES: ${{ inputs.countries }}
+
+      - name: Restore downscaled plots from GCS
+        if: ${{ !inputs.run_downscale_dekade }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          IFS=',' read -ra countries <<< "$COUNTRIES"
+          for country in "${countries[@]}"; do
+            for sub in weekly dekadal; do
+              src="plots/$country/$DATE_STR/$sub"
+              mkdir -p "$src"
+              gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
+            done
+          done
+
+      - name: Install rclone
+        continue-on-error: true
+        run: curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        continue-on-error: true
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+
+      # ── Stage: rainfall_onset ────────────────────────────────────────
+      - name: Run rainfall onset
+        if: ${{ inputs.run_rainfall_onset }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          IFS=',' read -ra countries <<< "$COUNTRIES"
+          for country in "${countries[@]}"; do
+            echo "Rainfall onset: $country"
+            COUNTRY="$country" python run_rainfall_onset.py || true
+          done
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+
+      - name: Restore rainfall onset plots from GCS
+        if: ${{ !inputs.run_rainfall_onset }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          IFS=',' read -ra countries <<< "$COUNTRIES"
+          for country in "${countries[@]}"; do
+            src="plots/$country/$DATE_STR/monthly"
+            mkdir -p "$src"
+            gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
+          done
+
+      # ── Stage: briefing_slides (ws_scripts/slide*.sh, Kenya-hardcoded) ──
+      - name: Install uv for ws_scripts
+        if: ${{ inputs.run_briefing_slides }}
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.20"
+
+      - name: Run slide7.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide7.sh
+
+      - name: Run slide8.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide8.sh
+
+      - name: Run slide9.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide9.sh
+
+      - name: Run slide10.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide10.sh
+
+      - name: Run slide11.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        env:
+          ECMWF_DATASTORES_URL: "https://ecds.ecmwf.int/api"
+          ECMWF_DATASTORES_KEY: ${{ secrets.CDSAPI_KEY }}
+        run: bash slide11.sh
+
+      - name: Run slide12.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide12.sh
+
+      - name: Run slide13.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide13.sh
+
+      - name: Run slide14.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide14.sh
+
+      - name: Run slide15.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide15.sh
+
+      - name: Run slide171819.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash slide171819.sh
+
+      - name: Collect briefing plots
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          mkdir -p "plots/briefing/${{ inputs.date_str }}"
+          mv ws_scripts/*.png "plots/briefing/${{ inputs.date_str }}/" 2>/dev/null || true
+
+      - name: Restore briefing slides from GCS
+        if: ${{ !inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          mkdir -p "plots/briefing/${DATE_STR}"
+          gcloud storage rsync -r "gs://${BUCKET}/plots/briefing/${DATE_STR}" "plots/briefing/${DATE_STR}"
+
+      # ── Stage: ai_briefing (Kenya/Great_Horn-hardcoded, ignores
+      # countries input — top up its fixed prerequisites from GCS first so
+      # it has something to read even if you're testing a different country
+      # or skipped an upstream stage above; additive only, never overwrites
+      # files an enabled stage just generated fresh, since filenames don't
+      # collide across stages). ─────────────────────────────────────────
+      - name: Top up ai_briefing prerequisites from GCS
+        if: ${{ inputs.run_ai_briefing }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          for rel in \
+            "plots/Kenya/${DATE_STR}" \
+            "plots/Great_Horn/${DATE_STR}" \
+            "plots/diagnostics/${DATE_STR}" \
+            "plots/briefing/${DATE_STR}"
+          do
+            mkdir -p "$rel"
+            gcloud storage rsync -r "gs://${BUCKET}/${rel}" "$rel" || true
+          done
+
+      - name: Generate AI weather briefing
+        if: ${{ inputs.run_ai_briefing }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python ai_weather_briefing.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
+
+      # ── Convert NetCDF → JSON and update catalog (local only — never
+      # committed/pushed, website_branch is discarded at the end) ──────
+      - name: Convert NetCDF and update catalog
+        working-directory: website_branch
+        continue-on-error: true
+        env:
+          NCDF_DIR:       ncdf_data
+          OUTPUT_DIR:     data/weekly
+          CATALOG_PATH:   data/weekly/catalog.json
+          VARIABLES:      "temp,precip,u10,v10,w500,u700,v700,tcw,cape,d2m,mn2t6,mx2t6"
+          N_WEEKS:        "6"
+          KEEP_FORECASTS: "5"
+        run: |
+          python scripts/nc_to_json_and_catalog.py \
+            --ncdf-dir    "${{ env.NCDF_DIR }}" \
+            --output-dir  "${{ env.OUTPUT_DIR }}" \
+            --catalog     "${{ env.CATALOG_PATH }}" \
+            --variables   "${{ env.VARIABLES }}" \
+            --n-weeks     "${{ env.N_WEEKS }}" \
+            --keep        "${{ env.KEEP_FORECASTS }}"
+
+      - name: Remove website worktree
+        continue-on-error: true
+        run: rm -rf website_branch
+
+      - name: Email test run results
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@v16
+        with:
+          server_address: smtp.resend.com
+          server_port: 587
+          username: resend
+          password: ${{ secrets.RESEND_API_KEY }}
+          subject: "[TEST] S2S Pipeline Run — ${{ inputs.date_str }} (${{ inputs.countries }})"
+          to: ${{ inputs.email }}
+          from: "S2S Test Pipeline <info@dashboards.rhizaresearch.org>"
+          body: |
+            Test pipeline run for date ${{ inputs.date_str }}, countries: ${{ inputs.countries }}.
+            Nothing from this run was uploaded to GCS or committed to main/website — this is
+            output from the test workflow only. Any stage you turned off was backfilled from
+            the production GCS bucket instead of regenerated.
+          attachments: |
+            main_repo/plots/*/${{ inputs.date_str }}/dekadal/dekadal_precip.png,
+            main_repo/plots/*/${{ inputs.date_str }}/weekly/weekly_precip.png,
+            main_repo/plots/*/${{ inputs.date_str }}/weekly/weekly_precip_downscaled_clipped.png,
+            main_repo/plots/*/${{ inputs.date_str }}/weekly/weekly_medium_range_precip.png,
+            main_repo/plots/briefing/${{ inputs.date_str }}/*.png,
+            main_repo/prompts/digest_${{ inputs.date_str }}.txt,
+            main_repo/s2s_briefing_${{ inputs.date_str }}.pptx
