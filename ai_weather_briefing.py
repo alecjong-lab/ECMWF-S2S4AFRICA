@@ -65,7 +65,7 @@ Forecast date: {date_str}
 Country: Kenya
 Month: {date_str[5:7]}
 Zone statistics (6-week forecast).
-Onset dates come from the rainfall-onset action (first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days), median over ensemble members and grid cells in each region. Use them in the Indicators paragraph of the Overall Summary; do not infer onset from weekly totals.
+Onset dates come from the rainfall-onset action (first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days), median over ensemble members and grid cells in each region. Use them in the Indicators paragraph of the Overall Summary for **OND Short Rains** onset (typical mid-October). Never describe MAM Long Rains onset. Do not infer onset from weekly totals.
 {gef.format_prompt_data(promt_unformat)}
 """
 

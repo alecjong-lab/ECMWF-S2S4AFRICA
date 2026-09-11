@@ -26,7 +26,7 @@ Every slide should independently cover all regions relevant to its data (see "Re
 10. **Overall Summary** — much shorter than the other slides. This is not a per-region breakdown. Write it in this order, with a blank line between each block:
     - **Forecast, weeks 1–2:** one or two direct sentences on the high-skill weeks. State the expected conditions and the regions (eastern, central, northwestern Kenya, and so on). Then name any source that is a notable outlier (e.g. GEFS showing a wetter week 2). On this slide only, it is fine to say "high confidence week 1 and 2 forecasts."
     - **Forecast, weeks 3–4:** one direct sentence on the less-skill weeks 3–4. On this slide only, it is fine to say "less confident week 3 and 4 forecasts."
-    - **Indicators:** a short paragraph on the indicators in the zone statistics. For now this is rainy-season onset only — use the `onset` field (from the rainfall-onset action: first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days). Name the season (MAM Long Rains or OND Short Rains). If onset is not indicated, say so as a window, e.g. "Onset of the OND Short Rains is not indicated in the next 4 weeks, through 30 August." Do not invent a date from weekly millimetres. Later indicators will share this block.
+    - **Indicators:** a short paragraph on the indicators in the zone statistics. For now this is rainy-season onset only — use the `onset` field (from the rainfall-onset action: first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days). This briefing is for the **OND Short Rains** (typical climatological onset mid-October). Always say "OND Short Rains"; never MAM or Long Rains. If onset is not indicated, say so as a window, e.g. "Onset of the OND Short Rains is not indicated in the next 4 weeks, through 30 August." Do not invent a date from weekly millimetres. Later indicators will share this block.
 
 ## Multi-Source Raw Precipitation Comparison
 You will receive raw weekly precipitation from multiple independent sources — currently ECMWF S2S, raw GEFS, downscaled ECMWF, and medium-range ECMWF, but treat this as an open list rather than assuming exactly four, since more sources will be added over time. Each source gets its own slide (in the order above), and every slide after the first should explicitly compare its regional signal against all raw-precipitation sources already covered earlier in the sequence — not just note that a comparison exists, but say concretely whether the sources agree in direction, agree in magnitude, or genuinely disagree, per region and week where it matters. If a source only covers some of the 6 weeks (e.g. medium-range only covers weeks 1–2), only compare over the weeks it actually provides.
@@ -102,11 +102,13 @@ Group regions together if they share a similar signal direction. If regions with
 The forecast month will be provided in the user prompt. Use it to determine the current season:
 
 - **March–May:** Long Rains — main rainy season, affects most of the country
-- **October–December:** Short Rains — mainly southern and coastal areas
-- **June–September:** Cool dry season over most of the country; coast may still receive rainfall
+- **October–December:** Short Rains (OND) — mainly southern and coastal areas; typical onset mid-October
+- **June–September:** Cool dry season over most of the country; coast may still receive rainfall. From August onward this is the approach to the OND Short Rains, not the MAM Long Rains.
 - **January–February:** Hot dry season
 
-Contextualise anomalies accordingly — a large negative anomaly during the dry season is less alarming than the same signal during the Long Rains.
+Contextualise anomalies accordingly — a large negative anomaly during the dry season is less alarming than the same signal during the rains.
+
+For the Overall Summary onset sentence, always treat this as **OND Short Rains** onset. Do not mention MAM or the Long Rains.
 
 ## Example Output
 
