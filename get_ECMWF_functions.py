@@ -2168,11 +2168,106 @@ SKILL = {
     "week6": "Climatology almost always better",
 }
 
+KENYA_BRIEFING_REGION_MAP = {
+    "Nyandarua": "Highlands East of the Rift Valley",
+    "Laikipia": "Highlands East of the Rift Valley",
+    "Nyeri": "Highlands East of the Rift Valley",
+    "Kirinyaga": "Highlands East of the Rift Valley",
+    "Murang'a": "Highlands East of the Rift Valley",
+    "Kiambu": "Highlands East of the Rift Valley",
+    "Meru": "Highlands East of the Rift Valley",
+    "Embu": "Highlands East of the Rift Valley",
+    "Tharaka-Nithi": "Highlands East of the Rift Valley",
+    "Nairobi": "Highlands East of the Rift Valley",
+    "Nandi": "Highlands West of the Rift Valley",
+    "Kakamega": "Highlands West of the Rift Valley",
+    "Vihiga": "Highlands West of the Rift Valley",
+    "Bungoma": "Highlands West of the Rift Valley",
+    "Siaya": "Highlands West of the Rift Valley",
+    "Busia": "Highlands West of the Rift Valley",
+    "Baringo": "Highlands West of the Rift Valley",
+    "Nakuru": "Highlands West of the Rift Valley",
+    "Trans Nzoia": "Highlands West of the Rift Valley",
+    "Uasin Gishu": "Highlands West of the Rift Valley",
+    "Elgeyo-Marakwet": "Highlands West of the Rift Valley",
+    "West Pokot": "Highlands West of the Rift Valley",
+    "Kisii": "Rift Valley and Lake Victoria Basin",
+    "Nyamira": "Rift Valley and Lake Victoria Basin",
+    "Kericho": "Rift Valley and Lake Victoria Basin",
+    "Bomet": "Rift Valley and Lake Victoria Basin",
+    "Kisumu": "Rift Valley and Lake Victoria Basin",
+    "Homa Bay": "Rift Valley and Lake Victoria Basin",
+    "Migori": "Rift Valley and Lake Victoria Basin",
+    "Narok": "Rift Valley and Lake Victoria Basin",
+    "Mombasa": "Coast",
+    "Kilifi": "Coast",
+    "Lamu": "Coast",
+    "Kwale": "Coast",
+    "Marsabit": "Northeastern Kenya",
+    "Mandera": "Northeastern Kenya",
+    "Wajir": "Northeastern Kenya",
+    "Garissa": "Northeastern Kenya",
+    "Isiolo": "Northeastern Kenya",
+    "Machakos": "Southeastern Lowlands",
+    "Kitui": "Southeastern Lowlands",
+    "Makueni": "Southeastern Lowlands",
+    "Kajiado": "Southeastern Lowlands",
+    "Taita Taveta": "Southeastern Lowlands",
+    "Tana River": "Southeastern Lowlands",
+    "Turkana": "Northwestern Kenya",
+    "Samburu": "Northwestern Kenya",
+}
+
+
+def add_onset_from_netcdf(promt_unformat, onset_nc, shapefile="Kenya_shapes/ken_admin1.shp"):
+    """Fold run_rainfall_onset.py dates into the briefing JSON (per Kenya region)."""
+    if not promt_unformat or not os.path.isfile(onset_nc):
+        return promt_unformat
+    ds = xr.open_dataset(onset_nc)
+    da = ds["onset_date"] if "onset_date" in ds else ds[list(ds.data_vars)[0]]
+    states1 = gpd.read_file(shapefile)
+    states1["region"] = states1["adm1_name"].map(KENYA_BRIEFING_REGION_MAP)
+    regions = states1.dropna(subset=["region"]).dissolve(by="region")
+    for region in list(promt_unformat):
+        if region not in regions.index:
+            continue
+        clipped = clip_by_overlap(da, regions, region, threshold=0.15)
+        if clipped.size == 0:
+            valid = np.array([], dtype="datetime64[ns]")
+        else:
+            times = np.asarray(clipped.values).reshape(-1).astype("datetime64[ns]")
+            valid = times[~np.isnat(times)]
+        entry = {"rule": "icpac-onset"}
+        if valid.size == 0:
+            entry["onset_date"] = None
+            entry["onset_doy"] = None
+        else:
+            med = np.datetime64(int(np.median(valid.astype("int64"))), "ns")
+            entry["onset_date"] = str(med.astype("datetime64[D]"))
+            jan1 = med.astype("datetime64[Y]")
+            entry["onset_doy"] = int((med.astype("datetime64[D]") - jan1).astype(int) + 1)
+        promt_unformat[region]["onset"] = entry
+    ds.close()
+    return promt_unformat
+
+
 def format_prompt_data(data: dict) -> str:
     lines = []
     for zone, weeks in data.items():
         lines.append(f"\n{zone}:")
+        onset = weeks.get("onset")
+        if onset:
+            rule = onset.get("rule", "icpac-onset")
+            date = onset.get("onset_date")
+            doy = onset.get("onset_doy")
+            if date:
+                extra = f" (doy {doy})" if doy is not None else ""
+                lines.append(f"  onset ({rule}): {date}{extra}")
+            else:
+                lines.append(f"  onset ({rule}): not indicated in this forecast window")
         for week, stats in weeks.items():
+            if week == "onset":
+                continue
             skill = SKILL.get(week, "")
             skill_str = f" ({skill})" if skill else ""
             if 'anom_prct' in stats:

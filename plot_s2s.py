@@ -387,22 +387,7 @@ for data in all_ensemble_data:
 if os.environ["AI_ACTIVE"]=='True':
     try:
         #Short ai summary production
-        region_map = {
-            "Nyandarua": "Highlands East of the Rift Valley","Laikipia": "Highlands East of the Rift Valley","Nyeri": "Highlands East of the Rift Valley",
-            "Kirinyaga": "Highlands East of the Rift Valley","Murang'a": "Highlands East of the Rift Valley","Kiambu": "Highlands East of the Rift Valley",
-            "Meru": "Highlands East of the Rift Valley","Embu": "Highlands East of the Rift Valley","Tharaka-Nithi": "Highlands East of the Rift Valley",
-            "Nairobi": "Highlands East of the Rift Valley","Nandi": "Highlands West of the Rift Valley","Kakamega": "Highlands West of the Rift Valley",
-            "Vihiga": "Highlands West of the Rift Valley","Bungoma": "Highlands West of the Rift Valley","Siaya": "Highlands West of the Rift Valley",
-            "Busia": "Highlands West of the Rift Valley","Baringo": "Highlands West of the Rift Valley","Nakuru": "Highlands West of the Rift Valley",
-            "Trans Nzoia": "Highlands West of the Rift Valley","Uasin Gishu": "Highlands West of the Rift Valley","Elgeyo-Marakwet": "Highlands West of the Rift Valley",
-            "West Pokot": "Highlands West of the Rift Valley","Kisii": "Rift Valley and Lake Victoria Basin","Nyamira": "Rift Valley and Lake Victoria Basin",
-            "Kericho": "Rift Valley and Lake Victoria Basin","Bomet": "Rift Valley and Lake Victoria Basin","Kisumu": "Rift Valley and Lake Victoria Basin",
-            "Homa Bay": "Rift Valley and Lake Victoria Basin","Migori": "Rift Valley and Lake Victoria Basin","Narok": "Rift Valley and Lake Victoria Basin",
-            "Mombasa": "Coast","Kilifi": "Coast","Lamu": "Coast","Kwale": "Coast","Marsabit": "Northeastern Kenya","Mandera": "Northeastern Kenya",
-            "Wajir": "Northeastern Kenya","Garissa": "Northeastern Kenya","Isiolo": "Northeastern Kenya","Machakos": "Southeastern Lowlands"
-            ,"Kitui": "Southeastern Lowlands","Makueni": "Southeastern Lowlands","Kajiado": "Southeastern Lowlands","Taita Taveta": "Southeastern Lowlands",
-            "Tana River": "Southeastern Lowlands","Turkana": "Northwestern Kenya","Samburu": "Northwestern Kenya",
-        }
+        region_map = gef.KENYA_BRIEFING_REGION_MAP
 
         states1=gpd.read_file("Kenya_shapes/ken_admin1.shp")
         states1['region'] = states1['adm1_name'].map(region_map)
