@@ -129,6 +129,9 @@ deep convection/cloudiness, higher OLR = suppressed convection.
 current-year observed CHIRPS, line = climatology) and `kenya_ond_weekly_standardized_anomaly`
 (bar = z-score anomaly) cover the Aug-Dec season to date only — say where the current season
 sits relative to climatology, don't extrapolate beyond the observed weeks shown.
+`kenya_ond_last_week_rainfall_kenya_extent` is a map of the latest complete CHIRPS week
+inside the Kenya OND box, drawn on the full Kenya extent (box outline = OND region) —
+use past-tense observed language and cardinal directions, same as family J.
 `kenya_weekly_rainfall_analog_years` overlays named analog years (thin colored lines),
 current-year CHIRPS observed (thick black line with markers), the ECMWF S2S 101-member
 ensemble (thin grey lines) and its ensemble mean (thick purple line) — distinguish clearly
