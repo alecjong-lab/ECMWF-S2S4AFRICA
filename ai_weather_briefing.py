@@ -289,15 +289,16 @@ onsetecmwf_accum_path = f"{kenya_path}/monthly/onset_s2s_accum.png"
 onsetgefs_accum_path = f"{kenya_path}/monthly/onset_gefs_accum.png"
 
 # ICPAC_10mm variant of the two plain onset maps above (10mm, not 20mm, wet-spell
-# total) -- no 10mm variant of the accum definition
-onsetecmwf_10mm_path = f"{kenya_path}/monthly/onset_s2s_10mm.png"
-onsetgefs_10mm_path = f"{kenya_path}/monthly/onset_gefs_10mm.png"
+# total) -- no 10mm variant of the accum definition. Generator stems are
+# icpac10mm, not _10mm.
+onsetecmwf_10mm_path = f"{kenya_path}/monthly/onset_s2s_icpac10mm.png"
+onsetgefs_10mm_path = f"{kenya_path}/monthly/onset_gefs_icpac10mm.png"
 
 # reforecast-archive climatology counterparts of the ECMWF onset maps above
 # (see the "S2S reforecast climatology" block in run_rainfall_onset.py)
 onsetecmwf_climatology_path = f"{kenya_path}/monthly/onset_s2s_climatology.png"
 onsetecmwf_accum_climatology_path = f"{kenya_path}/monthly/onset_s2s_climatology_accum.png"
-onsetecmwf_climatology_10mm_path = f"{kenya_path}/monthly/onset_s2s_climatology_10mm.png"
+onsetecmwf_climatology_10mm_path = f"{kenya_path}/monthly/onset_s2s_climatology_icpac10mm.png"
 
 # dry/wet spell probability & median length maps (see plot_s2s.py)
 median_wet_path = f"{kenya_path}/monthly/median_wetspell_length.png"
@@ -377,6 +378,22 @@ briefing_plot_names = [
 for name in briefing_plot_names:
     picture_paths[name] = f"{briefing_plots_path}/{name}.png"
 
+def resolve_picture_path(path):
+    """Prefer the given path; also try the icpac10mm <-> 10mm filename alias."""
+    if os.path.exists(path):
+        return path
+    aliases = (
+        ("_icpac10mm.png", "_10mm.png"),
+        ("_10mm.png", "_icpac10mm.png"),
+    )
+    for old, new in aliases:
+        if path.endswith(old):
+            alt = path[: -len(old)] + new
+            if os.path.exists(alt):
+                return alt
+    return path
+
+
 def replace_picture(slide, shape, image_path):
     left, top, width, height = shape.left, shape.top, shape.width, shape.height
     shape._element.getparent().remove(shape._element)
@@ -397,7 +414,7 @@ optional_picture_names = set(briefing_plot_names)
 # fetch (Planette's reforecast archive) on top of the core pipeline, so a
 # missing one is tolerated the same way rather than blocking the whole send.
 optional_picture_names |= {
-    "Onset_ECMWF_climatology", "Onset_ECMWF_accum_climatology", "Onset_ECMWF_climatology_10mm",
+    "Onset_ECMWF_climatology", "Onset_ECMWF_climatology_10mm",
     "median_wet_climatology", "wet5_climatology", "wet7_climatology",
 }
 
@@ -408,6 +425,7 @@ for slide in prs.slides:
         key, path = first_mapped(shape, picture_paths)
         if key is None:
             continue
+        path = resolve_picture_path(path)
         if os.path.exists(path):
             replace_picture(slide, shape, path)
         elif key in optional_picture_names:
