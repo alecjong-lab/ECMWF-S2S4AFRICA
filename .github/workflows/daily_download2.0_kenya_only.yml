@@ -436,6 +436,9 @@ jobs:
           date="${{ inputs.date_str }}"
 
           briefing="s2s_briefing_${date}.pptx"
+          if [ ! -f "$briefing" ] && [ -f "main_repo/$briefing" ]; then
+            cp "main_repo/$briefing" "$briefing"
+          fi
           if [ -f "$briefing" ]; then
             echo "plots_ok=true" >> "$GITHUB_OUTPUT"
           else
@@ -475,11 +478,14 @@ jobs:
         id: drive
         continue-on-error: true
         run: |
-          python repo_scripts/publish_briefing_to_drive.py \
-            --file "s2s_briefing_${{ inputs.date_str }}.pptx" \
+          briefing="s2s_briefing_${{ inputs.date_str }}.pptx"
+          if [ ! -f "$briefing" ] && [ -f "main_repo/$briefing" ]; then
+            briefing="main_repo/$briefing"
+          fi
+          python -u repo_scripts/publish_briefing_to_drive.py \
+            --file "$briefing" \
             --dest "gdrive:S2S_briefings/Kenya/" \
-            --emails "${{ matrix.emails }}" \
-            >> "$GITHUB_OUTPUT"
+            --emails "${{ matrix.emails }}"
 
       - name: Email out generated plots for Kenya
         if: steps.check_plots.outputs.plots_ok == 'true'
@@ -494,7 +500,7 @@ jobs:
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
             Attached is today's Kenya S2S weather briefing and historical station data.
-            A copy is also on Google Drive: ${{ steps.drive.outputs.drive_url }}
+            A copy is also on Google Drive: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
             You can browse the full plot archive (except station data) at
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
