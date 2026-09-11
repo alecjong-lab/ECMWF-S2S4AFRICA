@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 S="git+https://github.com/rhiza-research/forecasting-skills@dev"
-BBOX=1.0/36.5/-3.0/39.0   # from: resolve-region "Kenya OND region"
+BBOX=5.0/36.5/-5.0/42.0   # from: resolve-region "Kenya OND region"
 
 # OND season (Aug-Dec, current year) + latest available CHIRPS day.
 CUR_YEAR=$(date -u +%Y)
@@ -11,7 +11,7 @@ END=$(uvx --from $S forecasting-skills chirps-fetch --probe-latest)
 
 # observed branch
 uvx --from $S forecasting-skills chirps-fetch \
-  --start-time "$SEASON_START" --end-time "$END" --bbox $BBOX \
+  --start-time "$SEASON_START" --end-time "$END" --bbox "$BBOX" \
   --workers 8 --output chirps_ond.zarr
 uvx --from $S forecasting-skills summarize-dim \
   --dim latitude --dim longitude --method mean --lat-weighted \
@@ -20,7 +20,7 @@ uvx --from $S forecasting-skills summarize-dim \
 # climatology branch
 uvx --from $S forecasting-skills clim-fetch \
   --dataset chirps --variable precip \
-  --start-time "$SEASON_START" --end-time "$SEASON_END" --bbox $BBOX \
+  --start-time "$SEASON_START" --end-time "$SEASON_END" --bbox "$BBOX" \
   --output clim_ond.zarr
 uvx --from $S forecasting-skills summarize-dim \
   --dim latitude --dim longitude --method mean --lat-weighted \
@@ -67,12 +67,11 @@ uvx --from $S forecasting-skills plot-timeseries \
   --output kenya_ond_weekly_rainfall_vs_climatology.png
 
 S="git+https://github.com/rhiza-research/forecasting-skills@dev"
-BBOX=1.0/36.5/-3.0/39.0
 
 # weekly climatology with correct weekly std
 uvx --from $S forecasting-skills clim-fetch \
   --dataset chirps --variable precip --window 7 --align left \
-  --start-time "$SEASON_START" --end-time "$SEASON_END" --bbox $BBOX \
+  --start-time "$SEASON_START" --end-time "$SEASON_END" --bbox "$BBOX" \
   --output clim_ond_w7.zarr
 
 # observed anomaly, per grid cell then area-averaged
@@ -153,7 +152,7 @@ uvx --from $S forecasting-skills resolve-region KEN \
   --geojson kenya.geojson
 
 uvx --from $S forecasting-skills chirps-fetch \
-  --bbox $BBOX \
+  --bbox "$BBOX" \
   $TIME \
   --workers 8 \
   --output chirps_ond_last_week.zarr
