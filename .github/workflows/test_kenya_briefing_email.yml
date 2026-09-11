@@ -102,11 +102,10 @@ jobs:
         id: drive
         continue-on-error: true
         run: |
-          python publish_briefing_to_drive.py \
+          python -u publish_briefing_to_drive.py \
             --file "s2s_briefing_${{ steps.date.outputs.date }}.pptx" \
             --dest "gdrive:S2S_briefings/Kenya/" \
-            --emails "${{ env.TEST_EMAIL }}" \
-            >> "$GITHUB_OUTPUT"
+            --emails "${{ env.TEST_EMAIL }}"
 
       - name: Email test briefing
         if: hashFiles(format('s2s_briefing_{0}.pptx', steps.date.outputs.date)) != ''
@@ -122,6 +121,6 @@ jobs:
           body: |
             Test run of the Kenya briefing pipeline (not the subscriber list).
             Date: ${{ steps.date.outputs.date }}
-            Drive copy: ${{ steps.drive.outputs.drive_url }}
+            Drive copy: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
           reply_to: genevieve@rhizaresearch.org
           attachments: s2s_briefing_${{ steps.date.outputs.date }}.pptx
