@@ -9,6 +9,8 @@ CLAUDE.md
 test/*
 !test/.env.example
 s2s_briefing_*.pptx
+WeatherbriefingKenya_template_download.pptx
+WeatherbriefingKenya_template_with_alt.pptx
 .superpowers/
 kenya_bucket_staging/
 docs/superpowers/
