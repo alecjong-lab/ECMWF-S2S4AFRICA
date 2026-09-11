@@ -50,35 +50,6 @@ data_monthly_cut_to_mclimate=data_monthly.sel(longitude=slice(m_climate_big.long
 ensemble_stats_tp=gef.ensemble_data(data_weekly_cut_to_mclimate,m_climate_big,'tp',quantiles=[75,50,25])
 ensemble_stats_tp_month=gef.ensemble_data(data_monthly_cut_to_mclimate,m_climate_big_month,'tp',quantiles=[75,50,25])
 
-#---probability of dry/wet spells of a given minimum length, and median wet spell length (mirrors the dry spell block above)---#
-precip=data.diff('step').tp.isel(step=slice(None,28))
-precip.attrs=data.tp.attrs
-
-hold_cdd=[gef.dry_spell_probability(precip, threshold=1.0, spell_length_threshold=i)[0] for i in range(28)]  # mm/day threshold
-stacked = xr.concat(hold_cdd, dim=xr.DataArray(np.arange(28), dims="spell_length", name="spell_length"))
-
-count_above = (stacked >= 50).sum(dim="spell_length")
-median_length = (count_above - 1).where(count_above > 0)  # count of True values minus 1 (0-indexing); NaN where prob never reaches 0.5
-median_length.attrs['GRIB_name']='Median dry spell length'
-median_length.attrs['units']='days'
-median_length=median_length.assign_coords({'step':precip.isel(step=-1).step}).to_dataset()
-
-last_step=precip.isel(step=-1).step.values
-
-dry_spell5=gef.dry_spell_probability(precip, threshold=1.0, spell_length_threshold=5)[0].assign_coords({'step':last_step}).to_dataset(name='tp')
-dry_spell7=gef.dry_spell_probability(precip, threshold=1.0, spell_length_threshold=7)[0].assign_coords({'step':last_step}).to_dataset(name='tp')
-wet_spell5=gef.wet_spell_probability(precip, threshold=1.0, spell_length_threshold=5)[0].assign_coords({'step':last_step}).to_dataset(name='tp')
-wet_spell7=gef.wet_spell_probability(precip, threshold=1.0, spell_length_threshold=7)[0].assign_coords({'step':last_step}).to_dataset(name='tp')
-
-hold_cwd=[gef.wet_spell_probability(precip, threshold=1.0, spell_length_threshold=i)[0] for i in range(28)]  # mm/day threshold
-stacked_wet = xr.concat(hold_cwd, dim=xr.DataArray(np.arange(28), dims="spell_length", name="spell_length"))
-
-count_above_wet = (stacked_wet >= 50).sum(dim="spell_length")
-median_wet_length = (count_above_wet - 1).where(count_above_wet > 0)  # count of True values minus 1 (0-indexing); NaN where prob never reaches 0.5
-median_wet_length.attrs['GRIB_name']='Median wet spell length'
-median_wet_length.attrs['units']='days'
-median_wet_length=median_wet_length.assign_coords({'step':last_step}).to_dataset()
-
 #-----precip medium range---------------------------------------------------------------------------------------#
 try:
     data_weekly_medium=xr.open_zarr(f'{data_path}/medium_range_precip.zarr',consolidated=True).compute()
@@ -176,12 +147,6 @@ for country in countries:
     plt.savefig(f'{monthly_path}/monthly_precip.png',bbox_inches='tight')
     plt.close()
 
-    #---------------------------------month dry spell-----------------------------------------------------------------------------------------------
-    ds_to_plot_cdd=median_length.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
-    fig=gef.panel_plot_variable(ds_to_plot_cdd,variable='tp',forecast_timestep=ds_to_plot_cdd.step.values,cmap='jet',fontsize=fs,vmin=0)
-    plt.savefig(f'{monthly_path}/median_dryspell_length.png',bbox_inches='tight')
-    plt.close()
-    
     #plot dekadal precip from extended range forecast
     ds_to_plot_dekade=data_dekade.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     fig=gef.panel_plot_variable(ds_to_plot_dekade,variable='tp',forecast_timestep=ds_to_plot_dekade.step.values,cmap=gef.cmap,fontsize=fs)
@@ -243,17 +208,97 @@ for country in countries:
         plt.savefig(f'{weekly_path}/weekly_chance_higherthan_20mm.png',bbox_inches='tight')
         plt.close()
 
+        #---probability of dry/wet spells of a given minimum length, and median spell length (Kenya-only: slow, and only needed for Kenya)---#
+        precip_kenya=data.diff('step').tp.isel(step=slice(None,28)).sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
+        precip_kenya.attrs=data.tp.attrs
+        last_step=precip_kenya.isel(step=-1).step.values
+
+        hold_cdd=[gef.dry_spell_probability(precip_kenya, threshold=1.0, spell_length_threshold=i)[0] for i in range(28)]  # mm/day threshold
+        stacked = xr.concat(hold_cdd, dim=xr.DataArray(np.arange(28), dims="spell_length", name="spell_length"))
+
+        count_above = (stacked >= 50).sum(dim="spell_length")
+        median_length = (count_above - 1).where(count_above > 0)  # count of True values minus 1 (0-indexing); NaN where prob never reaches 0.5
+        median_length.attrs['GRIB_name']='Median dry spell length'
+        median_length.attrs['units']='days'
+        median_length=median_length.assign_coords({'step':last_step}).to_dataset()
+
+        dry_spell5=gef.dry_spell_probability(precip_kenya, threshold=1.0, spell_length_threshold=5)[0].assign_coords({'step':last_step}).to_dataset(name='tp')
+        dry_spell7=gef.dry_spell_probability(precip_kenya, threshold=1.0, spell_length_threshold=7)[0].assign_coords({'step':last_step}).to_dataset(name='tp')
+        wet_spell5=gef.wet_spell_probability(precip_kenya, threshold=1.0, spell_length_threshold=5)[0].assign_coords({'step':last_step}).to_dataset(name='tp')
+        wet_spell7=gef.wet_spell_probability(precip_kenya, threshold=1.0, spell_length_threshold=7)[0].assign_coords({'step':last_step}).to_dataset(name='tp')
+
+        hold_cwd=[gef.wet_spell_probability(precip_kenya, threshold=1.0, spell_length_threshold=i)[0] for i in range(28)]  # mm/day threshold
+        stacked_wet = xr.concat(hold_cwd, dim=xr.DataArray(np.arange(28), dims="spell_length", name="spell_length"))
+
+        count_above_wet = (stacked_wet >= 50).sum(dim="spell_length")
+        median_wet_length = (count_above_wet - 1).where(count_above_wet > 0)  # count of True values minus 1 (0-indexing); NaN where prob never reaches 0.5
+        median_wet_length.attrs['GRIB_name']='Median wet spell length'
+        median_wet_length.attrs['units']='days'
+        median_wet_length=median_wet_length.assign_coords({'step':last_step}).to_dataset()
+
+        #---------------------------------month dry spell plot-----------------------------------------------------------------------------------------------
+        fig=gef.panel_plot_variable(median_length,variable='tp',forecast_timestep=median_length.step.values,cmap='jet',fontsize=fs,vmin=0)
+        plt.savefig(f'{monthly_path}/median_dryspell_length.png',bbox_inches='tight')
+        plt.close()
+
         #---dry/wet spell probability and median spell length maps---
         for spell_ds, spell_name in [(dry_spell5,'dryspell_5days'),(dry_spell7,'dryspell_7days'),
                                       (wet_spell5,'wetspell_5days'),(wet_spell7,'wetspell_7days')]:
-            ds_to_plot_spell=spell_ds.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
-            fig=gef.panel_plot_variable(ds_to_plot_spell,variable='tp',forecast_timestep=ds_to_plot_spell.step.values,cmap='jet',fontsize=fs,vmin=0,vmax=100)
+            fig=gef.panel_plot_variable(spell_ds,variable='tp',forecast_timestep=spell_ds.step.values,cmap='jet',fontsize=fs,vmin=0,vmax=100)
             plt.savefig(f'{monthly_path}/prob_{spell_name}.png',bbox_inches='tight')
             plt.close()
 
-        ds_to_plot_cwd=median_wet_length.sel(longitude=slice(bboxes[country]['lon1'],bboxes[country]['lon2']),latitude=slice(bboxes[country]['lat1'],bboxes[country]['lat2']))
-        fig=gef.panel_plot_variable(ds_to_plot_cwd,variable='tp',forecast_timestep=ds_to_plot_cwd.step.values,cmap='jet',fontsize=fs,vmin=0)
+        #---climatological wet spell probability and median wet spell length, from the reforecast archive (Kenya-only)---#
+        with xr.set_options(keep_attrs=True):
+            reforecast_tp=gef.load_reforecast(date_str,'single','pr',bbox=bboxes['Kenya'],all_years=True)
+            reforecast_tp_mm=(reforecast_tp*24*3600).to_dataset(name='tp').rename({'init_time':'time'})
+
+            hold_wet_spell5_clim=[]
+            hold_wet_spell7_clim=[]
+            hold_median_wet_length_clim=[]
+
+            for t in range(len(reforecast_tp_mm.time.values)):
+                precip_reforecast=reforecast_tp_mm.isel(time=t).isel(step=slice(None,28)).sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2)).tp
+                last_step_reforecast=precip_reforecast.isel(step=-1).step.values
+
+                wet_spell5_clim=gef.wet_spell_probability(precip_reforecast, threshold=1.0, spell_length_threshold=5)[0].assign_coords({'step':last_step_reforecast}).to_dataset(name='tp')
+                wet_spell7_clim=gef.wet_spell_probability(precip_reforecast, threshold=1.0, spell_length_threshold=7)[0].assign_coords({'step':last_step_reforecast}).to_dataset(name='tp')
+
+                hold_cwd_clim=[gef.wet_spell_probability(precip_reforecast, threshold=1.0, spell_length_threshold=j)[0] for j in range(28)]  # mm/day threshold
+                stacked_wet_clim=xr.concat(hold_cwd_clim, dim=xr.DataArray(np.arange(28), dims="spell_length", name="spell_length"))
+
+                count_above_wet_clim=(stacked_wet_clim >= 50).sum(dim="spell_length")
+                median_wet_length_clim=(count_above_wet_clim - 1).where(count_above_wet_clim > 0)  # count of True values minus 1 (0-indexing); NaN where prob never reaches 0.5
+                median_wet_length_clim.attrs['GRIB_name']='Median wet spell length'
+                median_wet_length_clim.attrs['units']='days'
+                median_wet_length_clim=median_wet_length_clim.assign_coords({'step':last_step_reforecast}).to_dataset(name='tp')
+
+                hold_wet_spell5_clim.append(wet_spell5_clim)
+                hold_wet_spell7_clim.append(wet_spell7_clim)
+                hold_median_wet_length_clim.append(median_wet_length_clim)
+
+            # mean over the reforecast years gives the model climatology; re-assign 'step'
+            # and 'time' since both are dropped by the mean over 'time' ('step' is the same
+            # lead time every year; 'time' is set to the current forecast's init time so plot
+            # titles show the actual forecast dekade being described)
+            wet_spell5_climatology=xr.concat(hold_wet_spell5_clim,dim='time').mean('time').assign_coords({'step':last_step_reforecast,'time':data.time})
+            wet_spell7_climatology=xr.concat(hold_wet_spell7_clim,dim='time').mean('time').assign_coords({'step':last_step_reforecast,'time':data.time})
+            median_wet_length_climatology=xr.concat(hold_median_wet_length_clim,dim='time').mean('time').assign_coords({'step':last_step_reforecast,'time':data.time})
+
+        for clim_ds, clim_name in [(wet_spell5_climatology,'wetspell_5days'),(wet_spell7_climatology,'wetspell_7days')]:
+            fig=gef.panel_plot_variable(clim_ds,variable='tp',forecast_timestep=clim_ds.step.values,cmap='jet',fontsize=fs,vmin=0,vmax=100)
+            plt.savefig(f'{monthly_path}/climatology_prob_{clim_name}.png',bbox_inches='tight')
+            plt.close()
+
+        # shared vmax so the forecast and climatological median wetspell length maps are on the same colorscale
+        median_wetspell_vmax=float(np.nanmax([np.nanmax(median_wet_length.tp.values),np.nanmax(median_wet_length_climatology.tp.values)]))
+
+        fig=gef.panel_plot_variable(median_wet_length,variable='tp',forecast_timestep=median_wet_length.step.values,cmap='jet',fontsize=fs,vmin=0,vmax=median_wetspell_vmax)
         plt.savefig(f'{monthly_path}/median_wetspell_length.png',bbox_inches='tight')
+        plt.close()
+
+        fig=gef.panel_plot_variable(median_wet_length_climatology,variable='tp',forecast_timestep=median_wet_length_climatology.step.values,cmap='jet',fontsize=fs,vmin=0,vmax=median_wetspell_vmax)
+        plt.savefig(f'{monthly_path}/climatology_median_wetspell_length.png',bbox_inches='tight')
         plt.close()
 
         #-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
