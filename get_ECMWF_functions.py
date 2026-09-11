@@ -2804,36 +2804,171 @@ def plot_wind_and_sst_anomaly_weekly(ds_wind, ds_sst, title, out_path, u_var='u1
     plt.savefig(out_path)
     plt.close(fig)
 
-def load_reforecasts(forecast_day, var_group, var, grid='1p5latx1p5lon',
-                      bbox={"lat1": 90, "lon1": -180, "lat2": -90, "lon2": 178.5},
-                      levels=None,time_range=slice(0,28)):
-    '''To build a S2S m-climate like ECMWF you need the reforecasts that cover a 5 init time window around the closest 
-    init day and month to the date that you give. Reforecast are produced for every odd day basically. 
-    Load the needed reforecasts for the Planette's ECMWF IFS S2S Reforecast Data icechunk data.
-    after reforecasts have been loaded then a mclimate can be constructed from it.
-    
-    inputs:
-    forecast_day: day for which to find the needed hindcasts to construct a model climatology in format "YYYY-MM-DD"
-    var_group: either 'pressure' or 'single'
-    var: the variable(s) that need selection 
-    grid: grid resolution, either 1p5latx1p5lon for land or 1platx1plon for ocean
-    see https://github.com/PlanetteAI/planette_ifs_archive for full list of level types and variables
-    bbox: a dictionary containing the lat lon boundaries like {"lat1": Northenmost,"lon1": Westernmost,"lat2": Southernmost, "lon2": Easternmost}.
-    Example for Kenya: {"lat1": 6,     "lon1": 33,   "lat2": -5,    "lon2": 42}
-    levels: list of pressure levels to select, only needed for pressure level variables
-    time_range: number of lead days to select, default is 28 days
-    More variables, pressure levels and larger bounding boxes will result in a longer execution time and more memmory needed. So be cautious about choosing.
+def load_reforecast(forecast_day, var_group, var, grid='1p5latx1p5lon',
+                     bbox={"lat1": 90, "lon1": -180, "lat2": -90, "lon2": 178.5},
+                     levels=None, time_range=slice(0, 28), all_years=False,
+                     size_warning_mb=500):
+    """
+    Download reforecast data from Planette's public ECMWF IFS S2S dataset.
 
-    Returns (reforecasts, closest_day_month): the actual reforecast archive day (as
-    "MM-DD") the 5-init-time window is centered on, which can differ from forecast_day
-    since reforecasts only exist every ~2 days - use this (not forecast_day) to label
-    any climatology cached from the result, so the filename matches what it contains.
-    '''
-    # early guard: pressure levels only make sense for pressure-level variables
+    -------------------------------------------------------------------
+    forecast_day (required)
+    -------------------------------------------------------------------
+    Either:
+        - a single date string in the format "YYYY-MM-DD", e.g. "2020-06-15", or
+        - a LIST of date strings, e.g. ["2020-06-15", "2021-07-01", "2022-08-10"],
+          to download the nearest reforecast for each date in one go.
+
+    Reforecasts only exist on (roughly) odd calendar days, so the closest
+    available date to each one you give will be used automatically.
+
+    Note: a list here is for arbitrary/specific dates. If you instead want
+    the same calendar day repeated across every year 2006-2024, use
+    all_years=True with a single forecast_day instead (see below).
+
+    -------------------------------------------------------------------
+    var_group (required)
+    -------------------------------------------------------------------
+    Which table of variables you want data from. Must be one of:
+        'pressure' -> variables at multiple pressure levels (see 'var' below)
+        'single'   -> variables at a single level (surface, 2m, etc.)
+
+    -------------------------------------------------------------------
+    var (required)
+    -------------------------------------------------------------------
+    The variable name(s) you want, as a string or list of strings.
+
+    If var_group='pressure', choose from:
+        t  -> Air temperature
+        u  -> Zonal (east-west) wind
+        v  -> Meridional (north-south) wind
+        z  -> Geopotential height
+        q  -> Specific humidity
+    (levels available differ slightly per variable -- see 'levels' below)
+
+    If var_group='single', choose from:
+        t2m       -> 2m temperature (K)
+        t2m_max   -> Daily max 2m temperature (K)
+        t2m_min   -> Daily min 2m temperature (K)
+        t2d       -> 2m dewpoint temperature (K)
+        cdd       -> Cooling degree days (K)
+        hdd       -> Heating degree days (K)
+        ts        -> Skin temperature (K)
+        sst       -> Sea surface temperature (K)
+        pr        -> Daily Mean Total precipitation !!rate!! (kg m-2 s-1)
+        conv_pr   -> Convective precipitation rate (kg m-2 s-1)
+        sfwe      -> Snowfall water-equivalent rate (kg m-2 s-1)
+        snw_dens  -> Snow density (kg m-3)
+        smv20     -> Soil moisture, top 20cm (kg m-3)
+        smv100    -> Soil moisture, top 100cm (kg m-3)
+        sdwe      -> Snow depth water equivalent (kg m-2)
+        slp       -> Sea level pressure (hPa)
+        ps        -> Surface pressure (hPa)
+        u10m      -> 10m zonal wind (m/s)
+        v10m      -> 10m meridional wind (m/s)
+        ws10m     -> 10m wind speed (m/s)
+        dswrf     -> Downward shortwave radiation flux (W m-2)
+        olr       -> Top net thermal radiation (W m-2)
+        cape      -> Convective available potential energy (J kg-1)
+        siconc    -> Sea ice area fraction (0-1)
+
+    Ocean-only variables (need grid='1platx1plon', see below):
+        sit  -> Sea ice thickness (m)
+        ssh  -> Sea surface height (m)
+        sss  -> Sea surface practical salinity (psu)
+
+    -------------------------------------------------------------------
+    grid (optional, default '1p5latx1p5lon')
+    -------------------------------------------------------------------
+    Which spatial grid to use:
+        '1p5latx1p5lon' -> 1.5 x 1.5 degree grid, used for ATMOSPHERE and
+                            LAND/SURFACE variables (t, u, v, z, q, t2m, pr, etc.)
+        '1platx1plon'   -> 1 x 1 degree grid, used ONLY for the OCEAN
+                            variables (sit, ssh, sss)
+
+    -------------------------------------------------------------------
+    bbox (optional -- a bounding box dictionary)
+    -------------------------------------------------------------------
+    Restricts the data to a rectangular lat/lon region, so you don't have
+    to download the whole world. Format:
+        {"lat1": <northernmost latitude>,
+         "lon1": <westernmost longitude>,
+         "lat2": <southernmost latitude>,
+         "lon2": <easternmost longitude>}
+
+    Default is the whole globe. Example for Kenya:
+        {"lat1": 6, "lon1": 33, "lat2": -5, "lon2": 42}
+
+    Tip: smaller boxes download much faster and use less memory.
+
+    -------------------------------------------------------------------
+    levels (optional, only used when var_group='pressure')
+    -------------------------------------------------------------------
+    A list of pressure levels (in hPa) to select, e.g. [850, 500].
+    Available levels:
+        t, u, v, z -> 10, 50, 100, 200, 300, 500, 700, 850, 925, 1000
+        q          -> 200, 300, 500, 700, 850, 925, 1000
+    Leave as None to get all available levels for that variable.
+    Must be None if var_group='single' (there are no pressure levels).
+
+    -------------------------------------------------------------------
+    time_range (optional, default slice(0, 28))
+    -------------------------------------------------------------------
+    Which lead-time days (forecast days) to keep, out of the full 46-day
+    (0-45 day) forecast horizon. slice(0, 28) keeps lead days 0 to 27.
+    Use slice(0, 46) to keep the full forecast length.
+
+    -------------------------------------------------------------------
+    all_years (optional, default False)
+    -------------------------------------------------------------------
+    False -> download just the reforecast(s) closest to 'forecast_day'
+             (one, or one per date if 'forecast_day' is a list).
+    True  -> download that SAME calendar day-and-month, but repeated for
+             every year from 2006 to 2024. Useful for building a model
+             climatology, e.g. "give me every June 15th reforecast from
+             2006-2024". Requires 'forecast_day' to be a single date, not
+             a list.
+
+    -------------------------------------------------------------------
+    size_warning_mb (optional, default 500)
+    -------------------------------------------------------------------
+    Before downloading, the script estimates the size (in MB) of the data
+    you're about to pull based on your chosen variables, region, levels,
+    dates, and lead time -- and prints it either way. If the estimated
+    size is above this threshold, it also prints a warning suggesting you
+    shrink your request (smaller bbox, fewer variables/levels/dates,
+    shorter time_range). The download still goes ahead either way; this
+    is just so you're not caught off guard by a request that takes a
+    long time or uses a lot of memory. Set to a very high number (e.g.
+    1e9) to effectively disable the warning.
+
+    -------------------------------------------------------------------
+    Returns
+    -------------------------------------------------------------------
+    An xarray DataArray (or Dataset, if 'var' is a list) containing the
+    requested data, already downloaded into memory.
+
+    -------------------------------------------------------------------
+    A note on data size
+    -------------------------------------------------------------------
+    More variables, more pressure levels, larger bounding boxes, longer
+    time ranges, and all_years=True will all make downloads slower and
+    use more memory. Start small, then expand once you know what you need.
+    """
+
+    # Pressure levels only make sense for pressure-level variables
     if var_group == 'single' and levels is not None:
         raise ValueError("Cannot choose pressure levels on single level variables")
 
-    # 1. Open Icechunk repo on S3 (public bucket — no AWS credentials required)
+    # all_years builds its own list of dates internally, so it doesn't
+    # make sense to also pass a list of dates in
+    if all_years and isinstance(forecast_day, (list, tuple, np.ndarray)):
+        raise ValueError(
+            "all_years=True expects a single forecast_day, not a list. "
+            "Use a list of dates with all_years=False instead."
+        )
+
+    # 1. Open the public Icechunk data store on S3 (no credentials needed)
     storage = icechunk.s3_storage(
         bucket="planette-ifs-46-day",
         prefix="reforecasts",
@@ -2843,7 +2978,7 @@ def load_reforecasts(forecast_day, var_group, var, grid='1p5latx1p5lon',
     repo = icechunk.Repository.open(storage)
     store = repo.readonly_session("main").store
 
-    # 2. Open a Zarr group
+    # 2. Open the relevant part ("group") of the dataset
     ds = xr.open_zarr(
         store,
         group=f"{var_group}/{grid}",
@@ -2851,26 +2986,69 @@ def load_reforecasts(forecast_day, var_group, var, grid='1p5latx1p5lon',
         chunks={},
         decode_timedelta=True,
     )
-    ds = ds.assign_coords(lead=ds.lead + pd.Timedelta(days=1)).rename({"lead": "step",'lat':'latitude','lon':'longitude'})
 
-    # find the closest day and month to the forecast day that is given, we compare with 2010 but it could be any year from 2006 to 2024
-    closest_day_month = str(ds.sel(init_time=f'2010-{str(forecast_day)[5:]}', method='nearest').init_time.values)[5:10]
-    # add years to the middle day which the window needs to be created around
-    hindcast_dates = [f'{i}-{closest_day_month}' for i in np.arange(2006, 2025)]
-    # find the index of these middle dates so that we can construct the 5 day window
-    index_per_hindcastdate = [ds.get_index('init_time').get_loc(hindcast_date) for hindcast_date in hindcast_dates]
-    # construct the 5 init time window, so that we hindcasts can be selected
-    all_indices = [idx for i in index_per_hindcastdate for idx in range(i - 2, i + 3)]
+    # Rename some coordinates to more familiar names, and make the lead
+    # time start at day 1 instead of day 0 internally (this matches how
+    # the forecast "step" is normally counted)
+    ds = ds.assign_coords(lead=ds.lead + pd.Timedelta(days=1)).rename(
+        {"lead": "step", 'lat': 'latitude', 'lon': 'longitude'}
+    )
 
-    if var_group == 'pressure' and levels is not None:
-        # only load the required data into memory for further calculation
-        reforecasts = ds[var].isel(init_time=all_indices).sel(
-            longitude=slice(bbox['lon1'], bbox['lon2']), latitude=slice(bbox['lat1'], bbox['lat2'])
-        ).sel(pressure_level=levels).isel(step=time_range).compute()
+    if all_years:
+        # Find the closest available day-month to forecast_day, using
+        # 2010 purely as a reference year (any year 2006-2024 would work)
+        closest_day_month = str(
+            ds.sel(init_time=f'2010-{str(forecast_day)[5:]}', method='nearest').init_time.values
+        )[5:10]
+
+        # Build that day-month combination for every year 2006-2024
+        hindcast_dates = [f'{y}-{closest_day_month}' for y in np.arange(2006, 2025)]
+
+        # For each of those dates, find the closest real init_time available
+        indices = [
+            ds.get_index('init_time').get_loc(
+                ds.sel(init_time=hindcast_date, method='nearest').init_time.values
+            )
+            for hindcast_date in hindcast_dates
+        ]
+        ds_sel = ds.isel(init_time=indices)
     else:
-        # only load the required data into memory for further calculation
-        reforecasts = ds[var].isel(init_time=all_indices).sel(
-            longitude=slice(bbox['lon1'], bbox['lon2']), latitude=slice(bbox['lat1'], bbox['lat2'])
-        ).isel(step=time_range).compute()
+        # Just grab the single closest reforecast to forecast_day
+        ds_sel = ds.sel(init_time=forecast_day, method='nearest')
 
-    return reforecasts, closest_day_month
+    # 3. Subset by variable, region, (optionally) pressure level, and lead time.
+    #    This is still "lazy" -- nothing has been downloaded yet.
+    if var_group == 'pressure' and levels is not None:
+        reforecast_lazy = ds_sel[var].sel(
+            longitude=slice(bbox['lon1'], bbox['lon2']),
+            latitude=slice(bbox['lat1'], bbox['lat2'])
+        ).sel(pressure_level=levels).isel(step=time_range)
+    else:
+        reforecast_lazy = ds_sel[var].sel(
+            longitude=slice(bbox['lon1'], bbox['lon2']),
+            latitude=slice(bbox['lat1'], bbox['lat2'])
+        ).isel(step=time_range)
+
+    # 4. Estimate the download size before actually pulling any data, so
+    #    you know what you're about to get. .nbytes works on lazy arrays,
+    #    so this doesn't cost any time or bandwidth.
+    estimated_mb = reforecast_lazy.nbytes / (1024 ** 2)
+    if estimated_mb >= 1024:
+        print(f"Estimated download size: {estimated_mb / 1024:.2f} GB")
+    else:
+        print(f"Estimated download size: {estimated_mb:.1f} MB")
+
+    if estimated_mb > size_warning_mb:
+        print(
+            f"WARNING: this request is larger than your size_warning_mb "
+            f"setting ({size_warning_mb} MB). It may take a while and use "
+            f"a lot of memory. Consider a smaller bbox, fewer "
+            f"variables/levels/dates, or a shorter time_range. "
+            f"Proceeding anyway..."
+        )
+
+    # 5. Actually download ("compute") the data into memory
+    reforecast = reforecast_lazy.compute()
+
+    return reforecast
+
