@@ -472,6 +472,8 @@ briefing_plot_names = [
     "kenya_gefs_chirps_verify_5mm",
     "kenya_gefs_chirps_bias",
     "kenya_gefs_chirps_mae",
+    "sst_global_oisst_nino_iod",
+    "kenya_week1_forecast_mae_vs_chirps",
 ]
 for name in briefing_plot_names:
     picture_paths[name] = f"{briefing_plots_path}/{name}.png"

@@ -107,6 +107,9 @@ title). The three files show three different metrics — hits/exceedance at a 5m
 bias (forecast minus observed), and mean absolute error, respectively — identify which one
 from the title and describe how that metric changes across lead weeks (i.e. across columns),
 which is the actual skill-degradation story here.
+`kenya_week1_forecast_mae_vs_chirps` is a 1D timeseries (not a map grid) of week-1 MAE
+versus CHIRPS over Kenya for GFS, AIFS-ENS, and IFS-ENS — compare models and how error
+changes over the months shown, not across lead weeks.
 
 **M. MJO RMM phase diagrams** (`mjo_rmm_gefs`, `mjo_rmm_ecmwf`): a phase-space diagram
 (RMM1 vs RMM2) with a unit circle — inside the circle = weak/inactive MJO, outside = active,
@@ -118,6 +121,11 @@ trajectory, and whether ensemble members agree on propagation direction/speed.
 figures (not combined). State the current phase (El Nino/La Nina/neutral, or positive/
 negative/neutral IOD) and forecast tendency using only labels/thresholds visible in the
 plot.
+
+**Q. Global OISST with monitoring boxes** (`sst_global_oisst_nino_iod`): a global daily
+OISST v2.1 SST map with three outlined boxes (Nino 3.4, IOD west, IOD east). Describe the
+SST pattern in those boxes and any basin-scale contrast the boxes sit in — not the whole
+globe equally.
 
 **O. Convective diagnostics** (`itcz_africa_latest` — a single snapshot map of the ITCZ's
 current position over Africa; `hovmoller_olr_tropics` — a time-vs-longitude/latitude

@@ -78,10 +78,20 @@ jobs:
         working-directory: ws_scripts
         run: bash slide15.sh
 
+      - name: Run slide16.sh
+        continue-on-error: true
+        working-directory: ws_scripts
+        run: bash slide16.sh
+
       - name: Run slide171819.sh
         continue-on-error: true
         working-directory: ws_scripts
         run: bash slide171819.sh
+
+      - name: Run slide20.sh
+        continue-on-error: true
+        working-directory: ws_scripts
+        run: bash slide20.sh
 
       - name: Collect briefing plots
         run: |
