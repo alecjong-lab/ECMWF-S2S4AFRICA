@@ -122,6 +122,15 @@ jobs:
         run: |
           mkdir -p ~/.config/rclone
           echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+          
+      - name: Run rainfall onset
+        continue-on-error: true
+        working-directory: main_repo
+        run: python run_rainfall_onset.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: "${{ inputs.date_str }}"
+          COUNTRY: Kenya
 
       - name: Generate AI weather briefing
         continue-on-error: true
