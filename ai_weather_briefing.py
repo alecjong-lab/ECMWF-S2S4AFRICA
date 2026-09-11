@@ -288,6 +288,17 @@ onsetgefs_path = f"{kenya_path}/monthly/onset_gefs.png"
 onsetecmwf_accum_path = f"{kenya_path}/monthly/onset_s2s_accum.png"
 onsetgefs_accum_path = f"{kenya_path}/monthly/onset_gefs_accum.png"
 
+# ICPAC_10mm variant of the two plain onset maps above (10mm, not 20mm, wet-spell
+# total) -- no 10mm variant of the accum definition
+onsetecmwf_10mm_path = f"{kenya_path}/monthly/onset_s2s_10mm.png"
+onsetgefs_10mm_path = f"{kenya_path}/monthly/onset_gefs_10mm.png"
+
+# reforecast-archive climatology counterparts of the ECMWF onset maps above
+# (see the "S2S reforecast climatology" block in run_rainfall_onset.py)
+onsetecmwf_climatology_path = f"{kenya_path}/monthly/onset_s2s_climatology.png"
+onsetecmwf_accum_climatology_path = f"{kenya_path}/monthly/onset_s2s_climatology_accum.png"
+onsetecmwf_climatology_10mm_path = f"{kenya_path}/monthly/onset_s2s_climatology_10mm.png"
+
 # dry/wet spell probability & median length maps (see plot_s2s.py)
 median_wet_path = f"{kenya_path}/monthly/median_wetspell_length.png"
 wet5_path = f"{kenya_path}/monthly/prob_wetspell_5days.png"
@@ -295,6 +306,13 @@ wet7_path = f"{kenya_path}/monthly/prob_wetspell_7days.png"
 median_dry_path = f"{kenya_path}/monthly/median_dryspell_length.png"
 dry5_path = f"{kenya_path}/monthly/prob_dryspell_5days.png"
 dry7_path = f"{kenya_path}/monthly/prob_dryspell_7days.png"
+
+# reforecast-archive climatology counterparts of the wet-spell maps above
+# (Kenya-only "climatological wet spell" block in plot_s2s.py; no dry-spell
+# climatology has been computed yet)
+median_wet_climatology_path = f"{kenya_path}/monthly/climatology_median_wetspell_length.png"
+wet5_climatology_path = f"{kenya_path}/monthly/climatology_prob_wetspell_5days.png"
+wet7_climatology_path = f"{kenya_path}/monthly/climatology_prob_wetspell_7days.png"
 
 exceed20mm_path = f"{kenya_path}/weekly/chance_higherthan_20mm.png"
 
@@ -313,12 +331,20 @@ picture_paths = {
     "Onset_GEFS": onsetgefs_path,
     "Onset_ECMWF_accum": onsetecmwf_accum_path,
     "Onset_GEFS_accum": onsetgefs_accum_path,
+    "Onset_ECMWF_10mm": onsetecmwf_10mm_path,
+    "Onset_GEFS_10mm": onsetgefs_10mm_path,
+    "Onset_ECMWF_climatology": onsetecmwf_climatology_path,
+    "Onset_ECMWF_accum_climatology": onsetecmwf_accum_climatology_path,
+    "Onset_ECMWF_climatology_10mm": onsetecmwf_climatology_10mm_path,
     "median_wet": median_wet_path,
     "wet5": wet5_path,
     "wet7": wet7_path,
     "median_dry": median_dry_path,
     "dry5": dry5_path,
     "dry7": dry7_path,
+    "median_wet_climatology": median_wet_climatology_path,
+    "wet5_climatology": wet5_climatology_path,
+    "wet7_climatology": wet7_climatology_path,
     "exceed20mm": exceed20mm_path,
 }
 
@@ -366,6 +392,14 @@ required_missing = []
 # so a missing one is tolerated (warn, keep the template placeholder) rather than
 # blocking the send like the core forecast/diagnostic pictures below.
 optional_picture_names = set(briefing_plot_names)
+
+# Reforecast-archive climatology plots are new and depend on an extra network
+# fetch (Planette's reforecast archive) on top of the core pipeline, so a
+# missing one is tolerated the same way rather than blocking the whole send.
+optional_picture_names |= {
+    "Onset_ECMWF_climatology", "Onset_ECMWF_accum_climatology", "Onset_ECMWF_climatology_10mm",
+    "median_wet_climatology", "wet5_climatology", "wet7_climatology",
+}
 
 # Picture-only shapes (no AI narration) — matched by shape name or alt text,
 # wherever in the deck that shape happens to live.

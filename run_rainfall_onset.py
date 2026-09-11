@@ -398,10 +398,7 @@ try:
     clean_for_netcdf(onset_s2s_clim).to_netcdf(f'{data_path}/rainfall_onset_s2s_climatology_{country}.nc')
     summarize('S2S climatology', onset_s2s_clim)
 
-    title = (
-        f'S2S climatological rainy season onset — {country}\n'
-        f'{onset_s2s_clim.sizes["number"]} reforecast year/member combinations, same calendar day as {date_str}'
-    )
+    title = f'S2S climatological rainy season onset — {country} ({pd.Timestamp(date_str):%b %d})'
     plot_onset_map(onset_s2s_clim, bbox, pd.Timestamp(date_str).year, title, f'{plot_dir}/onset_s2s_climatology.png',
                    forecast_start=universal_forecast_start or pd.Timestamp(valid_time_year.min().values),
                    n_time=universal_n_time or reforecast_daily.sizes['step'])
@@ -410,10 +407,7 @@ try:
     clean_for_netcdf(onset_s2s_clim_icpac10mm).to_netcdf(f'{data_path}/rainfall_onset_icpac10mm_s2s_climatology_{country}.nc')
     summarize('S2S climatology (ICPAC_10mm)', onset_s2s_clim_icpac10mm)
 
-    title_icpac10mm = (
-        f'S2S climatological rainy season onset (ICPAC_10mm) — {country}\n'
-        f'{onset_s2s_clim_icpac10mm.sizes["number"]} reforecast year/member combinations, same calendar day as {date_str}'
-    )
+    title_icpac10mm = f'S2S climatological rainy season onset (ICPAC_10mm) — {country} ({pd.Timestamp(date_str):%b %d})'
     plot_onset_map(onset_s2s_clim_icpac10mm, bbox, pd.Timestamp(date_str).year, title_icpac10mm,
                    f'{plot_dir}/onset_s2s_climatology_icpac10mm.png',
                    forecast_start=universal_forecast_start or pd.Timestamp(valid_time_year.min().values),
@@ -423,10 +417,7 @@ try:
     clean_for_netcdf(onset_s2s_clim_accum).to_netcdf(f'{data_path}/rainfall_onset_accum_s2s_climatology_{country}.nc')
     summarize('S2S climatology (accum)', onset_s2s_clim_accum)
 
-    title_accum = (
-        f'S2S climatological start of growing season — {country}\n'
-        f'{onset_s2s_clim_accum.sizes["number"]} reforecast year/member combinations, same calendar day as {date_str}'
-    )
+    title_accum = f'S2S climatological start of growing season — {country} ({pd.Timestamp(date_str):%b %d})'
     plot_onset_map(onset_s2s_clim_accum, bbox, pd.Timestamp(date_str).year, title_accum,
                    f'{plot_dir}/onset_s2s_climatology_accum.png',
                    forecast_start=universal_forecast_start or pd.Timestamp(valid_time_year.min().values),
