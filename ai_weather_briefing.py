@@ -6,6 +6,7 @@ import get_ECMWF_functions as gef
 from datetime import datetime, timedelta
 from pptx import Presentation
 from pptx.util import Pt
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_AUTO_SIZE, PP_ALIGN
 from pptx.oxml.ns import qn
 import json
@@ -15,20 +16,31 @@ import requests
 
 prefix=os.environ["MAIN_PATH"]
 
-# Google Slides template (weather_briefing_kenya_template). Downloaded via the
-# rclone gdrive remote (same RCLONE_CONFIG as s2s-emails.xlsx). The file can
-# stay private if that Google account has access. Override with
-# BRIEFING_TEMPLATE_ID, GOOGLE_DRIVE_TOKEN, or BRIEFING_TEMPLATE_PATH.
+# Google Slides template (weather_briefing_kenya_template). Primary fetch is
+# the public "anyone with the link" pptx export. rclone/Drive API are fallbacks
+# if the file is made private. Override with BRIEFING_TEMPLATE_ID,
+# GOOGLE_DRIVE_TOKEN, or BRIEFING_TEMPLATE_PATH. GOOGLE_API_KEY is Gemini-only.
 TEMPLATE_SLIDES_ID = os.environ.get(
     "BRIEFING_TEMPLATE_ID", "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
 )
 TEMPLATE_EXPORT_URL = (
     f"https://docs.google.com/presentation/d/{TEMPLATE_SLIDES_ID}/export/pptx"
 )
+PPTX_MIME = (
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+)
+SLIDES_MIME = "application/vnd.google-apps.presentation"
+DRIVE_FILE_URL = (
+    f"https://www.googleapis.com/drive/v3/files/{TEMPLATE_SLIDES_ID}"
+    "?fields=id,name,mimeType&supportsAllDrives=true"
+)
 DRIVE_EXPORT_URL = (
     f"https://www.googleapis.com/drive/v3/files/{TEMPLATE_SLIDES_ID}/export"
-    "?mimeType=application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    "&supportsAllDrives=true"
+    f"?mimeType={PPTX_MIME}&supportsAllDrives=true"
+)
+DRIVE_MEDIA_URL = (
+    f"https://www.googleapis.com/drive/v3/files/{TEMPLATE_SLIDES_ID}"
+    "?alt=media&supportsAllDrives=true"
 )
 
 if "DATE_STR" in os.environ:
@@ -65,7 +77,7 @@ Forecast date: {date_str}
 Country: Kenya
 Month: {date_str[5:7]}
 Zone statistics (6-week forecast).
-Onset dates come from the rainfall-onset action (first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days), median over ensemble members and grid cells in each region. Use them in the Indicators paragraph of the Overall Summary for **OND Short Rains** onset (typical mid-October). Never describe MAM Long Rains onset. Do not infer onset from weekly totals.
+Onset dates come from the rainfall-onset action (first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days), median over ensemble members and grid cells in each region. Use them in one sentence of the Overall Summary for **OND Short Rains** onset (typical mid-October). Never describe MAM Long Rains onset. Do not infer onset from weekly totals. Each forecast slide (2–10) should be 2–3 sentences only.
 {gef.format_prompt_data(promt_unformat)}
 """
 
@@ -76,7 +88,7 @@ response = client.models.generate_content(
     contents=user_prompt,
     config=types.GenerateContentConfig(
         system_instruction=system_prompt,
-        max_output_tokens=6000,
+        max_output_tokens=2500,
     )
 )
 summary = response.text
@@ -89,13 +101,21 @@ summary = response.text
 # with open(f'{prefix}/prompts/digest_{date_str}.txt', 'w') as f:
 #     f.write(summary)
 
-def _rclone_drive_token(remote="gdrive"):
+def _rclone_remote():
+    return os.environ.get("BRIEFING_RCLONE_REMOTE", "gdrive")
+
+
+def _rclone_refresh(remote):
     subprocess.run(
         ["rclone", "about", f"{remote}:"],
         check=False,
         capture_output=True,
         text=True,
     )
+
+
+def _rclone_drive_token(remote="gdrive"):
+    _rclone_refresh(remote)
     dump = subprocess.run(
         ["rclone", "config", "dump"],
         check=True,
@@ -116,7 +136,7 @@ def _drive_access_token():
     if env_token:
         return env_token
     if shutil.which("rclone"):
-        return _rclone_drive_token(os.environ.get("BRIEFING_RCLONE_REMOTE", "gdrive"))
+        return _rclone_drive_token(_rclone_remote())
     return None
 
 
@@ -131,29 +151,101 @@ def _write_pptx(dest_path, content, source):
     return dest_path
 
 
+def _drive_http_error(op, resp):
+    body = (resp.text or "").strip().replace("\n", " ")
+    return f"Drive API {op} {resp.status_code}: {body[:400]}"
+
+
+class _GoogleAuthSession(requests.Session):
+    """Keep Bearer auth on googleusercontent / googleapis download redirects.
+
+    requests strips Authorization when the host changes, which makes Drive
+    answer 403 "The request is missing a valid API key."
+    """
+
+    def rebuild_auth(self, prepared_request, response):
+        return
+
+
+def _rclone_copy_template(dest_path):
+    remote = _rclone_remote()
+    dest = os.path.abspath(dest_path)
+    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+    _rclone_refresh(remote)
+    proc = subprocess.run(
+        [
+            "rclone",
+            "--drive-export-formats",
+            "pptx",
+            "backend",
+            "copyid",
+            f"{remote}:",
+            TEMPLATE_SLIDES_ID,
+            dest,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0 or not os.path.isfile(dest):
+        detail = (proc.stderr or proc.stdout or "rclone copyid failed").strip()
+        raise RuntimeError(detail)
+    with open(dest, "rb") as f:
+        head = f.read(2)
+    if head != b"PK":
+        raise RuntimeError(f"rclone copyid did not produce a pptx ({dest})")
+    return dest_path
+
+
+def _drive_api_download(dest_path, token):
+    session = _GoogleAuthSession()
+    session.headers["Authorization"] = f"Bearer {token}"
+    meta = session.get(DRIVE_FILE_URL, timeout=120)
+    if not meta.ok:
+        raise RuntimeError(_drive_http_error("files.get", meta))
+    mime = meta.json().get("mimeType", "")
+    url = DRIVE_EXPORT_URL if mime == SLIDES_MIME else DRIVE_MEDIA_URL
+    resp = session.get(url, timeout=120)
+    if not resp.ok:
+        raise RuntimeError(_drive_http_error("download", resp))
+    return _write_pptx(dest_path, resp.content, f"Drive API ({mime or 'unknown'})")
+
+
 def download_slides_template(dest_path):
+    errors = []
+
+    try:
+        resp = requests.get(TEMPLATE_EXPORT_URL, timeout=120)
+        resp.raise_for_status()
+        return _write_pptx(dest_path, resp.content, TEMPLATE_EXPORT_URL)
+    except Exception as exc:
+        errors.append(f"public export: {exc}")
+        print(
+            f"WARNING: public Slides export failed ({exc}); trying rclone/Drive",
+            file=sys.stderr,
+        )
+
+    if shutil.which("rclone"):
+        try:
+            return _rclone_copy_template(dest_path)
+        except Exception as exc:
+            errors.append(f"rclone: {exc}")
+            print(f"WARNING: rclone template copy failed ({exc})", file=sys.stderr)
+
     token = None
     try:
         token = _drive_access_token()
     except Exception as exc:
+        errors.append(f"token: {exc}")
         print(f"WARNING: could not get a Drive token ({exc})", file=sys.stderr)
 
     if token:
-        resp = requests.get(
-            DRIVE_EXPORT_URL,
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=120,
-        )
-        resp.raise_for_status()
-        return _write_pptx(dest_path, resp.content, "Drive API")
+        try:
+            return _drive_api_download(dest_path, token)
+        except Exception as exc:
+            errors.append(f"Drive API: {exc}")
+            print(f"WARNING: Drive API template download failed ({exc})", file=sys.stderr)
 
-    print(
-        "WARNING: no Drive credentials; falling back to the public Slides export URL",
-        file=sys.stderr,
-    )
-    resp = requests.get(TEMPLATE_EXPORT_URL, timeout=120)
-    resp.raise_for_status()
-    return _write_pptx(dest_path, resp.content, TEMPLATE_EXPORT_URL)
+    raise RuntimeError("Drive template download failed: " + "; ".join(errors))
 
 
 def shape_keys(shape):
@@ -282,22 +374,28 @@ IO_precip_anom_path = f"{diagnostics_path}/ECMWF_s2s_precip_anomaly_{date_str}.p
 IO_precip_anom_std_path = f"{diagnostics_path}/ECMWF_s2s_precip_std_anomaly_{date_str}.png"
 
 # rainy season onset maps (see run_rainfall_onset.py) -- wet-spell/no-dry-spell
-# definition, and the two-stage cumulative-rainfall ("accum") definition
+# definition, the ICPAC 10 mm wet-spell variant, and the two-stage
+# cumulative-rainfall ("accum") definition. Generator stems use icpac10mm,
+# not _10mm.
 onsetecmwf_path = f"{kenya_path}/monthly/onset_s2s.png"
 onsetgefs_path = f"{kenya_path}/monthly/onset_gefs.png"
 onsetecmwf_accum_path = f"{kenya_path}/monthly/onset_s2s_accum.png"
 onsetgefs_accum_path = f"{kenya_path}/monthly/onset_gefs_accum.png"
+onsetecmwf_10mm_path = f"{kenya_path}/monthly/onset_s2s_icpac10mm.png"
+onsetgefs_10mm_path = f"{kenya_path}/monthly/onset_gefs_icpac10mm.png"
+onsetecmwf_accum_clim_path = f"{kenya_path}/monthly/onset_s2s_climatology_accum.png"
 
 # ICPAC_10mm variant of the two plain onset maps above (10mm, not 20mm, wet-spell
-# total) -- no 10mm variant of the accum definition
-onsetecmwf_10mm_path = f"{kenya_path}/monthly/onset_s2s_10mm.png"
-onsetgefs_10mm_path = f"{kenya_path}/monthly/onset_gefs_10mm.png"
+# total) -- no 10mm variant of the accum definition. Generator stems are
+# icpac10mm, not _10mm.
+onsetecmwf_10mm_path = f"{kenya_path}/monthly/onset_s2s_icpac10mm.png"
+onsetgefs_10mm_path = f"{kenya_path}/monthly/onset_gefs_icpac10mm.png"
 
 # reforecast-archive climatology counterparts of the ECMWF onset maps above
 # (see the "S2S reforecast climatology" block in run_rainfall_onset.py)
 onsetecmwf_climatology_path = f"{kenya_path}/monthly/onset_s2s_climatology.png"
 onsetecmwf_accum_climatology_path = f"{kenya_path}/monthly/onset_s2s_climatology_accum.png"
-onsetecmwf_climatology_10mm_path = f"{kenya_path}/monthly/onset_s2s_climatology_10mm.png"
+onsetecmwf_climatology_10mm_path = f"{kenya_path}/monthly/onset_s2s_climatology_icpac10mm.png"
 
 # dry/wet spell probability & median length maps (see plot_s2s.py)
 median_wet_path = f"{kenya_path}/monthly/median_wetspell_length.png"
@@ -348,7 +446,7 @@ picture_paths = {
     "exceed20mm": exceed20mm_path,
 }
 
-# Plots generated by ws_scripts/slide*.sh and collected into briefing_plots_path
+# Plots generated by ws_scripts/*.sh and collected into briefing_plots_path
 # (see populate_briefing_template3.py) — picture-only, no AI narration.
 briefing_plot_names = [
     "chirps_kenya_weekly_rainfall",
@@ -360,6 +458,7 @@ briefing_plot_names = [
     "tahmo_kenya_cities_humidity",
     "kenya_ond_weekly_rainfall_vs_climatology",
     "kenya_ond_weekly_standardized_anomaly",
+    "kenya_ond_last_week_rainfall_kenya_extent",
     "kenya_weekly_rainfall_analog_years",
     "mjo_rmm_gefs",
     "mjo_rmm_ecmwf",
@@ -373,9 +472,27 @@ briefing_plot_names = [
     "kenya_gefs_chirps_verify_5mm",
     "kenya_gefs_chirps_bias",
     "kenya_gefs_chirps_mae",
+    "sst_global_oisst_nino_iod",
+    "kenya_week1_forecast_mae_vs_chirps",
 ]
 for name in briefing_plot_names:
     picture_paths[name] = f"{briefing_plots_path}/{name}.png"
+
+def resolve_picture_path(path):
+    """Prefer the given path; also try the icpac10mm <-> 10mm filename alias."""
+    if os.path.exists(path):
+        return path
+    aliases = (
+        ("_icpac10mm.png", "_10mm.png"),
+        ("_10mm.png", "_icpac10mm.png"),
+    )
+    for old, new in aliases:
+        if path.endswith(old):
+            alt = path[: -len(old)] + new
+            if os.path.exists(alt):
+                return alt
+    return path
+
 
 def replace_picture(slide, shape, image_path):
     left, top, width, height = shape.left, shape.top, shape.width, shape.height
@@ -387,17 +504,25 @@ def replace_picture(slide, shape, image_path):
 # before prs.save() below.
 required_missing = []
 
-# ws_scripts/slide*.sh-sourced pictures are still being wired into this pipeline
+# ws_scripts/*.sh-sourced pictures are still being wired into this pipeline
 # (see populate_briefing_template3.py) and aren't reliably populated every day yet,
 # so a missing one is tolerated (warn, keep the template placeholder) rather than
 # blocking the send like the core forecast/diagnostic pictures below.
-optional_picture_names = set(briefing_plot_names)
+# 10 mm / climatology onset maps are not on every GCS date yet (they landed
+# after 2026-09-09). Warn and keep the template placeholder instead of
+# blocking the send.
+optional_onset_names = {
+    "Onset_ECMWF_10mm",
+    "Onset_GEFS_10mm",
+    "Onset_ECMWF_accum_climatology",
+}
+optional_picture_names = set(briefing_plot_names) | optional_onset_names
 
 # Reforecast-archive climatology plots are new and depend on an extra network
 # fetch (Planette's reforecast archive) on top of the core pipeline, so a
 # missing one is tolerated the same way rather than blocking the whole send.
 optional_picture_names |= {
-    "Onset_ECMWF_climatology", "Onset_ECMWF_accum_climatology", "Onset_ECMWF_climatology_10mm",
+    "Onset_ECMWF_climatology", "Onset_ECMWF_climatology_10mm",
     "median_wet_climatology", "wet5_climatology", "wet7_climatology",
 }
 
@@ -408,6 +533,7 @@ for slide in prs.slides:
         key, path = first_mapped(shape, picture_paths)
         if key is None:
             continue
+        path = resolve_picture_path(path)
         if os.path.exists(path):
             replace_picture(slide, shape, path)
         elif key in optional_picture_names:
@@ -415,6 +541,40 @@ for slide in prs.slides:
         else:
             print(f"WARNING: missing required picture for '{key}': {path}", file=sys.stderr)
             required_missing.append(key)
+
+# Seasonal Progression has a right-hand picture with no alt text yet. Fill
+# the largest remaining unlabeled picture on that slide (skip logos / flags).
+_last_week_map = "kenya_ond_last_week_rainfall_kenya_extent"
+_last_week_path = resolve_picture_path(picture_paths[_last_week_map])
+if os.path.exists(_last_week_path):
+    _skip_unlabeled = ("gklogo", "3dflags")
+    for slide in prs.slides:
+        texts = []
+        unlabeled = []
+        already_mapped = False
+        for shape in list(slide.shapes):
+            keys = set(shape_keys(shape))
+            if getattr(shape, "has_text_frame", False):
+                texts.append(shape.text_frame.text or "")
+            if _last_week_map in keys:
+                already_mapped = True
+                break
+            if shape.shape_type != MSO_SHAPE_TYPE.PICTURE:
+                continue
+            if first_mapped(shape, picture_paths)[0]:
+                continue
+            blob = " ".join(keys).lower()
+            if any(token in blob for token in _skip_unlabeled):
+                continue
+            unlabeled.append(shape)
+        if (
+            already_mapped
+            or "Seasonal Progression" not in "".join(texts)
+            or not unlabeled
+        ):
+            continue
+        target = max(unlabeled, key=lambda s: int(s.width) * int(s.height))
+        replace_picture(slide, target, _last_week_path)
 
 dt_obj = datetime.fromisoformat(date_str)
 day = dt_obj.day

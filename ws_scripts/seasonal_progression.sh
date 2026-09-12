@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 S="git+https://github.com/rhiza-research/forecasting-skills@dev"
-BBOX=1.0/36.5/-3.0/39.0   # from: resolve-region "Kenya OND region"
+BBOX=5.0/36.5/-5.0/42.0   # from: resolve-region "Kenya OND region"
 
 # OND season (Aug-Dec, current year) + latest available CHIRPS day.
 CUR_YEAR=$(date -u +%Y)
@@ -11,7 +11,7 @@ END=$(uvx --from $S forecasting-skills chirps-fetch --probe-latest)
 
 # observed branch
 uvx --from $S forecasting-skills chirps-fetch \
-  --start-time "$SEASON_START" --end-time "$END" --bbox $BBOX \
+  --start-time "$SEASON_START" --end-time "$END" --bbox "$BBOX" \
   --workers 8 --output chirps_ond.zarr
 uvx --from $S forecasting-skills summarize-dim \
   --dim latitude --dim longitude --method mean --lat-weighted \
@@ -20,7 +20,7 @@ uvx --from $S forecasting-skills summarize-dim \
 # climatology branch
 uvx --from $S forecasting-skills clim-fetch \
   --dataset chirps --variable precip \
-  --start-time "$SEASON_START" --end-time "$SEASON_END" --bbox $BBOX \
+  --start-time "$SEASON_START" --end-time "$SEASON_END" --bbox "$BBOX" \
   --output clim_ond.zarr
 uvx --from $S forecasting-skills summarize-dim \
   --dim latitude --dim longitude --method mean --lat-weighted \
@@ -67,12 +67,11 @@ uvx --from $S forecasting-skills plot-timeseries \
   --output kenya_ond_weekly_rainfall_vs_climatology.png
 
 S="git+https://github.com/rhiza-research/forecasting-skills@dev"
-BBOX=1.0/36.5/-3.0/39.0
 
 # weekly climatology with correct weekly std
 uvx --from $S forecasting-skills clim-fetch \
   --dataset chirps --variable precip --window 7 --align left \
-  --start-time "$SEASON_START" --end-time "$SEASON_END" --bbox $BBOX \
+  --start-time "$SEASON_START" --end-time "$SEASON_END" --bbox "$BBOX" \
   --output clim_ond_w7.zarr
 
 # observed anomaly, per grid cell then area-averaged
@@ -140,3 +139,37 @@ uvx --from $S forecasting-skills plot-timeseries \
   --title "Weekly standardized rainfall anomaly, Kenya OND region (Aug-Dec ${CUR_YEAR})" \
   --ylabel 'Standardized anomaly [z-score]' --fontsize 16 \
   --output kenya_ond_weekly_standardized_anomaly.png
+
+# Latest published CHIRPS week on the OND box, drawn on the full Kenya extent.
+TIME=$(uvx --from $S forecasting-skills resolve-time last-1w --as-of "$END")
+# TIME is: --start-time YYYY-MM-DD --end-time YYYY-MM-DD
+WEEK_START=$(echo "$TIME" | awk '{for (i = 1; i <= NF; i++) if ($i == "--start-time") print $(i + 1)}')
+WEEK_END=$(echo "$TIME" | awk '{for (i = 1; i <= NF; i++) if ($i == "--end-time") print $(i + 1)}')
+WEEK_START_LABEL=$(date -u -d "$WEEK_START" +'%-d %b')
+WEEK_END_LABEL=$(date -u -d "$WEEK_END" +'%-d %b %Y')
+
+uvx --from $S forecasting-skills resolve-region KEN \
+  --geojson kenya.geojson
+
+uvx --from $S forecasting-skills chirps-fetch \
+  --bbox "$BBOX" \
+  $TIME \
+  --workers 8 \
+  --output chirps_ond_last_week.zarr
+
+uvx --from $S forecasting-skills aggregate-temporal \
+  --period weekly --method mean --align left \
+  --input chirps_ond_last_week.zarr --output chirps_ond_last_week_weekly.zarr
+
+uvx --from $S forecasting-skills convert-to-totals \
+  --min-coverage 1.0 \
+  --input chirps_ond_last_week_weekly.zarr --output chirps_ond_last_week_mm.zarr
+
+uvx --from $S forecasting-skills plot \
+  --layer heatmap:chirps_ond_last_week_mm.zarr \
+  --layer outline:kenya.geojson \
+  --draw-box "$BBOX" \
+  --extent 33.4,42.4,-5.2,6.0 \
+  --fontsize 18 \
+  --title "CHIRPS rainfall total, ${WEEK_START_LABEL} – ${WEEK_END_LABEL} — Kenya OND region shown on full Kenya extent" \
+  --output kenya_ond_last_week_rainfall_kenya_extent.png

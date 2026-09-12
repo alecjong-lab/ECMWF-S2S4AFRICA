@@ -27,61 +27,71 @@ jobs:
         id: date
         run: echo "date=$(date -u -d '2 days ago' +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
-      - name: Run slide7.sh
+      - name: Run recent_rainfall_observations_kenya.sh
         continue-on-error: true
         working-directory: ws_scripts
-        run: bash slide7.sh
+        run: bash recent_rainfall_observations_kenya.sh
 
-      - name: Run slide8.sh
+      - name: Run recent_rainfall_observations_eastern_africa.sh
         continue-on-error: true
         working-directory: ws_scripts
-        run: bash slide8.sh
+        run: bash recent_rainfall_observations_eastern_africa.sh
 
-      - name: Run slide9.sh
+      - name: Run recent_observations_station_data.sh
         continue-on-error: true
         working-directory: ws_scripts
         env:
           TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
           TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
-        run: bash slide9.sh
+        run: bash recent_observations_station_data.sh
 
-      - name: Run slide10.sh
+      - name: Run seasonal_progression.sh
         continue-on-error: true
         working-directory: ws_scripts
-        run: bash slide10.sh
+        run: bash seasonal_progression.sh
 
-      - name: Run slide11.sh
+      - name: Run seasonal_progression_vs_analog_years.sh
         continue-on-error: true
         working-directory: ws_scripts
         env:
           ECMWF_DATASTORES_URL: "https://ecds.ecmwf.int/api"
           ECMWF_DATASTORES_KEY: ${{ secrets.CDSAPI_KEY }}
-        run: bash slide11.sh
+        run: bash seasonal_progression_vs_analog_years.sh
 
-      - name: Run slide12.sh
+      - name: Run equatorial_waves_mjo.sh
         continue-on-error: true
         working-directory: ws_scripts
-        run: bash slide12.sh
+        run: bash equatorial_waves_mjo.sh
 
-      - name: Run slide13.sh
+      - name: Run equatorial_waves_iod_enso.sh
         continue-on-error: true
         working-directory: ws_scripts
-        run: bash slide13.sh
+        run: bash equatorial_waves_iod_enso.sh
 
-      - name: Run slide14.sh
+      - name: Run itcz_state.sh
         continue-on-error: true
         working-directory: ws_scripts
-        run: bash slide14.sh
+        run: bash itcz_state.sh
 
-      - name: Run slide15.sh
+      - name: Run equatorial_waves_analyses_and_forecasts.sh
         continue-on-error: true
         working-directory: ws_scripts
-        run: bash slide15.sh
+        run: bash equatorial_waves_analyses_and_forecasts.sh
 
-      - name: Run slide171819.sh
+      - name: Run current_sst_conditions.sh
         continue-on-error: true
         working-directory: ws_scripts
-        run: bash slide171819.sh
+        run: bash current_sst_conditions.sh
+
+      - name: Run last_weeks_forecast_verification.sh
+        continue-on-error: true
+        working-directory: ws_scripts
+        run: bash last_weeks_forecast_verification.sh
+
+      - name: Run timeseries_verification.sh
+        continue-on-error: true
+        working-directory: ws_scripts
+        run: bash timeseries_verification.sh
 
       - name: Collect briefing plots
         run: |

@@ -11,7 +11,7 @@ CLIM_END=$(date -u -d "$START +21 days" +%Y-%m-%d)
 END_LABEL=$(date -u -d "$END" +'%Y-%m-%d')
 
 uvx --from "$SKILLS" forecasting-skills chirps-fetch \
-  --bbox 17.998307/21.887843/-26.742192/51.13387 \
+  --bbox 17.998307/21.887843/-15/51.13387 \
   --start-time "$START" --end-time "$END" --workers 8 \
   --output step1.zarr
 
@@ -37,7 +37,7 @@ CLIM_SKILLS="git+https://github.com/rhiza-research/forecasting-skills@mohini/ski
 uvx --from "$CLIM_SKILLS" forecasting-skills clim-fetch \
   --dataset chirps --variable precip --window 7 --align left \
   --start-time "$START" --end-time "$CLIM_END" \
-  --bbox 17.998307/21.887843/-26.742192/51.13387 \
+  --bbox 17.998307/21.887843/-15/51.13387 \
   --output chirps_clim_7d.zarr
 
 uvx --from "$CLIM_SKILLS" forecasting-skills rename \
@@ -46,7 +46,7 @@ uvx --from "$CLIM_SKILLS" forecasting-skills rename \
 
 # --- observations (dev) ---
 uvx --from "$SKILLS" forecasting-skills chirps-fetch \
-  --bbox 17.998307/21.887843/-26.742192/51.13387 \
+  --bbox 17.998307/21.887843/-15/51.13387 \
   --start-time "$START" --end-time "$END" --workers 8 \
   --output step1.zarr
 
