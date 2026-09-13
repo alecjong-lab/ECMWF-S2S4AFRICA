@@ -94,7 +94,7 @@ response = client.models.generate_content(
     contents=user_prompt,
     config=types.GenerateContentConfig(
         system_instruction=synthesis_system_prompt,
-        max_output_tokens=6000,
+        max_output_tokens=2500,
     ),
 )
 summary = response.text

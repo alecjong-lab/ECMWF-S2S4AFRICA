@@ -306,75 +306,87 @@ jobs:
             gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
           done
 
-      # ── Stage: briefing_slides (ws_scripts/slide*.sh, Kenya-hardcoded) ──
+      # ── Stage: briefing_slides (ws_scripts/*.sh, Kenya-hardcoded) ──
       - name: Install uv for ws_scripts
         if: ${{ inputs.run_briefing_slides }}
         uses: astral-sh/setup-uv@v5
         with:
           version: "0.11.20"
 
-      - name: Run slide7.sh
+      - name: Run recent_rainfall_observations_kenya.sh
         if: ${{ inputs.run_briefing_slides }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
-        run: bash slide7.sh
+        run: bash recent_rainfall_observations_kenya.sh
 
-      - name: Run slide8.sh
+      - name: Run recent_rainfall_observations_eastern_africa.sh
         if: ${{ inputs.run_briefing_slides }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
-        run: bash slide8.sh
+        run: bash recent_rainfall_observations_eastern_africa.sh
 
-      - name: Run slide9.sh
+      - name: Run recent_observations_station_data.sh
         if: ${{ inputs.run_briefing_slides }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
-        run: bash slide9.sh
+        run: bash recent_observations_station_data.sh
 
-      - name: Run slide10.sh
+      - name: Run seasonal_progression.sh
         if: ${{ inputs.run_briefing_slides }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
-        run: bash slide10.sh
+        run: bash seasonal_progression.sh
 
-      - name: Run slide11.sh
+      - name: Run seasonal_progression_vs_analog_years.sh
         if: ${{ inputs.run_briefing_slides }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         env:
           ECMWF_DATASTORES_URL: "https://ecds.ecmwf.int/api"
           ECMWF_DATASTORES_KEY: ${{ secrets.CDSAPI_KEY }}
-        run: bash slide11.sh
+        run: bash seasonal_progression_vs_analog_years.sh
 
-      - name: Run slide12.sh
+      - name: Run equatorial_waves_mjo.sh
         if: ${{ inputs.run_briefing_slides }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
-        run: bash slide12.sh
+        run: bash equatorial_waves_mjo.sh
 
-      - name: Run slide13.sh
+      - name: Run equatorial_waves_iod_enso.sh
         if: ${{ inputs.run_briefing_slides }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
-        run: bash slide13.sh
+        run: bash equatorial_waves_iod_enso.sh
 
-      - name: Run slide14.sh
+      - name: Run itcz_state.sh
         if: ${{ inputs.run_briefing_slides }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
-        run: bash slide14.sh
+        run: bash itcz_state.sh
 
-      - name: Run slide15.sh
+      - name: Run equatorial_waves_analyses_and_forecasts.sh
         if: ${{ inputs.run_briefing_slides }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
-        run: bash slide15.sh
+        run: bash equatorial_waves_analyses_and_forecasts.sh
 
-      - name: Run slide171819.sh
+      - name: Run current_sst_conditions.sh
         if: ${{ inputs.run_briefing_slides }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
-        run: bash slide171819.sh
+        run: bash current_sst_conditions.sh
+
+      - name: Run last_weeks_forecast_verification.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash last_weeks_forecast_verification.sh
+
+      - name: Run timeseries_verification.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash timeseries_verification.sh
 
       - name: Collect briefing plots
         if: ${{ inputs.run_briefing_slides }}

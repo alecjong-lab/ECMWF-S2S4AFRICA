@@ -107,6 +107,9 @@ title). The three files show three different metrics — hits/exceedance at a 5m
 bias (forecast minus observed), and mean absolute error, respectively — identify which one
 from the title and describe how that metric changes across lead weeks (i.e. across columns),
 which is the actual skill-degradation story here.
+`kenya_week1_forecast_mae_vs_chirps` is a 1D timeseries (not a map grid) of week-1 MAE
+versus CHIRPS over Kenya for GFS, AIFS-ENS, and IFS-ENS — compare models and how error
+changes over the months shown, not across lead weeks.
 
 **M. MJO RMM phase diagrams** (`mjo_rmm_gefs`, `mjo_rmm_ecmwf`): a phase-space diagram
 (RMM1 vs RMM2) with a unit circle — inside the circle = weak/inactive MJO, outside = active,
@@ -119,6 +122,11 @@ figures (not combined). State the current phase (El Nino/La Nina/neutral, or pos
 negative/neutral IOD) and forecast tendency using only labels/thresholds visible in the
 plot.
 
+**Q. Global OISST with monitoring boxes** (`sst_global_oisst_nino_iod`): a global daily
+OISST v2.1 SST map with three outlined boxes (Nino 3.4, IOD west, IOD east). Describe the
+SST pattern in those boxes and any basin-scale contrast the boxes sit in — not the whole
+globe equally.
+
 **O. Convective diagnostics** (`itcz_africa_latest` — a single snapshot map of the ITCZ's
 current position over Africa; `hovmoller_olr_tropics` — a time-vs-longitude/latitude
 Hovmoller of outgoing longwave radiation showing propagation of convective anomalies;
@@ -129,6 +137,9 @@ deep convection/cloudiness, higher OLR = suppressed convection.
 current-year observed CHIRPS, line = climatology) and `kenya_ond_weekly_standardized_anomaly`
 (bar = z-score anomaly) cover the Aug-Dec season to date only — say where the current season
 sits relative to climatology, don't extrapolate beyond the observed weeks shown.
+`kenya_ond_last_week_rainfall_kenya_extent` is a map of the latest complete CHIRPS week
+inside the Kenya OND box, drawn on the full Kenya extent (box outline = OND region) —
+use past-tense observed language and cardinal directions, same as family J.
 `kenya_weekly_rainfall_analog_years` overlays named analog years (thin colored lines),
 current-year CHIRPS observed (thick black line with markers), the ECMWF S2S 101-member
 ensemble (thin grey lines) and its ensemble mean (thick purple line) — distinguish clearly
