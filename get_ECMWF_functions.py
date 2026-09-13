@@ -3052,3 +3052,28 @@ def load_reforecast(forecast_day, var_group, var, grid='1p5latx1p5lon',
 
     return reforecast
 
+
+
+def reforecast_center_day(reforecasts, date_str):
+    """Recover the reforecast archive's actual centre day as "MM-DD" from a
+    load_reforecast() result.
+
+    load_reforecast picks, per year, the init_time nearest to date_str's month-day,
+    and reforecasts only exist every ~2 days, so the archive day can differ from
+    date_str by a day or two. Use this (not date_str) to label any climatology cached
+    from the result, so the filename matches the days it was actually built from.
+
+    Returns the month-day of whichever init_time in the result lands closest to
+    date_str's own month-day.
+    """
+    target = datetime(2000, int(date_str[5:7]), int(date_str[8:10]))
+
+    best_day_month, best_gap = None, None
+    for init in np.atleast_1d(reforecasts.init_time.values):
+        init = pd.Timestamp(init)
+        gap = abs((datetime(2000, init.month, init.day) - target).days)
+        gap = min(gap, 365 - gap)  # wrap around the new year
+        if best_gap is None or gap < best_gap:
+            best_day_month, best_gap = init.strftime('%m-%d'), gap
+
+    return best_day_month

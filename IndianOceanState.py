@@ -238,7 +238,7 @@ if io_precip_mclimate_path:
 else:
     # reforecasts give the model climatology to compare the forecast against, kept
     # per-week (not summed) so a weekly anomaly can be computed alongside the monthly one
-    reforecasts, reforecast_center_day = gef.load_reforecasts(date_str,'single',var='pr',bbox={'lat1': 20, 'lon1': 30, 'lat2': -20, 'lon2': 120})
+    reforecasts = gef.load_reforecast(date_str,'single',var='pr',bbox={'lat1': 20, 'lon1': 30, 'lat2': -20, 'lon2': 120},all_years=True)
     reforecasts_weekly_persist=gef.week_sum(reforecasts.isel(step=slice(0,28))*60*60*24)
     reforecasts_monthly=reforecasts_weekly_persist.sum('step')
 
@@ -249,9 +249,10 @@ else:
         'tp_monthly_std': reforecasts_monthly.std({'number', 'init_time'}),
     })
     # label with the reforecast archive's actual center date, not date_str, since
-    # the 5-init-time window is built around the nearest day reforecasts exist for
-    reforecast_center_date = f"{date_str[:4]}-{reforecast_center_day}"
-    print(f"Reforecast window for IO_precip is centered on {reforecast_center_day} (nearest to {date_str[5:]})")
+    # reforecasts only exist every ~2 days so the nearest init can be a day or two off
+    center_day = gef.reforecast_center_day(reforecasts, date_str)
+    reforecast_center_date = f"{date_str[:4]}-{center_day}"
+    print(f"Reforecasts for IO_precip are centered on {center_day} (nearest to {date_str[5:]})")
     gef.save_mclimate(io_precip_mclimate, reforecast_center_date, 'IO_precip', folder_path=f'{prefix}/m-climate/')
 
 # --- monthly: climatological median/spread of the summed (monthly-total) reforecasts ---

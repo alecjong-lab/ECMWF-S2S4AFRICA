@@ -113,17 +113,19 @@ if nino_mclimate_path:
 else:
     # reforecast longitude only runs -180..178.5 (no wraparound support in a plain
     # slice), so pull the whole band and let box_mean do the antimeridian split later
-    reforecast_nino_sst, reforecast_center_day = gef.load_reforecasts(
+    reforecast_nino_sst = gef.load_reforecast(
         date_str, 'single', var='sst',
-        bbox={'lat1': 5, 'lon1': -180, 'lat2': -5, 'lon2': 178.5}, time_range=slice(0, 28))
+        bbox={'lat1': 5, 'lon1': -180, 'lat2': -5, 'lon2': 178.5}, time_range=slice(0, 28),
+        all_years=True)
     reforecast_nino_sst_weekly = gef.week_mean(reforecast_nino_sst).isel(step=slice(0, 4))
     nino_mclimate_ds = xr.Dataset({
         'sst': reforecast_nino_sst_weekly.quantile(0.5, {'number', 'init_time'})
     })
     # label with the reforecast archive's actual center date, not date_str, since
-    # the 5-init-time window is built around the nearest day reforecasts exist for
-    reforecast_center_date = f"{date_str[:4]}-{reforecast_center_day}"
-    print(f"Reforecast window for Nino34_sst is centered on {reforecast_center_day} (nearest to {date_str[5:]})")
+    # reforecasts only exist every ~2 days so the nearest init can be a day or two off
+    center_day = gef.reforecast_center_day(reforecast_nino_sst, date_str)
+    reforecast_center_date = f"{date_str[:4]}-{center_day}"
+    print(f"Reforecasts for Nino34_sst are centered on {center_day} (nearest to {date_str[5:]})")
     gef.save_mclimate(nino_mclimate_ds, reforecast_center_date, 'Nino34_sst', folder_path=f'{prefix}/m-climate/')
 
 nino_path = f'{data_path}/ECMWF_s2s_sst_nino34_{date_str}.zarr'

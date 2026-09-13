@@ -74,6 +74,7 @@ forecast_files = {
     (9, 11): ["ECMWF_tp_forecasts_09-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_26_Great_Horn.nc","September_Dekad2"],
     (9, 21): ["ECMWF_tp_forecasts_09-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_27_Great_Horn.nc","September_Dekad3"],
     (10, 1): ["ECMWF_tp_forecasts_10-01-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_28_Great_Horn.nc","October_Dekad1"],
+    (10, 11): ["ECMWF_tp_forecasts_10-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_29_Great_Horn.nc","October_Dekad2"],
 
 }
 
