@@ -5,6 +5,8 @@ import geopandas as gpd
 import rioxarray
 from datetime import datetime, timedelta
 import os
+import re
+import sys
 import pandas as pd
 import regionmask
 
@@ -18,6 +20,18 @@ else:
 prefix=os.environ["MAIN_PATH"]
 
 data_path=f'{prefix}/data/{date_str}'
+
+# data_dekade.nc / data_weekly.nc are written by plot_s2s.py and handed over on
+# local disk -- they are never uploaded to GCS, so a run with plot_s2s skipped
+# (e.g. test_pipeline.yml) can't restore them. Nothing here works without them,
+# so say so and no-op instead of dying on a FileNotFoundError deep in xarray.
+missing=[f for f in (f'data/{date_str}/data_dekade.nc', f'data/{date_str}/data_weekly.nc')
+         if not os.path.isfile(f)]
+if missing:
+    print(f"Skipping downscaling: plot_s2s.py handoff file(s) not found: {', '.join(missing)}. "
+          f"Run plot_s2s.py for {date_str} first.")
+    sys.exit(0)
+
 data=xr.open_zarr(f'{data_path}/ECMWF_s2s_precip_{date_str}.zarr',consolidated=True).compute()
 
 data_dekade=xr.open_dataset(f'data/{date_str}/data_dekade.nc')
@@ -49,6 +63,19 @@ region_map = {
 states1_regions = states1.copy()
 states1_regions['region'] = states1_regions['adm1_name'].map(region_map)
 regions_kenya = states1_regions.dropna(subset=['region']).dissolve(by='region')
+
+# The dekad index inside a chirps climatology filename: the two digits sitting
+# between the 2005_2025 span and the country, with an optional "sorted_" in
+# between (chirpsv3_dekads_2005_2025_26_Great_Horn.nc -> 26,
+# chirpsv3_dekads_2005_2025_sorted_06_Kenya.nc -> 06). Slicing at a fixed offset
+# quietly yields "so" for the sorted_ names, so match the digits instead.
+DEKAD_IN_FILENAME = re.compile(r'_(?:sorted_)?(\d{2})_[A-Za-z_]+\.nc$')
+
+def dekad_index(chirps_filename):
+    match = DEKAD_IN_FILENAME.search(chirps_filename)
+    if match is None:
+        raise ValueError(f"No dekad index in climatology filename {chirps_filename!r}")
+    return match.group(1)
 
 forecast_files = {
     (2, 17): ["ECMWF_tp_forecasts_02-17-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_06_Kenya.nc","Febuary_Dekad3.tif"],
@@ -165,7 +192,7 @@ if (int(month),int(day)) in forecast_files.keys():
                 ds_mean = ds_masked.mean({'longitude', 'latitude'}).drop_vars({'year','time','valid_time'})
                 records[i]=ds_mean.tp.values
 
-            dekade_names=[f'ire2026{i[26:28]}' for i in fclim_chirps[1]]
+            dekade_names=[f'ire2026{dekad_index(i)}' for i in fclim_chirps[1]]
             districts_names=df.index
 
             dff=pd.DataFrame(data=records, index=districts_names, columns=dekade_names)
@@ -183,7 +210,8 @@ if (int(month),int(day)) in forecast_files.keys():
                 to_save=ds_to_plot.isel(step=i)
                 to_save.rio.to_raster(dirname+fname)
                 to_save.rio.write_crs("EPSG:4326", inplace=True)
-                to_save.tp.rio.to_raster(f"{dirname+fname}.bil", driver="EHdr")
+                # EHdr (ESRI .bil) has no Float64 band type -- write float32.
+                to_save.tp.astype('float32').rio.to_raster(f"{dirname+fname}.bil", driver="EHdr")
 
             rescaled_forecast = rescaled_forecast.rio.write_crs("EPSG:4326")
             ds_to_plot = gef.clip_to_shapefile(rescaled_forecast, kenya_counties_shp, transpose=True, sortby_lat=True)

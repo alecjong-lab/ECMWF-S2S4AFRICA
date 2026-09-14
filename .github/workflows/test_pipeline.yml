@@ -13,7 +13,8 @@ name: Test Pipeline (manual)
 # blocks the run):
 #   - dowscale_dekade.py reads data/<date>/data_{dekade,weekly}.nc, written
 #     fresh by plot_s2s.py and never uploaded to GCS. Skip plot_s2s while
-#     leaving downscale_dekade on and downscaling will just no-op.
+#     leaving downscale_dekade on and downscaling no-ops; its plots are then
+#     restored from the bucket instead, same as if you'd turned it off.
 #   - run_rainfall_onset.py's data/<date>/rainfall_onset_s2s_Kenya.nc is never
 #     uploaded to GCS either. Skip rainfall_onset and ai_briefing's Kenya
 #     onset write-up will just be missing from the digest.
@@ -244,7 +245,8 @@ jobs:
       # ── Stage: downscale_dekade ─────────────────────────────────────
       # Needs data/<date>/data_{dekade,weekly}.nc, written fresh by plot_s2s
       # above and never uploaded to GCS — if plot_s2s was skipped this stage
-      # will just no-op (continue-on-error), not restorable.
+      # no-ops, and the restore step below pulls the last published downscaled
+      # plots instead so ai_briefing still has its ECMWF_dwn picture.
       - name: Perform downscaling
         if: ${{ inputs.run_downscale_dekade }}
         continue-on-error: true
@@ -256,8 +258,10 @@ jobs:
           DEKADE_COUNTRIES: ${{ inputs.countries }}
           WEEK_COUNTRIES: ${{ inputs.countries }}
 
+      # Also runs when downscaling was left on but plot_s2s was turned off: the
+      # .nc handoff it needs can't be restored, so it can't have produced anything.
       - name: Restore downscaled plots from GCS
-        if: ${{ !inputs.run_downscale_dekade }}
+        if: ${{ !inputs.run_downscale_dekade || !inputs.run_plot_s2s }}
         continue-on-error: true
         working-directory: main_repo
         run: |

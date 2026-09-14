@@ -121,15 +121,21 @@ s2s_full = {
     'monthly': xr.open_dataset(f'{data_path}/data_monthly.nc'),
 }
 
+def _open_downscaled(path):
+    """Open a downscaled netcdf and put its dims in panel-plot order."""
+    ds = xr.open_dataset(path)
+    return ds.transpose(*gef.plot_dim_order(ds))
+
+
 print('Loading downscaled precip data...')
 downscaled_jobs = []  # (country, timescale, ds, bbox, save_path)
 
 try:
     # build_rescaled_forecast's native dim order isn't consistent between the weekly and
-    # dekadal code paths (weekly comes out as longitude/latitude/step, dekadal as
-    # latitude/longitude/step) -- dowscale_dekade.py always transposes right before
-    # plotting, so do the same here rather than assume an order.
-    kenya_weekly = xr.open_dataset(f'{data_path}/data_weekly_Kenya_downscaled.nc').transpose('latitude', 'longitude','number', 'step')
+    # dekadal code paths (weekly comes out as longitude/latitude/number/step, dekadal as
+    # an ensemble mean with no 'number' at all) -- dowscale_dekade.py always transposes
+    # right before plotting, so do the same here rather than assume an order.
+    kenya_weekly = _open_downscaled(f'{data_path}/data_weekly_Kenya_downscaled.nc')
     kenya_monthly = (kenya_weekly.isel(step=slice(0, 4)).sum('step', keep_attrs=True)
                       .assign_coords(step=kenya_weekly.isel(step=3).step).expand_dims('step'))
     downscaled_jobs.append(('Kenya', 'weekly', kenya_weekly, WEEKLY_BBOXES['Kenya'],
@@ -140,14 +146,14 @@ except FileNotFoundError as e:
     print(f'  [skip] Kenya weekly/monthly downscaled: {e}')
 
 try:
-    kenya_dekade = xr.open_dataset(f'{data_path}/data_dekade_Kenya_downscaled.nc').transpose('latitude', 'longitude','number', 'step')
+    kenya_dekade = _open_downscaled(f'{data_path}/data_dekade_Kenya_downscaled.nc')
     downscaled_jobs.append(('Kenya', 'dekadal', kenya_dekade, DEKADE_BBOXES['Kenya'],
                              f'{plots_path}/Kenya/{date_str}/dekadal/dekadal_precip_downscaled.png'))
 except FileNotFoundError as e:
     print(f'  [skip] Kenya dekadal downscaled: {e}')
 
 try:
-    great_horn_dekade = xr.open_dataset(f'{data_path}/data_dekade_Great_Horn_downscaled.nc').transpose('latitude', 'longitude','number', 'step')
+    great_horn_dekade = _open_downscaled(f'{data_path}/data_dekade_Great_Horn_downscaled.nc')
     downscaled_jobs.append(('Great_Horn', 'dekadal', great_horn_dekade, DEKADE_BBOXES['Great_Horn'],
                              f'{plots_path}/Great_Horn/{date_str}/dekadal/dekadal_precip_downscaled.png'))
 except FileNotFoundError as e:

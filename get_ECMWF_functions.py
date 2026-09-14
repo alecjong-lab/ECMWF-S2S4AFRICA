@@ -260,6 +260,11 @@ def nan_gaussian_filter(arr, sigma):
     
     # keep it nan where there was no valid data nearby at all
     result[weights == 0] = np.nan
+
+    # the float64 weights above promote the result, so cast back to whatever
+    # floating dtype came in -- the downscaling chain is float32 throughout.
+    if np.issubdtype(arr.dtype, np.floating):
+        result = result.astype(arr.dtype, copy=False)
     return result
 
 def rank_upscale_and_align(
@@ -387,6 +392,9 @@ def rank_upscale_and_align(
     # then we clipi the values so the rank cannot be larger than the amount of years in the climatology: .clip(min=None,max=len(target_da['rank'])-1)
     sorted_target = target_da.isel(rank=smoothed.isel(year=-1).clip(min=None,max=len(target_da['rank'])-1))
 
+    # output_dtypes is handed to np.vectorize as otypes, so it really does cast:
+    # this smooths the rainfall field, not the integer ranks in `aligned`, and
+    # must keep sorted_target's float dtype or every value is truncated to whole mm.
     sorted_target = xr.apply_ufunc(
     nan_gaussian_filter,
     sorted_target,
@@ -394,7 +402,7 @@ def rank_upscale_and_align(
     input_core_dims=[["latitude", "longitude"]],
     output_core_dims=[["latitude", "longitude"]],
     vectorize=True,
-    output_dtypes=[aligned.dtype],
+    output_dtypes=[sorted_target.dtype],
     )
     return sorted_target+target_da.isel(rank=0)*0
 
@@ -474,6 +482,17 @@ def set_extent_from_dataset(ds):
     lon1 = ds.longitude.min().values
     return lat1, lat2, lon1, lon2
 
+def plot_dim_order(ds, preferred=('latitude', 'longitude', 'number', 'step')):
+    """
+    Dim order for panel plotting/raster writing, skipping dims `ds` doesn't have.
+
+    The downscaled weekly fields keep their ensemble members ('number'), the
+    dekadal ones are an ensemble mean and have no such dim, so neither order can
+    be hard-coded -- transposing with a dim that isn't there raises.
+    """
+    order = [d for d in preferred if d in ds.dims]
+    return order + [d for d in ds.dims if d not in order]
+
 def clip_to_shapefile(ds, shapefile_path, reproject_gdf=True, transpose=False, sortby_lat=False, crs="EPSG:4326",
                        all_touched=False):
     """
@@ -488,7 +507,7 @@ def clip_to_shapefile(ds, shapefile_path, reproject_gdf=True, transpose=False, s
         gdf = gdf.to_crs(ds.rio.crs)
     clipped = ds.rio.clip(gdf.geometry, gdf.crs, drop=True, all_touched=all_touched)
     if transpose:
-        clipped = clipped.transpose('latitude', 'longitude','number','step')
+        clipped = clipped.transpose(*plot_dim_order(clipped))
     if sortby_lat:
         clipped = clipped.sortby('latitude', ascending=False)
     return clipped
