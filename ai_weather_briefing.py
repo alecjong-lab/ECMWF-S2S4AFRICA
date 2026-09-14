@@ -1,5 +1,6 @@
 from google import genai
 from google.genai import types
+import io
 import os
 import sys
 import get_ECMWF_functions as gef
@@ -81,17 +82,27 @@ Onset dates come from the rainfall-onset action (first 3-day spell of at least 2
 {gef.format_prompt_data(promt_unformat)}
 """
 
-client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+if os.environ.get("GOOGLE_API_KEY"):
+    client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
-response = client.models.generate_content(
-    model="gemini-3.1-flash-lite",
-    contents=user_prompt,
-    config=types.GenerateContentConfig(
-        system_instruction=system_prompt,
-        max_output_tokens=2500,
+    response = client.models.generate_content(
+        model="gemini-3.1-flash-lite",
+        contents=user_prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            max_output_tokens=2500,
+        )
     )
-)
-summary = response.text
+    summary = response.text
+else:
+    # if google api key is missing, skip AI synthesis and use placeholder text
+    print(
+        "WARNING: GOOGLE_API_KEY not set; skipping AI synthesis and using "
+        "placeholder slide text",
+        file=sys.stderr,
+    )
+    placeholder = "[AI summary skipped]"
+    summary = "---SLIDE---".join([date_str] + [placeholder] * 9)
 
 # var_ex='''\n \nLegend:\np33= Percentage of ensemble members below normal of model climate
 # p66= Percentage of ensemble members above normal of model climate
@@ -502,6 +513,32 @@ def resolve_picture_path(path):
     return path
 
 
+_BLANK_PICTURE_PNG = None
+
+
+def _blank_picture_bytes():
+    """Missing plot placeholder cached once and reused"""
+    global _BLANK_PICTURE_PNG
+    if _BLANK_PICTURE_PNG is None:
+        from PIL import Image, ImageDraw, ImageFont  # already a python-pptx dependency
+
+        img = Image.new("RGB", (1200, 800), color=(230, 230, 230))
+        draw = ImageDraw.Draw(img)
+        text = "No plot available"
+        font = ImageFont.load_default(size=64)
+        bbox = draw.textbbox((0, 0), text, font=font)
+        w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        draw.text(((1200 - w) / 2, (800 - h) / 2), text, fill=(150, 150, 150), font=font)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        _BLANK_PICTURE_PNG = buf.getvalue()
+    return _BLANK_PICTURE_PNG
+
+
+def blank_picture_stream():
+    return io.BytesIO(_blank_picture_bytes())
+
+
 def _cNvPr(shape):
     for el in shape._element.iter():
         if el.tag.endswith("}cNvPr"):
@@ -568,9 +605,11 @@ for slide in prs.slides:
             replace_picture(slide, shape, path)
         elif key in optional_picture_names:
             print(f"WARNING: missing optional picture for '{key}': {path}", file=sys.stderr)
+            replace_picture(slide, shape, blank_picture_stream())
         else:
             print(f"WARNING: missing required picture for '{key}': {path}", file=sys.stderr)
             required_missing.append(key)
+            replace_picture(slide, shape, blank_picture_stream())
 
 dt_obj = datetime.fromisoformat(date_str)
 day = dt_obj.day
@@ -609,6 +648,7 @@ for slide in prs.slides:
         else:
             print(f"WARNING: missing required picture for '{plot_key}': {path}", file=sys.stderr)
             required_missing.append(plot_key)
+            replace_picture(slide, shape, blank_picture_stream())
 
 # Extra date-bearing shapes that don't follow the "{type}_text" naming
 # convention: "gen_date" has a "-date-" placeholder inline in a longer
@@ -631,11 +671,15 @@ for slide in prs.slides:
                     run.text = ""
 
 if required_missing:
-    print(
-        f"ERROR: {len(required_missing)} required picture(s) missing, refusing to save "
-        f"a briefing with stale template placeholders: {', '.join(required_missing)}",
-        file=sys.stderr,
+    msg = (
+        f"{len(required_missing)} required picture(s) missing, would save a "
+        f"briefing with blank placeholders in their place: {', '.join(required_missing)}"
     )
-    sys.exit(1)
+    if os.environ.get("BRIEFING_ALLOW_MISSING_PICTURES"):
+        # for testing, we want to save the deck even if some plots are missing
+        print(f"WARNING: {msg} — saving anyway (BRIEFING_ALLOW_MISSING_PICTURES set)", file=sys.stderr)
+    else:
+        print(f"ERROR: {msg}", file=sys.stderr)
+        sys.exit(1)
 
 prs.save(f"s2s_briefing_{date_str}.pptx")
