@@ -38,7 +38,7 @@ uvx --from "$DEV" forecasting-skills convert-to-totals \
 
 uvx --from "$DEV" forecasting-skills plot \
   --columns 4 --fontsize 13 --pair-on time --style heatmap \
-  --title "CHIRPS weekly rainfall — Kenya (${START_LABEL} – ${END_LABEL})" \
+  --title "CHIRPS Weekly Rainfall Totals — Kenya" \
   --variable precip \
   --input step4.zarr --output chirps_kenya_weekly_rainfall.png
 
@@ -98,6 +98,6 @@ uvx --from "$DEV" forecasting-skills rename \
 
 uvx --from "$DEV" forecasting-skills plot \
   --columns 4 --fontsize 13 --pair-on time --style heatmap \
-  --title "CHIRPS weekly rainfall anomaly — Kenya (${START_LABEL} – ${END_LABEL})" \
+  --title "CHIRPS Weekly Rainfall Anomaly — Kenya" \
   --variable precip_anomaly \
   --input step6.zarr --output chirps_kenya_weekly_anomaly.png
