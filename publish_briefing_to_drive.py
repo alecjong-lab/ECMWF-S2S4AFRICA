@@ -55,7 +55,28 @@ def drive_request(method, url, token, body=None):
         raise RuntimeError(f"Drive API {method} {url} failed ({exc.code}): {detail}") from exc
 
 
-def share_commenter(file_id, email, token):
+DEFAULT_EDITORS = "genevieve@rhizaresearch.org"
+
+
+def _split_emails(raw):
+    return [e.strip() for e in (raw or "").split(",") if e.strip()]
+
+
+def _permission_for_email(file_id, email, token):
+    listed = drive_request(
+        "GET",
+        f"https://www.googleapis.com/drive/v3/files/{file_id}/permissions"
+        "?fields=permissions(id,emailAddress,role,type)&supportsAllDrives=true",
+        token,
+    )
+    want = email.lower()
+    for perm in listed.get("permissions") or []:
+        if (perm.get("emailAddress") or "").lower() == want:
+            return perm
+    return None
+
+
+def share_user(file_id, email, token, role):
     url = (
         f"https://www.googleapis.com/drive/v3/files/{file_id}/permissions"
         "?sendNotificationEmail=false&supportsAllDrives=true"
@@ -65,14 +86,28 @@ def share_commenter(file_id, email, token):
             "POST",
             url,
             token,
-            {"role": "commenter", "type": "user", "emailAddress": email},
+            {"role": role, "type": "user", "emailAddress": email},
         )
         return "shared"
     except RuntimeError as exc:
         text = str(exc)
-        if "already" in text.lower() or "403" in text:
+        if "already" not in text.lower() and "403" not in text and "(400)" not in text:
+            raise
+        perm = _permission_for_email(file_id, email, token)
+        if not perm:
+            if "already" in text.lower() or "403" in text:
+                return "exists"
+            raise
+        if perm.get("role") == role:
             return "exists"
-        raise
+        drive_request(
+            "PATCH",
+            f"https://www.googleapis.com/drive/v3/files/{file_id}/permissions/{perm['id']}"
+            "?supportsAllDrives=true",
+            token,
+            {"role": role},
+        )
+        return "updated"
 
 
 def main():
@@ -87,6 +122,11 @@ def main():
         "--emails",
         default="",
         help="Comma-separated addresses to grant commenter access",
+    )
+    parser.add_argument(
+        "--editors",
+        default=DEFAULT_EDITORS,
+        help="Comma-separated addresses to grant editor (writer) access",
     )
     parser.add_argument("--remote", default="gdrive")
     args = parser.parse_args()
@@ -157,15 +197,24 @@ def main():
         except Exception:
             pass
 
-    emails = [e.strip() for e in args.emails.split(",") if e.strip()]
+    editors = _split_emails(args.editors)
+    emails = _split_emails(args.emails)
+    editor_set = {e.lower() for e in editors}
+    commenters = [e for e in emails if e.lower() not in editor_set]
     if token:
-        for email in emails:
+        for email in editors:
             try:
-                status = share_commenter(file_id, email, token)
-                print(f"share {email}: {status}", file=sys.stderr)
+                status = share_user(file_id, email, token, "writer")
+                print(f"share editor {email}: {status}", file=sys.stderr)
             except Exception as exc:
-                print(f"WARNING: share {email} failed ({exc})", file=sys.stderr)
-    elif emails:
+                print(f"WARNING: share editor {email} failed ({exc})", file=sys.stderr)
+        for email in commenters:
+            try:
+                status = share_user(file_id, email, token, "commenter")
+                print(f"share commenter {email}: {status}", file=sys.stderr)
+            except Exception as exc:
+                print(f"WARNING: share commenter {email} failed ({exc})", file=sys.stderr)
+    elif editors or emails:
         print("WARNING: no Drive token; skipped sharing", file=sys.stderr)
 
 
