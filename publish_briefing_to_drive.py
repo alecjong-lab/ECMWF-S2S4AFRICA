@@ -1,7 +1,9 @@
-"""Upload a Kenya briefing pptx to Google Drive with rclone and share it.
+"""Upload a Kenya briefing pptx as a shared Google Slides deck and share it.
 
 Uses the GitHub Actions service account via Application Default Credentials
-(``google-github-actions/auth`` + rclone ``--drive-env-auth``), into
+(``google-github-actions/auth`` + rclone ``--drive-env-auth``), converts the
+pptx into ``application/vnd.google-apps.presentation``, and writes the Slides
+edit URL into
 https://drive.google.com/drive/folders/1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho
 """
 from __future__ import annotations
@@ -18,6 +20,7 @@ import urllib.request
 
 DEFAULT_FOLDER_ID = "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"
 DEFAULT_EDITORS = "genevieve@rhizaresearch.org"
+SLIDES_MIME = "application/vnd.google-apps.presentation"
 
 
 def rclone(*args, check=True):
@@ -38,7 +41,16 @@ def drive_flags(folder_id):
         "drive",
         "--drive-root-folder-id",
         folder_id,
+        # Convert the uploaded pptx into a native Google Slides deck.
+        "--drive-import-formats",
+        "pptx",
+        "--drive-export-formats",
+        "pptx",
     )
+
+
+def slides_url(file_id):
+    return f"https://docs.google.com/presentation/d/{file_id}/edit"
 
 
 def drive_token():
@@ -137,8 +149,19 @@ def share_user(file_id, email, token, role):
         return "updated"
 
 
+def _listing_entries(path, flags):
+    listing = rclone("lsjson", "--files-only", path, *flags, check=False)
+    if listing.returncode != 0:
+        return []
+    try:
+        return json.loads(listing.stdout or "[]")
+    except json.JSONDecodeError:
+        return []
+
+
 def upload_pptx(local, folder_id):
     filename = os.path.basename(local)
+    title = os.path.splitext(filename)[0]
     flags = drive_flags(folder_id)
     copy = rclone("copyto", "-v", local, f":drive:{filename}", *flags, check=False)
     if copy.returncode != 0:
@@ -147,16 +170,46 @@ def upload_pptx(local, folder_id):
     if copy.stderr:
         print(copy.stderr, file=sys.stderr)
 
-    listing = rclone("lsjson", "--files-only", f":drive:{filename}", *flags, check=False)
-    entries = json.loads(listing.stdout or "[]") if listing.returncode == 0 else []
+    names = {filename, title}
+    entries = _listing_entries(f":drive:{filename}", flags)
     if not entries:
-        listing = rclone("lsjson", "--files-only", ":drive:", *flags, check=False)
-        entries = json.loads(listing.stdout or "[]") if listing.returncode == 0 else []
-        entries = [e for e in entries if e.get("Name") == filename]
+        entries = [
+            e
+            for e in _listing_entries(":drive:", flags)
+            if e.get("Name") in names or e.get("Name", "").startswith(title)
+        ]
     if not entries or not entries[0].get("ID"):
         raise SystemExit(f"rclone uploaded but could not find an ID for {filename}")
     file_id = entries[0]["ID"]
-    return file_id, f"https://drive.google.com/file/d/{file_id}/view"
+    return file_id, slides_url(file_id)
+
+
+def resolve_slides_link(file_id, drive_url, token):
+    meta = drive_request(
+        "GET",
+        f"https://www.googleapis.com/drive/v3/files/{file_id}"
+        "?fields=id,name,mimeType,webViewLink&supportsAllDrives=true",
+        token,
+    )
+    mime = meta.get("mimeType") or ""
+    if mime and mime != SLIDES_MIME:
+        print(
+            f"WARNING: uploaded as {mime}, expected {SLIDES_MIME}",
+            file=sys.stderr,
+        )
+    title = os.path.splitext(meta.get("name") or "")[0]
+    if title and meta.get("name") != title:
+        try:
+            drive_request(
+                "PATCH",
+                f"https://www.googleapis.com/drive/v3/files/{file_id}"
+                "?supportsAllDrives=true",
+                token,
+                {"name": title},
+            )
+        except Exception as exc:
+            print(f"WARNING: rename to {title} failed ({exc})", file=sys.stderr)
+    return meta.get("webViewLink") or drive_url
 
 
 def write_outputs(file_id, drive_url):
@@ -194,6 +247,8 @@ def main():
         raise SystemExit(f"briefing file not found: {local}")
 
     file_id, drive_url = upload_pptx(local, args.folder_id)
+    # Write the Slides URL before share/metadata so a later API error
+    # cannot blank the email.
     write_outputs(file_id, drive_url)
 
     editors = _split_emails(args.editors)
@@ -206,6 +261,12 @@ def main():
         if editors or emails:
             print(f"WARNING: {exc}; skipped sharing", file=sys.stderr)
         return
+
+    try:
+        drive_url = resolve_slides_link(file_id, drive_url, token)
+        write_outputs(file_id, drive_url)
+    except Exception as exc:
+        print(f"WARNING: Drive metadata lookup failed ({exc})", file=sys.stderr)
 
     for email in editors:
         try:

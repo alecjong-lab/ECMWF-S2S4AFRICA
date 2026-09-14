@@ -660,8 +660,10 @@ jobs:
           to: ${{ matrix.emails }}
           from: "${{ matrix.country }} Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            Attached is today's Kenya S2S weather briefing and historical station data.
-            A copy is also on Google Drive: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            Today's Kenya S2S briefing is a shared Google Slides deck:
+            ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            Please edit that deck rather than a local copy. A PowerPoint snapshot
+            and historical station data are attached for offline use.
             You can browse the full plot archive (except station data) at
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
