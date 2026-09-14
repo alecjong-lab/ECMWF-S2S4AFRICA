@@ -3,6 +3,9 @@ set -eo pipefail
 S="git+https://github.com/rhiza-research/forecasting-skills@dev"
 BBOX=5.0/36.5/-5.0/42.0   # from: resolve-region "Kenya OND region"
 
+# shellcheck source=./_portable_date.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
+
 # OND season (Aug-Dec, current year) + latest available CHIRPS day.
 CUR_YEAR=$(date -u +%Y)
 SEASON_START="${CUR_YEAR}-08-01"
@@ -90,9 +93,9 @@ uvx --from $S forecasting-skills summarize-dim \
 # SEASON_START) vs. the total weekly bins the OND climatology season spans —
 # both computed from actual day counts so a partial trailing week is dropped
 # regardless of how many days $END happens to cover.
-OBS_DAYS=$(( ( $(date -u -d "$END" +%s) - $(date -u -d "$SEASON_START" +%s) ) / 86400 + 1 ))
+OBS_DAYS=$(( ( $(pydate "$END" %s) - $(pydate "$SEASON_START" %s) ) / 86400 + 1 ))
 OBS_WEEKS=$(( OBS_DAYS / 7 ))
-SEASON_DAYS=$(( ( $(date -u -d "$SEASON_END" +%s) - $(date -u -d "$SEASON_START" +%s) ) / 86400 + 1 ))
+SEASON_DAYS=$(( ( $(pydate "$SEASON_END" %s) - $(pydate "$SEASON_START" %s) ) / 86400 + 1 ))
 SEASON_WEEKS=$(( SEASON_DAYS / 7 ))
 
 OBS_IDX_ARGS=()
@@ -145,8 +148,8 @@ TIME=$(uvx --from $S forecasting-skills resolve-time last-1w --as-of "$END")
 # TIME is: --start-time YYYY-MM-DD --end-time YYYY-MM-DD
 WEEK_START=$(echo "$TIME" | awk '{for (i = 1; i <= NF; i++) if ($i == "--start-time") print $(i + 1)}')
 WEEK_END=$(echo "$TIME" | awk '{for (i = 1; i <= NF; i++) if ($i == "--end-time") print $(i + 1)}')
-WEEK_START_LABEL=$(date -u -d "$WEEK_START" +'%-d %b')
-WEEK_END_LABEL=$(date -u -d "$WEEK_END" +'%-d %b %Y')
+WEEK_START_LABEL=$(pydate "$WEEK_START" '%-d %b')
+WEEK_END_LABEL=$(pydate "$WEEK_END" '%-d %b %Y')
 
 uvx --from $S forecasting-skills resolve-region KEN \
   --geojson kenya.geojson

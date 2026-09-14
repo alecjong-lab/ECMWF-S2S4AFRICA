@@ -3,14 +3,17 @@ set -eo pipefail
 
 DEV="git+https://github.com/rhiza-research/forecasting-skills@dev"
 
+# shellcheck source=./_portable_date.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
+
 # Trailing 4 complete weeks ending on the latest available CHIRPS day.
 END=$(uvx --from "$DEV" forecasting-skills chirps-fetch --probe-latest)
-START=$(date -u -d "$END -27 days" +%Y-%m-%d)
-W2=$(date -u -d "$START +7 days" +%Y-%m-%d)
-W3=$(date -u -d "$START +14 days" +%Y-%m-%d)
-W4=$(date -u -d "$START +21 days" +%Y-%m-%d)
-START_LABEL=$(date -u -d "$START" +'%-d %b')
-END_LABEL=$(date -u -d "$END" +'%-d %b %Y')
+START=$(pydate "$END -27 days" %Y-%m-%d)
+W2=$(pydate "$START +7 days" %Y-%m-%d)
+W3=$(pydate "$START +14 days" %Y-%m-%d)
+W4=$(pydate "$START +21 days" %Y-%m-%d)
+START_LABEL=$(pydate "$START" '%-d %b')
+END_LABEL=$(pydate "$END" '%-d %b %Y')
 
 # Kenya boundary polygon (needed by clip-region)
 uvx --from "$DEV" forecasting-skills resolve-region KEN \
@@ -35,7 +38,7 @@ uvx --from "$DEV" forecasting-skills convert-to-totals \
 
 uvx --from "$DEV" forecasting-skills plot \
   --columns 4 --fontsize 13 --pair-on time --style heatmap \
-  --title "CHIRPS weekly rainfall totals — Kenya (${START_LABEL} – ${END_LABEL})" \
+  --title "CHIRPS weekly rainfall — Kenya (${START_LABEL} – ${END_LABEL})" \
   --variable precip \
   --input step4.zarr --output chirps_kenya_weekly_rainfall.png
 
@@ -95,6 +98,6 @@ uvx --from "$DEV" forecasting-skills rename \
 
 uvx --from "$DEV" forecasting-skills plot \
   --columns 4 --fontsize 13 --pair-on time --style heatmap \
-  --title "CHIRPS weekly rainfall anomaly vs climatology — Kenya (${START_LABEL} – ${END_LABEL})" \
+  --title "CHIRPS weekly rainfall anomaly — Kenya (${START_LABEL} – ${END_LABEL})" \
   --variable precip_anomaly \
   --input step6.zarr --output chirps_kenya_weekly_anomaly.png

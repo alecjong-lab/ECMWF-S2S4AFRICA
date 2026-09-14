@@ -4,12 +4,15 @@ set -eo pipefail
 S="uvx --from git+https://github.com/rhiza-research/forecasting-skills@dev forecasting-skills"
 mkdir -p intermediate_results
 
+# shellcheck source=./_portable_date.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
+
 # Trailing 30-day window ending on the latest available day for a station
 # already in this pipeline (TA00025, Nairobi/alts fetch below).
 # tahmo-fetch's underlying API client logs "API request: ..." lines to
 # stdout ahead of the actual probed date, so only the last line is real.
 END=$($S tahmo-fetch --station TA00025 --probe-latest | tail -n1)
-START=$(date -u -d "$END -29 days" +%Y-%m-%d)
+START=$(pydate "$END -29 days" %Y-%m-%d)
 
 # ---------------------------------------------------------------
 # 1. Fetch. Two calls because the first pick of stations for
@@ -70,8 +73,8 @@ for c in nairobi mombasa kisumu nakuru eldoret; do
   IN_R="$IN_R --input intermediate_results/raw_$c.zarr"
 done
 LBL="--label Nairobi --label Mombasa --label Kisumu --label Nakuru --label Eldoret"
-START_LABEL=$(date -u -d "$START" +'%-d %b')
-END_LABEL=$(date -u -d "$END" +'%-d %b %Y')
+START_LABEL=$(pydate "$START" '%-d %b')
+END_LABEL=$(pydate "$END" '%-d %b %Y')
 
 $S plot-timeseries $IN_P $LBL --variable precip --fontsize 13 \
   --title "TAHMO daily rainfall, 5 Kenyan cities (${START_LABEL} - ${END_LABEL})" \

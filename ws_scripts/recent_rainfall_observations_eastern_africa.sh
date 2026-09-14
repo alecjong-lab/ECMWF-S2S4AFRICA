@@ -3,12 +3,15 @@ set -eo pipefail
 
 SKILLS="git+https://github.com/rhiza-research/forecasting-skills@dev"
 
+# shellcheck source=./_portable_date.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
+
 # Trailing 4 complete weeks ending on the latest available CHIRPS day.
 END=$(uvx --from "$SKILLS" forecasting-skills chirps-fetch --probe-latest)
-START=$(date -u -d "$END -27 days" +%Y-%m-%d)
-AGG_END=$(date -u -d "$END +1 days" +%Y-%m-%d)
-CLIM_END=$(date -u -d "$START +21 days" +%Y-%m-%d)
-END_LABEL=$(date -u -d "$END" +'%Y-%m-%d')
+START=$(pydate "$END -27 days" %Y-%m-%d)
+AGG_END=$(pydate "$END +1 days" %Y-%m-%d)
+CLIM_END=$(pydate "$START +21 days" %Y-%m-%d)
+END_LABEL=$(pydate "$END" %Y-%m-%d)
 
 uvx --from "$SKILLS" forecasting-skills chirps-fetch \
   --bbox 17.998307/21.887843/-15/51.13387 \
