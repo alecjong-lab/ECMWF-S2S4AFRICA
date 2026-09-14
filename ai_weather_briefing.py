@@ -546,15 +546,27 @@ def _cNvPr(shape):
     return None
 
 
-def replace_picture(slide, shape, image_path):
-    """Swap the bitmap but keep name / alt text so later matching still works."""
-    left, top, width, height = shape.left, shape.top, shape.width, shape.height
+def replace_picture(slide, shape, image_path, preserve_aspect=True):
+    """Swap the bitmap but keep name / alt text so later matching still works.
+
+    preserve_aspect=True (default): keep template top-left corner fixed,
+    scale image as far as possible to fit template box without distorting.
+
+    preserve_aspect=False: stretch to fill template box exactly; can distort.
+    """
+    left, top, box_width, box_height = shape.left, shape.top, shape.width, shape.height
     name = getattr(shape, "name", None)
     cnv = _cNvPr(shape)
     title = cnv.get("title") if cnv is not None else None
     descr = cnv.get("descr") if cnv is not None else None
     shape._element.getparent().remove(shape._element)
-    pic = slide.shapes.add_picture(image_path, left, top, width, height)
+    if preserve_aspect:
+        pic = slide.shapes.add_picture(image_path, left, top)
+        scale = min(box_width / pic.width, box_height / pic.height)
+        pic.width = int(pic.width * scale)
+        pic.height = int(pic.height * scale)
+    else:
+        pic = slide.shapes.add_picture(image_path, left, top, box_width, box_height)
     if name:
         pic.name = name
     new_cnv = _cNvPr(pic)
@@ -605,11 +617,11 @@ for slide in prs.slides:
             replace_picture(slide, shape, path)
         elif key in optional_picture_names:
             print(f"WARNING: missing optional picture for '{key}': {path}", file=sys.stderr)
-            replace_picture(slide, shape, blank_picture_stream())
+            replace_picture(slide, shape, blank_picture_stream(), preserve_aspect=False)
         else:
             print(f"WARNING: missing required picture for '{key}': {path}", file=sys.stderr)
             required_missing.append(key)
-            replace_picture(slide, shape, blank_picture_stream())
+            replace_picture(slide, shape, blank_picture_stream(), preserve_aspect=False)
 
 dt_obj = datetime.fromisoformat(date_str)
 day = dt_obj.day
@@ -648,7 +660,7 @@ for slide in prs.slides:
         else:
             print(f"WARNING: missing required picture for '{plot_key}': {path}", file=sys.stderr)
             required_missing.append(plot_key)
-            replace_picture(slide, shape, blank_picture_stream())
+            replace_picture(slide, shape, blank_picture_stream(), preserve_aspect=False)
 
 # Extra date-bearing shapes that don't follow the "{type}_text" naming
 # convention: "gen_date" has a "-date-" placeholder inline in a longer
