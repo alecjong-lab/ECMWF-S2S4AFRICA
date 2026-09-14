@@ -123,6 +123,6 @@ jobs:
           body: |
             Test run of the Kenya briefing pipeline (not the subscriber list).
             Date: ${{ steps.date.outputs.date }}
-            Shared Google Slides (please edit this deck): ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            Please comment on this shared deck: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
           reply_to: genevieve@rhizaresearch.org
           attachments: s2s_briefing_${{ steps.date.outputs.date }}.pptx
