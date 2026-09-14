@@ -1,7 +1,7 @@
 name: Test ws_scripts slide plots
 
-# Manual dry-run of ws_scripts/*.sh briefing plots. Check "Run every plot"
-# (default) or uncheck it and pick individual scripts.
+# Manual dry-run of ws_scripts/*.sh briefing plots. Only checked scripts run.
+# "Run every plot" is off unless you tick it.
 
 on:
   workflow_dispatch:
@@ -11,9 +11,9 @@ on:
         required: false
         default: ""
       run_all:
-        description: "Run every plot (overrides individual checkboxes)"
+        description: "Run every plot (leave unchecked to run only the boxes below)"
         type: boolean
-        default: true
+        default: false
       run_recent_rainfall_observations_kenya:
         description: "recent_rainfall_observations_kenya.sh"
         type: boolean
@@ -94,20 +94,36 @@ jobs:
           echo "date=$date" >> "$GITHUB_OUTPUT"
           echo "Using DATE_STR=$date"
 
+      - name: Show selected plots
+        run: |
+          echo "run_all=${{ inputs.run_all }}"
+          echo "kenya_rainfall=${{ inputs.run_recent_rainfall_observations_kenya }}"
+          echo "eastern_africa_rainfall=${{ inputs.run_recent_rainfall_observations_eastern_africa }}"
+          echo "station_data=${{ inputs.run_recent_observations_station_data }}"
+          echo "seasonal_progression=${{ inputs.run_seasonal_progression }}"
+          echo "analog_years=${{ inputs.run_seasonal_progression_vs_analog_years }}"
+          echo "mjo=${{ inputs.run_equatorial_waves_mjo }}"
+          echo "iod_enso=${{ inputs.run_equatorial_waves_iod_enso }}"
+          echo "itcz=${{ inputs.run_itcz_state }}"
+          echo "analyses_forecasts=${{ inputs.run_equatorial_waves_analyses_and_forecasts }}"
+          echo "sst=${{ inputs.run_current_sst_conditions }}"
+          echo "last_week_verification=${{ inputs.run_last_weeks_forecast_verification }}"
+          echo "timeseries_verification=${{ inputs.run_timeseries_verification }}"
+
       - name: Run recent_rainfall_observations_kenya.sh
-        if: ${{ inputs.run_all || inputs.run_recent_rainfall_observations_kenya }}
+        if: ${{ inputs.run_all == true || inputs.run_recent_rainfall_observations_kenya == true }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash recent_rainfall_observations_kenya.sh
 
       - name: Run recent_rainfall_observations_eastern_africa.sh
-        if: ${{ inputs.run_all || inputs.run_recent_rainfall_observations_eastern_africa }}
+        if: ${{ inputs.run_all == true || inputs.run_recent_rainfall_observations_eastern_africa == true }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash recent_rainfall_observations_eastern_africa.sh
 
       - name: Run recent_observations_station_data.sh
-        if: ${{ inputs.run_all || inputs.run_recent_observations_station_data }}
+        if: ${{ inputs.run_all == true || inputs.run_recent_observations_station_data == true }}
         continue-on-error: true
         working-directory: ws_scripts
         env:
@@ -116,13 +132,13 @@ jobs:
         run: bash recent_observations_station_data.sh
 
       - name: Run seasonal_progression.sh
-        if: ${{ inputs.run_all || inputs.run_seasonal_progression }}
+        if: ${{ inputs.run_all == true || inputs.run_seasonal_progression == true }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash seasonal_progression.sh
 
       - name: Run seasonal_progression_vs_analog_years.sh
-        if: ${{ inputs.run_all || inputs.run_seasonal_progression_vs_analog_years }}
+        if: ${{ inputs.run_all == true || inputs.run_seasonal_progression_vs_analog_years == true }}
         continue-on-error: true
         working-directory: ws_scripts
         env:
@@ -131,43 +147,43 @@ jobs:
         run: bash seasonal_progression_vs_analog_years.sh
 
       - name: Run equatorial_waves_mjo.sh
-        if: ${{ inputs.run_all || inputs.run_equatorial_waves_mjo }}
+        if: ${{ inputs.run_all == true || inputs.run_equatorial_waves_mjo == true }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash equatorial_waves_mjo.sh
 
       - name: Run equatorial_waves_iod_enso.sh
-        if: ${{ inputs.run_all || inputs.run_equatorial_waves_iod_enso }}
+        if: ${{ inputs.run_all == true || inputs.run_equatorial_waves_iod_enso == true }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash equatorial_waves_iod_enso.sh
 
       - name: Run itcz_state.sh
-        if: ${{ inputs.run_all || inputs.run_itcz_state }}
+        if: ${{ inputs.run_all == true || inputs.run_itcz_state == true }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash itcz_state.sh
 
       - name: Run equatorial_waves_analyses_and_forecasts.sh
-        if: ${{ inputs.run_all || inputs.run_equatorial_waves_analyses_and_forecasts }}
+        if: ${{ inputs.run_all == true || inputs.run_equatorial_waves_analyses_and_forecasts == true }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash equatorial_waves_analyses_and_forecasts.sh
 
       - name: Run current_sst_conditions.sh
-        if: ${{ inputs.run_all || inputs.run_current_sst_conditions }}
+        if: ${{ inputs.run_all == true || inputs.run_current_sst_conditions == true }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash current_sst_conditions.sh
 
       - name: Run last_weeks_forecast_verification.sh
-        if: ${{ inputs.run_all || inputs.run_last_weeks_forecast_verification }}
+        if: ${{ inputs.run_all == true || inputs.run_last_weeks_forecast_verification == true }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash last_weeks_forecast_verification.sh
 
       - name: Run timeseries_verification.sh
-        if: ${{ inputs.run_timeseries_verification }}
+        if: ${{ inputs.run_timeseries_verification == true }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash timeseries_verification.sh
