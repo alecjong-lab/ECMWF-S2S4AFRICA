@@ -275,7 +275,15 @@ def shape_keys(shape):
 
 
 def first_mapped(shape, mapping):
+    """Exact match: shape name or alt-text title/description equals a mapping key.
+
+    A trailing ``.png`` on the name/alt text is ignored so a placeholder named
+    ``kenya_weekly_rainfall_analog_years.png`` still maps to that plot stem.
+    """
     for key in shape_keys(shape):
+        stem = key[:-4] if key.lower().endswith(".png") else key
+        if stem in mapping:
+            return stem, mapping[stem]
         if key in mapping:
             return key, mapping[key]
     return None, None
@@ -494,10 +502,31 @@ def resolve_picture_path(path):
     return path
 
 
+def _cNvPr(shape):
+    for el in shape._element.iter():
+        if el.tag.endswith("}cNvPr"):
+            return el
+    return None
+
+
 def replace_picture(slide, shape, image_path):
+    """Swap the bitmap but keep name / alt text so later matching still works."""
     left, top, width, height = shape.left, shape.top, shape.width, shape.height
+    name = getattr(shape, "name", None)
+    cnv = _cNvPr(shape)
+    title = cnv.get("title") if cnv is not None else None
+    descr = cnv.get("descr") if cnv is not None else None
     shape._element.getparent().remove(shape._element)
-    slide.shapes.add_picture(image_path, left, top, width, height)
+    pic = slide.shapes.add_picture(image_path, left, top, width, height)
+    if name:
+        pic.name = name
+    new_cnv = _cNvPr(pic)
+    if new_cnv is not None:
+        if title:
+            new_cnv.set("title", title)
+        if descr:
+            new_cnv.set("descr", descr)
+    return pic
 
 # Missing pictures that should block the whole send (rather than going out with a
 # stale template placeholder in that slide) are tracked here and checked just
@@ -526,8 +555,9 @@ optional_picture_names |= {
     "median_wet_climatology", "wet5_climatology", "wet7_climatology",
 }
 
-# Picture-only shapes (no AI narration) — matched by shape name or alt text,
-# wherever in the deck that shape happens to live.
+# Picture-only shapes (no AI narration). Fill only when the shape name or
+# alt text equals a plot stem exactly (e.g. kenya_weekly_rainfall_analog_years).
+# Unlabeled pictures are left as template placeholders.
 for slide in prs.slides:
     for shape in list(slide.shapes):
         key, path = first_mapped(shape, picture_paths)
@@ -541,40 +571,6 @@ for slide in prs.slides:
         else:
             print(f"WARNING: missing required picture for '{key}': {path}", file=sys.stderr)
             required_missing.append(key)
-
-# Seasonal Progression has a right-hand picture with no alt text yet. Fill
-# the largest remaining unlabeled picture on that slide (skip logos / flags).
-_last_week_map = "kenya_ond_last_week_rainfall_kenya_extent"
-_last_week_path = resolve_picture_path(picture_paths[_last_week_map])
-if os.path.exists(_last_week_path):
-    _skip_unlabeled = ("gklogo", "3dflags")
-    for slide in prs.slides:
-        texts = []
-        unlabeled = []
-        already_mapped = False
-        for shape in list(slide.shapes):
-            keys = set(shape_keys(shape))
-            if getattr(shape, "has_text_frame", False):
-                texts.append(shape.text_frame.text or "")
-            if _last_week_map in keys:
-                already_mapped = True
-                break
-            if shape.shape_type != MSO_SHAPE_TYPE.PICTURE:
-                continue
-            if first_mapped(shape, picture_paths)[0]:
-                continue
-            blob = " ".join(keys).lower()
-            if any(token in blob for token in _skip_unlabeled):
-                continue
-            unlabeled.append(shape)
-        if (
-            already_mapped
-            or "Seasonal Progression" not in "".join(texts)
-            or not unlabeled
-        ):
-            continue
-        target = max(unlabeled, key=lambda s: int(s.width) * int(s.height))
-        replace_picture(slide, target, _last_week_path)
 
 dt_obj = datetime.fromisoformat(date_str)
 day = dt_obj.day
