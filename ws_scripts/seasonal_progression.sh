@@ -65,7 +65,7 @@ uvx --from $S forecasting-skills plot-timeseries \
   --variable precip --style bar \
   --trace 2:style=line,color=red,linewidth=2,marker=o \
   --label "CHIRPS observed (${CUR_YEAR})" --label 'CHIRPS climatology' \
-  --title "Weekly rainfall, Kenya OND region (Aug-Dec ${CUR_YEAR}) vs climatology" \
+  --title "Weekly Rainfall Totals — Kenya OND Region" \
   --ylabel 'Rainfall [mm/week]' --fontsize 16 \
   --output kenya_ond_weekly_rainfall_vs_climatology.png
 
@@ -139,7 +139,7 @@ uvx --from $S forecasting-skills concat \
 uvx --from $S forecasting-skills plot-timeseries \
   --input anom_full.zarr --variable precip_anomaly --style bar \
   --label 'CHIRPS standardized anomaly' \
-  --title "Weekly standardized rainfall anomaly, Kenya OND region (Aug-Dec ${CUR_YEAR})" \
+  --title "Weekly Rainfall Standardized Anomaly — Kenya OND Region" \
   --ylabel 'Standardized anomaly [z-score]' --fontsize 16 \
   --output kenya_ond_weekly_standardized_anomaly.png
 
@@ -174,5 +174,5 @@ uvx --from $S forecasting-skills plot \
   --draw-box "$BBOX" \
   --extent 33.4,42.4,-5.2,6.0 \
   --fontsize 18 \
-  --title "CHIRPS rainfall total, ${WEEK_START_LABEL} – ${WEEK_END_LABEL} — Kenya OND region shown on full Kenya extent" \
+  --title "CHIRPS Weekly Rainfall Total — Kenya OND Region (${WEEK_START_LABEL})" \
   --output kenya_ond_last_week_rainfall_kenya_extent.png

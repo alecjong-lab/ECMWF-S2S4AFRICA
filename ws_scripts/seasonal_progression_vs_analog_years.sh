@@ -136,7 +136,7 @@ $WS plot-timeseries \
     --along number \
     --align-day-of-year \
     --style line \
-    --title "Kenya weekly rainfall totals, Aug-Dec: analog years, ${CUR_YEAR} observed, and ECMWF S2S ensemble" \
+    --title "Weekly Rainfall Totals — Kenya" \
     --ylabel 'Weekly rainfall total (mm)' \
     --trace 1:zorder=5 \
     --trace 2:zorder=5 \
