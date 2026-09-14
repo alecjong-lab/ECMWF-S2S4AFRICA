@@ -50,7 +50,9 @@ jobs:
       - name: Auth to Google Cloud
         uses: google-github-actions/auth@v2
         with:
+          create_credentials_file: true
           token_format: "access_token"
+          access_token_scopes: "https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/drive"
           workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
           service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
           export_environment_variables: true
@@ -104,7 +106,7 @@ jobs:
         run: |
           python -u publish_briefing_to_drive.py \
             --file "s2s_briefing_${{ steps.date.outputs.date }}.pptx" \
-            --dest "gdrive:S2S_briefings/Kenya/" \
+            --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
             --emails "${{ env.TEST_EMAIL }}"
 
       - name: Email test briefing
@@ -121,6 +123,6 @@ jobs:
           body: |
             Test run of the Kenya briefing pipeline (not the subscriber list).
             Date: ${{ steps.date.outputs.date }}
-            Drive copy: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            Please comment on this shared deck: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
           reply_to: genevieve@rhizaresearch.org
           attachments: s2s_briefing_${{ steps.date.outputs.date }}.pptx
