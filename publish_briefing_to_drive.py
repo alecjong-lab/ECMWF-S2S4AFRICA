@@ -1,7 +1,7 @@
-"""Upload a Kenya briefing pptx to Google Drive and share it.
+"""Upload a Kenya briefing pptx to Google Drive with rclone and share it.
 
-Uploads with the GitHub Actions service account access token
-(google-github-actions/auth), not rclone. Default destination is
+Uses the GitHub Actions service account via Application Default Credentials
+(``google-github-actions/auth`` + rclone ``--drive-env-auth``), into
 https://drive.google.com/drive/folders/1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho
 """
 from __future__ import annotations
@@ -9,19 +9,36 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import urllib.error
-import urllib.parse
 import urllib.request
-import uuid
 
 
 DEFAULT_FOLDER_ID = "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"
 DEFAULT_EDITORS = "genevieve@rhizaresearch.org"
-PPTX_MIME = (
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-)
+
+
+def rclone(*args, check=True):
+    if not shutil.which("rclone"):
+        raise SystemExit("rclone is not on PATH")
+    return subprocess.run(
+        ["rclone", *args],
+        check=check,
+        capture_output=True,
+        text=True,
+    )
+
+
+def drive_flags(folder_id):
+    return (
+        "--drive-env-auth",
+        "--drive-scope",
+        "drive",
+        "--drive-root-folder-id",
+        folder_id,
+    )
 
 
 def drive_token():
@@ -38,7 +55,7 @@ def drive_token():
         )
     except (FileNotFoundError, subprocess.CalledProcessError) as exc:
         raise SystemExit(
-            "No Drive access token. Authenticate as "
+            "No Drive access token for sharing. Authenticate as "
             "alec-github-action@rhiza-shared.iam.gserviceaccount.com "
             f"(google-github-actions/auth or gcloud). ({exc})"
         ) from exc
@@ -48,17 +65,15 @@ def drive_token():
     return token
 
 
-def drive_request(method, url, token, body=None, content_type="application/json"):
-    data = body
-    if data is not None and not isinstance(data, (bytes, bytearray)):
-        data = json.dumps(data).encode()
+def drive_request(method, url, token, body=None):
+    data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(
         url,
         data=data,
         method=method,
         headers={
             "Authorization": f"Bearer {token}",
-            "Content-Type": content_type,
+            "Content-Type": "application/json",
         },
     )
     try:
@@ -122,66 +137,26 @@ def share_user(file_id, email, token, role):
         return "updated"
 
 
-def find_existing(folder_id, filename, token):
-    escaped = filename.replace("\\", "\\\\").replace("'", "\\'")
-    query = (
-        f"'{folder_id}' in parents and name = '{escaped}' and trashed = false"
-    )
-    params = urllib.parse.urlencode(
-        {
-            "q": query,
-            "fields": "files(id,webViewLink)",
-            "pageSize": "1",
-            "supportsAllDrives": "true",
-            "includeItemsFromAllDrives": "true",
-            "corpora": "allDrives",
-        }
-    )
-    listed = drive_request(
-        "GET",
-        f"https://www.googleapis.com/drive/v3/files?{params}",
-        token,
-    )
-    files = listed.get("files") or []
-    return files[0] if files else None
-
-
-def upload_pptx(local, folder_id, token):
+def upload_pptx(local, folder_id):
     filename = os.path.basename(local)
-    with open(local, "rb") as fh:
-        payload = fh.read()
-    existing = find_existing(folder_id, filename, token)
-    if existing:
-        url = (
-            f"https://www.googleapis.com/upload/drive/v3/files/{existing['id']}"
-            "?uploadType=media&supportsAllDrives=true"
-            "&fields=id,webViewLink"
-        )
-        return drive_request("PATCH", url, token, payload, content_type=PPTX_MIME)
+    flags = drive_flags(folder_id)
+    copy = rclone("copyto", "-v", local, f":drive:{filename}", *flags, check=False)
+    if copy.returncode != 0:
+        sys.stderr.write(copy.stderr or copy.stdout or "")
+        raise SystemExit(f"rclone copy failed ({copy.returncode})")
+    if copy.stderr:
+        print(copy.stderr, file=sys.stderr)
 
-    boundary = uuid.uuid4().hex
-    metadata = json.dumps(
-        {"name": filename, "parents": [folder_id], "mimeType": PPTX_MIME}
-    )
-    body = (
-        f"--{boundary}\r\n"
-        "Content-Type: application/json; charset=UTF-8\r\n\r\n"
-        f"{metadata}\r\n"
-        f"--{boundary}\r\n"
-        f"Content-Type: {PPTX_MIME}\r\n\r\n"
-    ).encode() + payload + f"\r\n--{boundary}--\r\n".encode()
-    url = (
-        "https://www.googleapis.com/upload/drive/v3/files"
-        "?uploadType=multipart&supportsAllDrives=true"
-        "&fields=id,webViewLink"
-    )
-    return drive_request(
-        "POST",
-        url,
-        token,
-        body,
-        content_type=f"multipart/related; boundary={boundary}",
-    )
+    listing = rclone("lsjson", "--files-only", f":drive:{filename}", *flags, check=False)
+    entries = json.loads(listing.stdout or "[]") if listing.returncode == 0 else []
+    if not entries:
+        listing = rclone("lsjson", "--files-only", ":drive:", *flags, check=False)
+        entries = json.loads(listing.stdout or "[]") if listing.returncode == 0 else []
+        entries = [e for e in entries if e.get("Name") == filename]
+    if not entries or not entries[0].get("ID"):
+        raise SystemExit(f"rclone uploaded but could not find an ID for {filename}")
+    file_id = entries[0]["ID"]
+    return file_id, f"https://drive.google.com/file/d/{file_id}/view"
 
 
 def write_outputs(file_id, drive_url):
@@ -218,21 +193,20 @@ def main():
     if not os.path.isfile(local):
         raise SystemExit(f"briefing file not found: {local}")
 
-    token = drive_token()
-    meta = upload_pptx(local, args.folder_id, token)
-    file_id = meta.get("id")
-    if not file_id:
-        raise SystemExit(f"Drive upload returned no file id: {meta}")
-    drive_url = (
-        meta.get("webViewLink")
-        or f"https://drive.google.com/file/d/{file_id}/view"
-    )
+    file_id, drive_url = upload_pptx(local, args.folder_id)
     write_outputs(file_id, drive_url)
 
     editors = _split_emails(args.editors)
     emails = _split_emails(args.emails)
     editor_set = {e.lower() for e in editors}
     commenters = [e for e in emails if e.lower() not in editor_set]
+    try:
+        token = drive_token()
+    except SystemExit as exc:
+        if editors or emails:
+            print(f"WARNING: {exc}; skipped sharing", file=sys.stderr)
+        return
+
     for email in editors:
         try:
             status = share_user(file_id, email, token, "writer")
