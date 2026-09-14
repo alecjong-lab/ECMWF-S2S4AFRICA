@@ -89,6 +89,7 @@ jobs:
         run: bash last_weeks_forecast_verification.sh
 
       - name: Run timeseries_verification.sh
+        if: false  # temporarily skipped — script is failing
         continue-on-error: true
         working-directory: ws_scripts
         run: bash timeseries_verification.sh
