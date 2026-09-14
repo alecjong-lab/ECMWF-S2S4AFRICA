@@ -1,7 +1,67 @@
 name: Test ws_scripts slide plots
 
+# Manual dry-run of ws_scripts/*.sh briefing plots. Check "Run every plot"
+# (default) or uncheck it and pick individual scripts.
+
 on:
   workflow_dispatch:
+    inputs:
+      date_str:
+        description: "Forecast date YYYY-MM-DD (blank = 2 days ago)"
+        required: false
+        default: ""
+      run_all:
+        description: "Run every plot (overrides individual checkboxes)"
+        type: boolean
+        default: true
+      run_recent_rainfall_observations_kenya:
+        description: "recent_rainfall_observations_kenya.sh"
+        type: boolean
+        default: false
+      run_recent_rainfall_observations_eastern_africa:
+        description: "recent_rainfall_observations_eastern_africa.sh"
+        type: boolean
+        default: false
+      run_recent_observations_station_data:
+        description: "recent_observations_station_data.sh"
+        type: boolean
+        default: false
+      run_seasonal_progression:
+        description: "seasonal_progression.sh"
+        type: boolean
+        default: false
+      run_seasonal_progression_vs_analog_years:
+        description: "seasonal_progression_vs_analog_years.sh"
+        type: boolean
+        default: false
+      run_equatorial_waves_mjo:
+        description: "equatorial_waves_mjo.sh"
+        type: boolean
+        default: false
+      run_equatorial_waves_iod_enso:
+        description: "equatorial_waves_iod_enso.sh"
+        type: boolean
+        default: false
+      run_itcz_state:
+        description: "itcz_state.sh"
+        type: boolean
+        default: false
+      run_equatorial_waves_analyses_and_forecasts:
+        description: "equatorial_waves_analyses_and_forecasts.sh"
+        type: boolean
+        default: false
+      run_current_sst_conditions:
+        description: "current_sst_conditions.sh"
+        type: boolean
+        default: false
+      run_last_weeks_forecast_verification:
+        description: "last_weeks_forecast_verification.sh"
+        type: boolean
+        default: false
+      run_timeseries_verification:
+        description: "timeseries_verification.sh (currently flaky)"
+        type: boolean
+        default: false
 
 jobs:
   slides:
@@ -25,19 +85,29 @@ jobs:
 
       - name: Compute DATE_STR
         id: date
-        run: echo "date=$(date -u -d '2 days ago' +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ -n "${{ inputs.date_str }}" ]; then
+            date="${{ inputs.date_str }}"
+          else
+            date="$(date -u -d '2 days ago' +%Y-%m-%d)"
+          fi
+          echo "date=$date" >> "$GITHUB_OUTPUT"
+          echo "Using DATE_STR=$date"
 
       - name: Run recent_rainfall_observations_kenya.sh
+        if: ${{ inputs.run_all || inputs.run_recent_rainfall_observations_kenya }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash recent_rainfall_observations_kenya.sh
 
       - name: Run recent_rainfall_observations_eastern_africa.sh
+        if: ${{ inputs.run_all || inputs.run_recent_rainfall_observations_eastern_africa }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash recent_rainfall_observations_eastern_africa.sh
 
       - name: Run recent_observations_station_data.sh
+        if: ${{ inputs.run_all || inputs.run_recent_observations_station_data }}
         continue-on-error: true
         working-directory: ws_scripts
         env:
@@ -46,11 +116,13 @@ jobs:
         run: bash recent_observations_station_data.sh
 
       - name: Run seasonal_progression.sh
+        if: ${{ inputs.run_all || inputs.run_seasonal_progression }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash seasonal_progression.sh
 
       - name: Run seasonal_progression_vs_analog_years.sh
+        if: ${{ inputs.run_all || inputs.run_seasonal_progression_vs_analog_years }}
         continue-on-error: true
         working-directory: ws_scripts
         env:
@@ -59,37 +131,43 @@ jobs:
         run: bash seasonal_progression_vs_analog_years.sh
 
       - name: Run equatorial_waves_mjo.sh
+        if: ${{ inputs.run_all || inputs.run_equatorial_waves_mjo }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash equatorial_waves_mjo.sh
 
       - name: Run equatorial_waves_iod_enso.sh
+        if: ${{ inputs.run_all || inputs.run_equatorial_waves_iod_enso }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash equatorial_waves_iod_enso.sh
 
       - name: Run itcz_state.sh
+        if: ${{ inputs.run_all || inputs.run_itcz_state }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash itcz_state.sh
 
       - name: Run equatorial_waves_analyses_and_forecasts.sh
+        if: ${{ inputs.run_all || inputs.run_equatorial_waves_analyses_and_forecasts }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash equatorial_waves_analyses_and_forecasts.sh
 
       - name: Run current_sst_conditions.sh
+        if: ${{ inputs.run_all || inputs.run_current_sst_conditions }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash current_sst_conditions.sh
 
       - name: Run last_weeks_forecast_verification.sh
+        if: ${{ inputs.run_all || inputs.run_last_weeks_forecast_verification }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash last_weeks_forecast_verification.sh
 
       - name: Run timeseries_verification.sh
-        if: false  # temporarily skipped — script is failing
+        if: ${{ inputs.run_timeseries_verification }}
         continue-on-error: true
         working-directory: ws_scripts
         run: bash timeseries_verification.sh
