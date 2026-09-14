@@ -120,6 +120,14 @@ jobs:
           DEKADE_COUNTRIES: "Kenya,Great_Horn,Ethiopia"
           WEEK_COUNTRIES: "Kenya,Ghana"
 
+      - name: Write daily downscaled Kenya GeoTIFF
+        continue-on-error: true
+        working-directory: main_repo
+        run: python write_daily_downscaled_kenya.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
       - name: Run rainfall onset
         continue-on-error: true
         working-directory: main_repo
