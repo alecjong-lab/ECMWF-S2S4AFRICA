@@ -113,6 +113,14 @@ jobs:
           WEEK_COUNTRIES: "Kenya"
           DATE_STR: "${{ inputs.date_str }}"
 
+      - name: Write daily downscaled Kenya GeoTIFF
+        continue-on-error: true
+        working-directory: main_repo
+        run: python write_daily_downscaled_kenya.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: "${{ inputs.date_str }}"
+
       - name: Install rclone
         continue-on-error: true
         run: curl https://rclone.org/install.sh | sudo bash

@@ -1,6 +1,6 @@
 """
 Run plot_s2s.py / IndianOceanState.py / climate_indices_timeseries.py / plot_gefs.py /
-dowscale_dekade.py / run_rainfall_onset.py / replot_precip_shared_colorscale.py /
+dowscale_dekade.py / write_daily_downscaled_kenya.py / run_rainfall_onset.py / replot_precip_shared_colorscale.py /
 ai_weather_briefing.py locally against pre-downloaded fixture data under test/, instead
 of the real download scripts or GitHub Actions. Mirrors the relevant steps of
 .github/workflows/daily_download2.0.yml, in the same order.
@@ -29,6 +29,7 @@ STAGES = [
     "climate_indices_timeseries",
     "plot_gefs",
     "dowscale_dekade",
+    "write_daily_downscaled_kenya",
     "run_rainfall_onset",
     "replot_precip_shared_colorscale",
     "ai_weather_briefing",
