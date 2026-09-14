@@ -467,11 +467,16 @@ jobs:
         if: steps.check_plots.outputs.plots_ok == 'true'
         uses: google-github-actions/auth@v2
         with:
+          create_credentials_file: true
           token_format: "access_token"
           access_token_scopes: "https://www.googleapis.com/auth/drive"
           workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
           service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
           export_environment_variables: true
+
+      - name: Install rclone
+        if: steps.check_plots.outputs.plots_ok == 'true'
+        run: curl https://rclone.org/install.sh | sudo bash
 
       - name: Upload Kenya briefing to Drive and share
         if: steps.check_plots.outputs.plots_ok == 'true'
