@@ -128,13 +128,13 @@ WEEK_LABEL="$VERIFY_START to $(pydate "$VERIFY_END" %m-%d)"
 plot_grid() {   # $1 = verify-zarr prefix, $2 = output png, $3 = title
     run plot-verify \
         --obs intermediate_results/chirps_gefsgrid.zarr \
-        --forecast intermediate_results/gefs_w4_plot.zarr --verify "intermediate_results/$1_w4.zarr" \
-        --forecast intermediate_results/gefs_w3_plot.zarr --verify "intermediate_results/$1_w3.zarr" \
-        --forecast intermediate_results/gefs_w2_plot.zarr --verify "intermediate_results/$1_w2.zarr" \
         --forecast intermediate_results/gefs_w1_plot.zarr --verify "intermediate_results/$1_w1.zarr" \
+        --forecast intermediate_results/gefs_w2_plot.zarr --verify "intermediate_results/$1_w2.zarr" \
+        --forecast intermediate_results/gefs_w3_plot.zarr --verify "intermediate_results/$1_w3.zarr" \
+        --forecast intermediate_results/gefs_w4_plot.zarr --verify "intermediate_results/$1_w4.zarr" \
         --variable precip \
-        --lead "Week 4 (init $LEAD_W4)"  --lead "Week 3 (init $LEAD_W3)" \
-        --lead "Week 2 (init $LEAD_W2)" --lead "Week 1 (init $LEAD_W1)" \
+        --lead "Week 1 (init $LEAD_W1)" --lead "Week 2 (init $LEAD_W2)" \
+        --lead "Week 3 (init $LEAD_W3)" --lead "Week 4 (init $LEAD_W4)" \
         --label 'CHIRPS' \
         --label 'GEFS ens. mean' --label 'GEFS ens. mean' \
         --label 'GEFS ens. mean' --label 'GEFS ens. mean' \
