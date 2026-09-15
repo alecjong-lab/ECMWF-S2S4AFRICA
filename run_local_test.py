@@ -22,6 +22,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent
 TEST_DIR = REPO_ROOT / "test"
 SANDBOX = TEST_DIR / "run"
+sys.path.insert(0, str(REPO_ROOT / "local_workflows"))
+from secrets_env import load_repo_secrets  # noqa: E402
 
 STAGES = [
     "plot_s2s",
@@ -93,20 +95,9 @@ def setup(date):
     print(f"Sandbox ready at {SANDBOX} (date={date})")
 
 
-def load_env_file(env, path):
-    if not path.is_file():
-        return
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        env[key.strip()] = value.strip()
-
-
 def run(date, skip):
     env = os.environ.copy()
-    load_env_file(env, TEST_DIR / ".env")
+    load_repo_secrets(env, REPO_ROOT)
 
     env["DATE_STR"] = date
     env["MAIN_PATH"] = str(SANDBOX)

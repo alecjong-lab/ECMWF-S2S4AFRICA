@@ -11,8 +11,9 @@
 #   ./local_workflows/run_skills.sh ai_briefing --force            # rerun even if done
 #   ./local_workflows/run_skills.sh --from ws_seasonal_progression # that step onward
 #
-# Shares .env, and the .local_run/state/<date>__<country>/*.done markers, with
-# run_local.sh — a step one of them already ran shows as done to the other too.
+# Shares .env / test/.env (same names as GitHub Actions repo secrets), and the
+# .local_run/state/<date>__<country>/*.done markers, with run_local.sh — a step
+# one of them already ran shows as done to the other too.
 set -eo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,12 +29,8 @@ export DATE_STR
 export MAIN_PATH="${REPO_ROOT}/"
 export BRIEFING_TEMPLATE_ID="${BRIEFING_TEMPLATE_ID:-1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5}"
 
-if [ -f "$REPO_ROOT/.env" ]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "$REPO_ROOT/.env"
-  set +a
-fi
+# shellcheck source=./load_secrets.sh
+source "$(dirname "${BASH_SOURCE[0]}")/load_secrets.sh"
 
 STATE_DIR="${REPO_ROOT}/.local_run/state/${DATE_STR}__${COUNTRY}"
 mkdir -p "$STATE_DIR"
@@ -64,10 +61,8 @@ step_ws_recent_rainfall_observations_eastern_africa() { _ws_script recent_rainfa
 step_ws_recent_observations_station_data() { _ws_script recent_observations_station_data.sh; }
 step_ws_seasonal_progression() { _ws_script seasonal_progression.sh; }
 step_ws_seasonal_progression_vs_analog_years() {
-  : "${CDSAPI_KEY:?CDSAPI_KEY not set — add it to .env}"
-  ECMWF_DATASTORES_URL="https://ecds.ecmwf.int/api" \
-  ECMWF_DATASTORES_KEY="$CDSAPI_KEY" \
-    _ws_script seasonal_progression_vs_analog_years.sh
+  : "${CDSAPI_KEY:?CDSAPI_KEY not set — GitHub secret CDSAPI_KEY; put it in .env (gh cannot export the value)}"
+  _ws_script seasonal_progression_vs_analog_years.sh
 }
 step_ws_equatorial_waves_mjo() { _ws_script equatorial_waves_mjo.sh; }
 step_ws_equatorial_waves_iod_enso() { _ws_script equatorial_waves_iod_enso.sh; }

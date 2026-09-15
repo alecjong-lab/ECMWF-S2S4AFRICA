@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
+.env
+.env.swp
 .ipynb_checkpoints/
 **/ecmwf_api_key.json
 private_data/

@@ -4,6 +4,8 @@ set -eo pipefail
 S="uvx --from git+https://github.com/rhiza-research/forecasting-skills@dev forecasting-skills"
 mkdir -p intermediate_results
 
+# shellcheck source=../local_workflows/load_secrets.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/local_workflows/load_secrets.sh"
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
 
