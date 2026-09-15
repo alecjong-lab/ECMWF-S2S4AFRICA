@@ -114,9 +114,9 @@ $WS summarize-dim \
     --output intermediate_results/s2s_ensmean.zarr
 
 # ------------------------------------------------------------- 3. the plot
-# --along number fans s2s_final's 101 members into one grey legend entry.
-# --trace selectors are 1-based --input indices (the token "2026" is
-# ambiguous across two labels, so index selectors are required here).
+# Analog years: thin colored lines. Current-year CHIRPS: heavy black.
+# S2S members: crimson spaghetti (--along number). Ensemble mean on top.
+# --trace selectors use full labels so "${CUR_YEAR}" is not ambiguous.
 $WS plot-timeseries \
     --input intermediate_results/tot_2006.zarr \
     --input intermediate_results/tot_2015.zarr \
@@ -125,25 +125,25 @@ $WS plot-timeseries \
     --input "intermediate_results/tot_${CUR_YEAR}.zarr" \
     --input intermediate_results/s2s_final.zarr \
     --input intermediate_results/s2s_ensmean.zarr \
-    --label 2006 \
-    --label 2015 \
-    --label 2019 \
-    --label 2023 \
-    --label "${CUR_YEAR} CHIRPS (observed)" \
-    --label "ECMWF S2S ${INIT} (101 members)" \
+    --label '2006 (analog)' \
+    --label '2015 (analog)' \
+    --label '2019 (analog)' \
+    --label '2023 (analog)' \
+    --label "${CUR_YEAR} observed (CHIRPS)" \
+    --label "${CUR_YEAR} ECMWF S2S members" \
     --label 'ECMWF S2S ensemble mean' \
     --variable precip \
     --along number \
     --align-day-of-year \
-    --style line \
-    --title "Weekly Rainfall Totals — Kenya" \
+    --trace "${CUR_YEAR} observed (CHIRPS):color=black,linewidth=3.5,zorder=10" \
+    --trace "${CUR_YEAR} ECMWF S2S members:color=crimson,linewidth=0.5,zorder=3" \
+    --trace 'ECMWF S2S ensemble mean:color=purple,linewidth=2.5,zorder=8' \
+    --trace '2006 (analog):linewidth=1.4' \
+    --trace '2015 (analog):linewidth=1.4' \
+    --trace '2019 (analog):linewidth=1.4' \
+    --trace '2023 (analog):linewidth=1.4' \
+    --title "Kenya weekly rainfall totals, Aug-Dec: analog years vs ${CUR_YEAR} + ECMWF S2S ensemble (init ${INIT})" \
     --ylabel 'Weekly rainfall total (mm)' \
-    --trace 1:zorder=5 \
-    --trace 2:zorder=5 \
-    --trace 3:zorder=5 \
-    --trace 4:zorder=5 \
-    --trace 5:color=black,linewidth=3,marker=o,zorder=10 \
-    --trace 6:color=grey,linewidth=0.6,zorder=1 \
-    --trace 7:color=purple,linewidth=3,marker=s,zorder=9 \
-    --fontsize 16 \
+    --fontsize 15 \
+    --figsize 16,9 \
     --output kenya_weekly_rainfall_analog_years.png
