@@ -135,7 +135,7 @@ plot_grid() {   # $1 = verify-zarr prefix, $2 = output png, $3 = title
         --variable precip \
         --lead "Week 4 (init $LEAD_W4)"  --lead "Week 3 (init $LEAD_W3)" \
         --lead "Week 2 (init $LEAD_W2)" --lead "Week 1 (init $LEAD_W1)" \
-        --label 'CHIRPS obs' \
+        --label 'CHIRPS' \
         --label 'GEFS ens. mean' --label 'GEFS ens. mean' \
         --label 'GEFS ens. mean' --label 'GEFS ens. mean' \
         --mask-geojson intermediate_results/kenya.geojson \
