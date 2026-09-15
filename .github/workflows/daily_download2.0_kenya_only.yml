@@ -352,6 +352,19 @@ jobs:
         run: |
           yes | python plot_sat_vs_stations.py --country Kenya
 
+      - name: Collect analog-years briefing plot
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          date="${{ inputs.date_str }}"
+          mkdir -p "plots/briefing/${date}"
+          mv ws_scripts/kenya_weekly_rainfall_analog_years.png "plots/briefing/${date}/" 2>/dev/null || true
+          if [ ! -f "plots/briefing/${date}/kenya_weekly_rainfall_analog_years.png" ]; then
+            gcloud storage cp \
+              "gs://${BUCKET}/plots/briefing/${date}/kenya_weekly_rainfall_analog_years.png" \
+              "plots/briefing/${date}/kenya_weekly_rainfall_analog_years.png" || true
+          fi
+
       - name: Upload files as artifact
         uses: actions/upload-artifact@v4
         with:
@@ -361,6 +374,7 @@ jobs:
             main_repo/plots/Kenya/*/weekly/weekly_precip.png
             main_repo/plots/Kenya/*/weekly/weekly_precip_downscaled_clipped.png
             main_repo/plots/Kenya/*/weekly/weekly_medium_range_precip.png
+            main_repo/plots/briefing/*/kenya_weekly_rainfall_analog_years.png
             main_repo/private_plots/**/*.png
             main_repo/private_data/**/*.csv
             main_repo/prompts/*.txt
@@ -450,12 +464,12 @@ jobs:
         id: attachments
         run: |
           ecmwf_date="${{ inputs.date_str }}"
-          today_date="${{ steps.date.outputs.date }}"
 
-          list="s2s_briefing_${ecmwf_date}.pptx,"
-          list+="private_data/station_data/Kenya/${today_date}/*.csv"
-
-          echo "list=$list" >> "$GITHUB_OUTPUT"
+          analog="plots/briefing/${ecmwf_date}/kenya_weekly_rainfall_analog_years.png"
+          if [ ! -f "$analog" ] && [ -f "main_repo/$analog" ]; then
+            analog="main_repo/$analog"
+          fi
+          echo "list=$analog" >> "$GITHUB_OUTPUT"
 
       - name: Checkout publish script
         if: steps.check_plots.outputs.plots_ok == 'true'
@@ -499,8 +513,8 @@ jobs:
           to: ${{ matrix.emails }}
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            Attached is today's Kenya S2S weather briefing and historical station data.
-            A copy is also on Google Drive: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            kenya_weekly_rainfall_analog_years.png is attached.
+            Today's Kenya S2S briefing: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
             You can browse the full plot archive (except station data) at
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
