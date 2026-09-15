@@ -465,6 +465,17 @@ jobs:
         continue-on-error: true
         run: rm -rf website_branch
 
+      - name: Upload test run artifacts
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-pipeline-${{ inputs.date_str }}
+          if-no-files-found: warn
+          path: |
+            main_repo/plots/**/${{ inputs.date_str }}/**
+            main_repo/prompts/digest_${{ inputs.date_str }}.txt
+            main_repo/s2s_briefing_${{ inputs.date_str }}.pptx
+
       - name: Email test run results
         continue-on-error: true
         uses: dawidd6/action-send-mail@v16
@@ -478,14 +489,9 @@ jobs:
           from: "S2S Test Pipeline <info@dashboards.rhizaresearch.org>"
           body: |
             Test pipeline run for date ${{ inputs.date_str }}, countries: ${{ inputs.countries }}.
+            kenya_weekly_rainfall_analog_years.png is attached.
+            Full output (briefing plots, pptx, digest): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             Nothing from this run was uploaded to GCS or committed to main/website — this is
             output from the test workflow only. Any stage you turned off was backfilled from
             the production GCS bucket instead of regenerated.
-          attachments: |
-            main_repo/plots/*/${{ inputs.date_str }}/dekadal/dekadal_precip.png,
-            main_repo/plots/*/${{ inputs.date_str }}/weekly/weekly_precip.png,
-            main_repo/plots/*/${{ inputs.date_str }}/weekly/weekly_precip_downscaled_clipped.png,
-            main_repo/plots/*/${{ inputs.date_str }}/weekly/weekly_medium_range_precip.png,
-            main_repo/plots/briefing/${{ inputs.date_str }}/*.png,
-            main_repo/prompts/digest_${{ inputs.date_str }}.txt,
-            main_repo/s2s_briefing_${{ inputs.date_str }}.pptx
+          attachments: main_repo/plots/briefing/${{ inputs.date_str }}/kenya_weekly_rainfall_analog_years.png
