@@ -132,21 +132,21 @@ $WS plot-timeseries \
     --label '2015 (analog)' \
     --label '2019 (analog)' \
     --label '2023 (analog)' \
-    --label "${CUR_YEAR} observed (CHIRPS)" \
-    --label "${CUR_YEAR} ECMWF S2S members" \
-    --label 'ECMWF S2S ensemble mean' \
+    --label "${CUR_YEAR} CHIRPS obs" \
+    --label "${CUR_YEAR} S2S members" \
+    --label 'S2S ensemble mean' \
     --variable precip \
     --along number \
     --align-day-of-year \
-    --trace "${CUR_YEAR} observed (CHIRPS):color=black,linewidth=3.5,zorder=10" \
-    --trace "${CUR_YEAR} ECMWF S2S members:color=crimson,linewidth=0.5,zorder=3" \
-    --trace 'ECMWF S2S ensemble mean:color=purple,linewidth=2.5,zorder=8' \
-    --trace '2006 (analog):linewidth=1.4' \
-    --trace '2015 (analog):linewidth=1.4' \
-    --trace '2019 (analog):linewidth=1.4' \
-    --trace '2023 (analog):linewidth=1.4' \
-    --title "OND Seasonal Progression: analog years vs ${CUR_YEAR} + ECMWF S2S (init ${INIT})" \
-    --ylabel 'Weekly rainfall total (mm)' \
-    --fontsize 15 \
-    --figsize 16,9 \
+    --trace "${CUR_YEAR} CHIRPS obs:color=black,linewidth=3.5,zorder=10" \
+    --trace "${CUR_YEAR} S2S members:color=crimson,linewidth=0.5,zorder=3" \
+    --trace 'S2S ensemble mean:color=purple,linewidth=2.5,zorder=8' \
+    --trace '2006 (analog):linewidth=3,color=#1b9e77' \
+    --trace '2015 (analog):linewidth=3,color=#d95f02' \
+    --trace '2019 (analog):linewidth=3,color=#7570b3' \
+    --trace '2023 (analog):linewidth=3,color=#e7298a' \
+    --title "Weekly Rainfall Totals - Kenya"$'\n'"Analog Years, ${CUR_YEAR}, & ECMWF S2S (init ${INIT})" \
+    --ylabel 'Rainfall (mm / week)' \
+    --fontsize 32 \
+    --figsize 25,10 \
     --output kenya_weekly_rainfall_analog_years.png

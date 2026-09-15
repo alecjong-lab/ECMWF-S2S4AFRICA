@@ -78,14 +78,24 @@ LBL="--label Nairobi --label Mombasa --label Kisumu --label Nakuru --label Eldor
 START_LABEL=$(pydate "$START" '%-d %b')
 END_LABEL=$(pydate "$END" '%-d %b %Y')
 
-$S plot-timeseries $IN_P $LBL --variable precip --fontsize 13 \
+# Dark2 (matplotlib qualitative palette), one color per city, thicker lines.
+TRACE_ARGS=(
+  --trace '*:linewidth=3'
+  --trace 'Nairobi:color=#1b9e77'
+  --trace 'Mombasa:color=#d95f02'
+  --trace 'Kisumu:color=#7570b3'
+  --trace 'Nakuru:color=#e7298a'
+  --trace 'Eldoret:color=#66a61e'
+)
+
+$S plot-timeseries $IN_P $LBL "${TRACE_ARGS[@]}" --variable precip --figsize 25,10 --fontsize 32 \
   --title "TAHMO Daily Rainfall Totals — Kenya Cities" \
   --ylabel 'Daily rainfall [mm]' --output tahmo_kenya_cities_rainfall.png
 
-$S plot-timeseries $IN_R $LBL --variable temperature --fontsize 13 \
+$S plot-timeseries $IN_R $LBL "${TRACE_ARGS[@]}" --variable temperature --figsize 25,10 --fontsize 32 \
   --title "TAHMO Daily Mean Temperature — Kenya Cities" \
   --ylabel 'Temperature [°C]' --output tahmo_kenya_cities_temperature.png
 
-$S plot-timeseries $IN_R $LBL --variable humidity --fontsize 13 \
+$S plot-timeseries $IN_R $LBL "${TRACE_ARGS[@]}" --variable humidity --figsize 25,10 --fontsize 32 \
   --title "TAHMO Daily Mean Relative Humidity — Kenya Cities" \
   --ylabel 'Relative humidity [fraction]' --output tahmo_kenya_cities_humidity.png

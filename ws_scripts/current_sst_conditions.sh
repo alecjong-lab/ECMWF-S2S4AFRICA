@@ -18,12 +18,13 @@ run select \
 
 run plot \
   --colormap RdYlBu_r \
-  --figsize 18,9 \
+  --figsize 25,10 \
+  --fontsize 32 \
   --style heatmap \
-  --title "Global SST — IOD West/East and Niño 3.4 Boxes" \
+  --title "Sea Surface Temperature"$'\n'"IOD East/West & Niño 3.4 boxes" \
   --draw-box 10/50/-10/70 \
   --draw-box 0/90/-10/110 \
   --draw-box 5/-170/-5/-120 \
-  --variable sst \
-  --input sst_map.zarr \
+  --layer heatmap:sst_map.zarr::variable=sst \
+  --label "SST (°C)" \
   --output sst_global_oisst_nino_iod.png

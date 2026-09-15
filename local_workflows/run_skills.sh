@@ -74,6 +74,9 @@ step_ws_last_weeks_forecast_verification() { _ws_script last_weeks_forecast_veri
 step_collect_briefing_plots() {
   mkdir -p "plots/briefing/${DATE_STR}"
   mv ws_scripts/*.png "plots/briefing/${DATE_STR}/" 2>/dev/null || true
+  # shellcheck source=./trim_pngs.sh
+  source "$(dirname "${BASH_SOURCE[0]}")/trim_pngs.sh"
+  trim_pngs_in_dir "plots/briefing/${DATE_STR}"
 }
 
 step_ai_briefing() {

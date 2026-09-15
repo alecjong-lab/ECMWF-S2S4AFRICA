@@ -36,9 +36,9 @@ uvx --from $S forecasting-skills plot-timeseries \
   --input chirps_ond_mean.zarr --input clim_ond_series.zarr \
   --variable precip --style bar \
   --trace 2:style=line,color=black,linewidth=2 \
-  --label "CHIRPS observed (${CUR_YEAR})" --label 'CHIRPS climatology' \
+  --label "CHIRPS obs (${CUR_YEAR})" --label 'CHIRPS climatology' \
   --title "Daily rainfall, Kenya OND region (Aug-Dec ${CUR_YEAR}) vs climatology" \
-  --ylabel 'Rainfall [mm/day]' --fontsize 16 \
+  --ylabel 'Rainfall [mm/day]' --figsize 25,10 --fontsize 32 \
   --output kenya_ond_daily_rainfall_vs_climatology.png
 
 
@@ -63,10 +63,10 @@ uvx --from $S forecasting-skills convert-to-totals \
 uvx --from $S forecasting-skills plot-timeseries \
   --input chirps_ond_weekly_mm.zarr --input clim_ond_weekly_mm.zarr \
   --variable precip --style bar \
-  --trace 2:style=line,color=red,linewidth=2,marker=o \
-  --label "CHIRPS observed (${CUR_YEAR})" --label 'CHIRPS climatology' \
+  --trace 2:style=line,color=black,linewidth=2 \
+  --label "CHIRPS obs (${CUR_YEAR})" --label 'CHIRPS climatology' \
   --title "Weekly Rainfall Totals — Kenya OND Region" \
-  --ylabel 'Rainfall [mm/week]' --fontsize 16 \
+  --ylabel 'Rainfall [mm/week]' --figsize 25,10 --fontsize 32 \
   --output kenya_ond_weekly_rainfall_vs_climatology.png
 
 S="git+https://github.com/rhiza-research/forecasting-skills@dev"
@@ -140,7 +140,7 @@ uvx --from $S forecasting-skills plot-timeseries \
   --input anom_full.zarr --variable precip_anomaly --style bar \
   --label 'CHIRPS standardized anomaly' \
   --title "Weekly Rainfall Standardized Anomaly — Kenya OND Region" \
-  --ylabel 'Standardized anomaly [z-score]' --fontsize 16 \
+  --ylabel 'Standardized anomaly [z-score]' --figsize 25,10 --fontsize 32 \
   --output kenya_ond_weekly_standardized_anomaly.png
 
 # Latest published CHIRPS week on the OND box, drawn on the full Kenya extent.
@@ -173,6 +173,6 @@ uvx --from $S forecasting-skills plot \
   --layer outline:kenya.geojson \
   --draw-box "$BBOX" \
   --extent 33.4,42.4,-5.2,6.0 \
-  --fontsize 18 \
-  --title "CHIRPS Weekly Rainfall Total — Kenya OND Region (${WEEK_START_LABEL})" \
+  --figsize 12,10 --fontsize 32 \
+  --title "Rainfall Total - ${WEEK_START_LABEL} Week" \
   --output kenya_ond_last_week_rainfall_kenya_extent.png
