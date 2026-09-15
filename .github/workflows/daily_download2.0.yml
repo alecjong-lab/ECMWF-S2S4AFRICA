@@ -623,15 +623,20 @@ jobs:
         with:
           path: repo_scripts
 
+      - name: Auth to Google Cloud
+        if: matrix.country == 'Kenya' && steps.check_plots.outputs.plots_ok == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          create_credentials_file: true
+          token_format: "access_token"
+          access_token_scopes: "https://www.googleapis.com/auth/drive"
+          workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
+          service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
+          export_environment_variables: true
+
       - name: Install rclone
         if: matrix.country == 'Kenya' && steps.check_plots.outputs.plots_ok == 'true'
         run: curl https://rclone.org/install.sh | sudo bash
-
-      - name: Configure rclone
-        if: matrix.country == 'Kenya' && steps.check_plots.outputs.plots_ok == 'true'
-        run: |
-          mkdir -p ~/.config/rclone
-          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
 
       - name: Upload Kenya briefing to Drive and share
         if: matrix.country == 'Kenya' && steps.check_plots.outputs.plots_ok == 'true'
@@ -644,7 +649,7 @@ jobs:
           fi
           python -u repo_scripts/publish_briefing_to_drive.py \
             --file "$briefing" \
-            --dest "gdrive:S2S_briefings/Kenya/" \
+            --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
             --emails "${{ matrix.emails }}"
 
       - name: Email Kenya briefing
@@ -660,7 +665,9 @@ jobs:
           from: "${{ matrix.country }} Data Share <info@dashboards.rhizaresearch.org>"
           body: |
             kenya_weekly_rainfall_analog_years.png is attached.
-            Today's Kenya S2S briefing: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            Today's Kenya S2S briefing is a shared Google Slides deck:
+            ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            Please comment on that deck rather than a local copy.
             You can browse the full plot archive (except station data) at
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
