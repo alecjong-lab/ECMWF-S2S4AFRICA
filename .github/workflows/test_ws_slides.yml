@@ -1,4 +1,4 @@
-name: Test ws_scripts slide plots
+name: Test ws_slides
 
 # Manual dry-run of ws_scripts/*.sh briefing plots. Only checked scripts run.
 # "Run every plot" is off unless you tick it.
