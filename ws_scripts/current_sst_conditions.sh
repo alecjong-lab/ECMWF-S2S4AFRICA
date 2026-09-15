@@ -11,16 +11,19 @@ run oisst-fetch \
   --start-time "$END" --end-time "$END" \
   --output oisst_latest.zarr
 
+run select \
+  --dim time --index 0 \
+  --input oisst_latest.zarr \
+  --output sst_map.zarr
+
 run plot \
+  --colormap RdYlBu_r \
+  --figsize 18,9 \
   --style heatmap \
-  --variable sst \
-  --colormap RdBu_r \
-  --extent=-180,180,-90,90 \
-  --draw-box 5/-170/-5/-120 \
+  --title "Global SST — IOD West/East and Niño 3.4 Boxes" \
   --draw-box 10/50/-10/70 \
   --draw-box 0/90/-10/110 \
-  --fontsize 16 \
-  --title "Global SST with Nino 3.4 and IOD Monitoring Boxes - OISST v2.1, ${END}" \
-  --ylabel "Daily Sea Surface Temperature [°C]" \
-  --input oisst_latest.zarr \
+  --draw-box 5/-170/-5/-120 \
+  --variable sst \
+  --input sst_map.zarr \
   --output sst_global_oisst_nino_iod.png

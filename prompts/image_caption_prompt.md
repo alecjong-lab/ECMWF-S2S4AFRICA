@@ -141,8 +141,8 @@ sits relative to climatology, don't extrapolate beyond the observed weeks shown.
 inside the Kenya OND box, drawn on the full Kenya extent (box outline = OND region) —
 use past-tense observed language and cardinal directions, same as family J.
 `kenya_weekly_rainfall_analog_years` overlays named analog years (thin colored lines),
-current-year CHIRPS observed (thick black line with markers), the ECMWF S2S 101-member
-ensemble (thin grey lines) and its ensemble mean (thick purple line) — distinguish clearly
+current-year CHIRPS observed (thick black line), the ECMWF S2S 101-member
+ensemble (thin crimson lines) and its ensemble mean (thicker purple line) — distinguish clearly
 between the observed-to-date portion, the analog-year comparison, and the forecast
 continuation.
 

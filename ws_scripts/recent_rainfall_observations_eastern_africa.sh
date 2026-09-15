@@ -3,12 +3,15 @@ set -eo pipefail
 
 SKILLS="git+https://github.com/rhiza-research/forecasting-skills@dev"
 
+# shellcheck source=./_portable_date.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
+
 # Trailing 4 complete weeks ending on the latest available CHIRPS day.
 END=$(uvx --from "$SKILLS" forecasting-skills chirps-fetch --probe-latest)
-START=$(date -u -d "$END -27 days" +%Y-%m-%d)
-AGG_END=$(date -u -d "$END +1 days" +%Y-%m-%d)
-CLIM_END=$(date -u -d "$START +21 days" +%Y-%m-%d)
-END_LABEL=$(date -u -d "$END" +'%Y-%m-%d')
+START=$(pydate "$END -27 days" %Y-%m-%d)
+AGG_END=$(pydate "$END +1 days" %Y-%m-%d)
+CLIM_END=$(pydate "$START +21 days" %Y-%m-%d)
+END_LABEL=$(pydate "$END" %Y-%m-%d)
 
 uvx --from "$SKILLS" forecasting-skills chirps-fetch \
   --bbox 17.998307/21.887843/-15/51.13387 \
@@ -24,7 +27,7 @@ uvx --from "$SKILLS" forecasting-skills convert-to-totals \
 
 uvx --from "$SKILLS" forecasting-skills plot \
   --columns 4 --rows 1 --fontsize 13 --pair-on time --style heatmap \
-  --title "CHIRPS weekly rainfall totals, East Africa (4 weeks ending ${END_LABEL})" \
+  --title "CHIRPS Weekly Rainfall Totals — East Africa" \
   --variable precip --input step3.zarr \
   --output chirps_east_africa_weekly_rainfall.png
 
@@ -67,6 +70,6 @@ uvx --from "$SKILLS" forecasting-skills rename \
 
 uvx --from "$SKILLS" forecasting-skills plot \
   --columns 4 --rows 1 --fontsize 13 --pair-on time --style heatmap \
-  --title "CHIRPS weekly rainfall anomaly vs climatology, East Africa (4 weeks ending ${END_LABEL})" \
+  --title "CHIRPS Weekly Rainfall Anomaly — East Africa" \
   --variable precip_anomaly --input step5.zarr \
   --output chirps_east_africa_weekly_anomaly.png

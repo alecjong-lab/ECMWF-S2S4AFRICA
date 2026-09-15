@@ -3,6 +3,9 @@ set -eo pipefail
 S="git+https://github.com/rhiza-research/forecasting-skills@dev"
 BBOX=5.0/36.5/-5.0/42.0   # from: resolve-region "Kenya OND region"
 
+# shellcheck source=./_portable_date.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
+
 # OND season (Aug-Dec, current year) + latest available CHIRPS day.
 CUR_YEAR=$(date -u +%Y)
 SEASON_START="${CUR_YEAR}-08-01"
@@ -62,7 +65,7 @@ uvx --from $S forecasting-skills plot-timeseries \
   --variable precip --style bar \
   --trace 2:style=line,color=red,linewidth=2,marker=o \
   --label "CHIRPS observed (${CUR_YEAR})" --label 'CHIRPS climatology' \
-  --title "Weekly rainfall, Kenya OND region (Aug-Dec ${CUR_YEAR}) vs climatology" \
+  --title "Weekly Rainfall Totals — Kenya OND Region" \
   --ylabel 'Rainfall [mm/week]' --fontsize 16 \
   --output kenya_ond_weekly_rainfall_vs_climatology.png
 
@@ -90,9 +93,9 @@ uvx --from $S forecasting-skills summarize-dim \
 # SEASON_START) vs. the total weekly bins the OND climatology season spans —
 # both computed from actual day counts so a partial trailing week is dropped
 # regardless of how many days $END happens to cover.
-OBS_DAYS=$(( ( $(date -u -d "$END" +%s) - $(date -u -d "$SEASON_START" +%s) ) / 86400 + 1 ))
+OBS_DAYS=$(( ( $(pydate "$END" %s) - $(pydate "$SEASON_START" %s) ) / 86400 + 1 ))
 OBS_WEEKS=$(( OBS_DAYS / 7 ))
-SEASON_DAYS=$(( ( $(date -u -d "$SEASON_END" +%s) - $(date -u -d "$SEASON_START" +%s) ) / 86400 + 1 ))
+SEASON_DAYS=$(( ( $(pydate "$SEASON_END" %s) - $(pydate "$SEASON_START" %s) ) / 86400 + 1 ))
 SEASON_WEEKS=$(( SEASON_DAYS / 7 ))
 
 OBS_IDX_ARGS=()
@@ -136,7 +139,7 @@ uvx --from $S forecasting-skills concat \
 uvx --from $S forecasting-skills plot-timeseries \
   --input anom_full.zarr --variable precip_anomaly --style bar \
   --label 'CHIRPS standardized anomaly' \
-  --title "Weekly standardized rainfall anomaly, Kenya OND region (Aug-Dec ${CUR_YEAR})" \
+  --title "Weekly Rainfall Standardized Anomaly — Kenya OND Region" \
   --ylabel 'Standardized anomaly [z-score]' --fontsize 16 \
   --output kenya_ond_weekly_standardized_anomaly.png
 
@@ -145,8 +148,8 @@ TIME=$(uvx --from $S forecasting-skills resolve-time last-1w --as-of "$END")
 # TIME is: --start-time YYYY-MM-DD --end-time YYYY-MM-DD
 WEEK_START=$(echo "$TIME" | awk '{for (i = 1; i <= NF; i++) if ($i == "--start-time") print $(i + 1)}')
 WEEK_END=$(echo "$TIME" | awk '{for (i = 1; i <= NF; i++) if ($i == "--end-time") print $(i + 1)}')
-WEEK_START_LABEL=$(date -u -d "$WEEK_START" +'%-d %b')
-WEEK_END_LABEL=$(date -u -d "$WEEK_END" +'%-d %b %Y')
+WEEK_START_LABEL=$(pydate "$WEEK_START" '%-d %b')
+WEEK_END_LABEL=$(pydate "$WEEK_END" '%-d %b %Y')
 
 uvx --from $S forecasting-skills resolve-region KEN \
   --geojson kenya.geojson
@@ -171,5 +174,5 @@ uvx --from $S forecasting-skills plot \
   --draw-box "$BBOX" \
   --extent 33.4,42.4,-5.2,6.0 \
   --fontsize 18 \
-  --title "CHIRPS rainfall total, ${WEEK_START_LABEL} – ${WEEK_END_LABEL} — Kenya OND region shown on full Kenya extent" \
+  --title "CHIRPS Weekly Rainfall Total — Kenya OND Region (${WEEK_START_LABEL})" \
   --output kenya_ond_last_week_rainfall_kenya_extent.png

@@ -5,6 +5,9 @@ set -eo pipefail
 SKILLS="git+https://github.com/rhiza-research/forecasting-skills@dev"
 run() { uvx --from "$SKILLS" forecasting-skills "$@"; }
 
+# shellcheck source=./_portable_date.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
+
 mkdir -p intermediate_results
 cd intermediate_results
 
@@ -16,15 +19,15 @@ BBOX="5.506/33.893569/-4.67677/41.855083"
 # availability delay — so its start is bounded by both constraints, not just
 # "latest available."
 CHIRPS_LATEST=$(run chirps-fetch --probe-latest)
-GEFS_REF=$(date -u -d "2 days ago" +%Y-%m-%d)
-CHIRPS_BOUND=$(date -u -d "$CHIRPS_LATEST -6 days" +%Y-%m-%d)
+GEFS_REF=$(pydate "2 days ago" %Y-%m-%d)
+CHIRPS_BOUND=$(pydate "$CHIRPS_LATEST -6 days" %Y-%m-%d)
 if [[ "$CHIRPS_BOUND" > "$GEFS_REF" ]]; then
   VERIFY_START="$GEFS_REF"
 else
   VERIFY_START="$CHIRPS_BOUND"
 fi
-VERIFY_END=$(date -u -d "$VERIFY_START +6 days" +%Y-%m-%d)
-AGG_END=$(date -u -d "$VERIFY_START +7 days" +%Y-%m-%d)
+VERIFY_END=$(pydate "$VERIFY_START +6 days" %Y-%m-%d)
+AGG_END=$(pydate "$VERIFY_START +7 days" %Y-%m-%d)
 echo "Verifying week: $VERIFY_START -> $VERIFY_END" >&2
 
 # ---------------------------------------------------------------- region
@@ -52,9 +55,9 @@ run select \
 # lead week N  <->  init N-1 weeks before the verifying week
 declare -A INIT=(
   [w1]="$VERIFY_START"
-  [w2]=$(date -u -d "$VERIFY_START -7 days" +%Y-%m-%d)
-  [w3]=$(date -u -d "$VERIFY_START -14 days" +%Y-%m-%d)
-  [w4]=$(date -u -d "$VERIFY_START -21 days" +%Y-%m-%d)
+  [w2]=$(pydate "$VERIFY_START -7 days" %Y-%m-%d)
+  [w3]=$(pydate "$VERIFY_START -14 days" %Y-%m-%d)
+  [w4]=$(pydate "$VERIFY_START -21 days" %Y-%m-%d)
 )
 
 for W in w1 w2 w3 w4; do
@@ -116,23 +119,23 @@ done
 # --------------------------------------------------------------- figures
 cd ..
 
-LEAD_W1=$(date -u -d "${INIT[w1]}" +'%b %-d')
-LEAD_W2=$(date -u -d "${INIT[w2]}" +'%b %-d')
-LEAD_W3=$(date -u -d "${INIT[w3]}" +'%b %-d')
-LEAD_W4=$(date -u -d "${INIT[w4]}" +'%b %-d')
-WEEK_LABEL="$VERIFY_START to $(date -u -d "$VERIFY_END" +'%m-%d')"
+LEAD_W1=$(pydate "${INIT[w1]}" '%b %-d')
+LEAD_W2=$(pydate "${INIT[w2]}" '%b %-d')
+LEAD_W3=$(pydate "${INIT[w3]}" '%b %-d')
+LEAD_W4=$(pydate "${INIT[w4]}" '%b %-d')
+WEEK_LABEL="$VERIFY_START to $(pydate "$VERIFY_END" %m-%d)"
 
 plot_grid() {   # $1 = verify-zarr prefix, $2 = output png, $3 = title
     run plot-verify \
         --obs intermediate_results/chirps_gefsgrid.zarr \
-        --forecast intermediate_results/gefs_w4_plot.zarr --verify "intermediate_results/$1_w4.zarr" \
-        --forecast intermediate_results/gefs_w3_plot.zarr --verify "intermediate_results/$1_w3.zarr" \
-        --forecast intermediate_results/gefs_w2_plot.zarr --verify "intermediate_results/$1_w2.zarr" \
         --forecast intermediate_results/gefs_w1_plot.zarr --verify "intermediate_results/$1_w1.zarr" \
+        --forecast intermediate_results/gefs_w2_plot.zarr --verify "intermediate_results/$1_w2.zarr" \
+        --forecast intermediate_results/gefs_w3_plot.zarr --verify "intermediate_results/$1_w3.zarr" \
+        --forecast intermediate_results/gefs_w4_plot.zarr --verify "intermediate_results/$1_w4.zarr" \
         --variable precip \
-        --lead "Week 4 (init $LEAD_W4)"  --lead "Week 3 (init $LEAD_W3)" \
-        --lead "Week 2 (init $LEAD_W2)" --lead "Week 1 (init $LEAD_W1)" \
-        --label 'CHIRPS obs' \
+        --lead "Week 1 (init $LEAD_W1)" --lead "Week 2 (init $LEAD_W2)" \
+        --lead "Week 3 (init $LEAD_W3)" --lead "Week 4 (init $LEAD_W4)" \
+        --label 'CHIRPS' \
         --label 'GEFS ens. mean' --label 'GEFS ens. mean' \
         --label 'GEFS ens. mean' --label 'GEFS ens. mean' \
         --mask-geojson intermediate_results/kenya.geojson \

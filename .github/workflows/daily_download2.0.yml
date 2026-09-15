@@ -485,6 +485,7 @@ jobs:
             main_repo/plots/*/*/weekly/weekly_precip.png
             main_repo/plots/*/*/weekly/weekly_precip_downscaled_clipped.png
             main_repo/plots/*/*/weekly/weekly_medium_range_precip.png
+            main_repo/plots/briefing/*/kenya_weekly_rainfall_analog_years.png
             # main_repo/plots/*/*/dekadal/imerg_*_dekadal.png
             # main_repo/plots/*/*/weekly/imerg_*_weekly.png
             # main_repo/plots/*/*/dekadal/chirps_*_dekadal.png
@@ -599,8 +600,11 @@ jobs:
           today_date="${{ steps.date.outputs.date }}"
 
           if [ "$country" == "Kenya" ]; then
-            list="s2s_briefing_${ecmwf_date}.pptx,"
-            list+="private_data/station_data/${country}/${today_date}/*.csv"
+            analog="plots/briefing/${ecmwf_date}/kenya_weekly_rainfall_analog_years.png"
+            if [ ! -f "$analog" ] && [ -f "main_repo/$analog" ]; then
+              analog="main_repo/$analog"
+            fi
+            list="$analog"
 
           else
             list="plots/${country}/${ecmwf_date}/dekadal/dekadal_precip.png,"
@@ -660,10 +664,10 @@ jobs:
           to: ${{ matrix.emails }}
           from: "${{ matrix.country }} Data Share <info@dashboards.rhizaresearch.org>"
           body: |
+            kenya_weekly_rainfall_analog_years.png is attached.
             Today's Kenya S2S briefing is a shared Google Slides deck:
             ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
-            Please edit that deck rather than a local copy. A PowerPoint snapshot
-            and historical station data are attached for offline use.
+            Please comment on that deck rather than a local copy.
             You can browse the full plot archive (except station data) at
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org

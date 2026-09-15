@@ -121,8 +121,8 @@ jobs:
           to: ${{ env.TEST_EMAIL }}
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            Test run of the Kenya briefing pipeline (not the subscriber list).
+            kenya_weekly_rainfall_analog_years.png is attached.
             Date: ${{ steps.date.outputs.date }}
             Please comment on this shared deck: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
           reply_to: genevieve@rhizaresearch.org
-          attachments: s2s_briefing_${{ steps.date.outputs.date }}.pptx
+          attachments: plots/briefing/${{ steps.date.outputs.date }}/kenya_weekly_rainfall_analog_years.png
