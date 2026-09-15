@@ -3,6 +3,9 @@
 #   analog years + current-year observed (CHIRPS) + ECMWF S2S ensemble spread & mean
 set -eo pipefail
 
+# shellcheck source=../local_workflows/load_secrets.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/local_workflows/load_secrets.sh"
+
 # ---------------------------------------------------------------- skill pins
 # weather-skills @dev — every step in this pipeline comes from this repo.
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
@@ -142,7 +145,7 @@ $WS plot-timeseries \
     --trace '2015 (analog):linewidth=1.4' \
     --trace '2019 (analog):linewidth=1.4' \
     --trace '2023 (analog):linewidth=1.4' \
-    --title "Kenya weekly rainfall totals, Aug-Dec: analog years vs ${CUR_YEAR} + ECMWF S2S ensemble (init ${INIT})" \
+    --title "OND Seasonal Progression: analog years vs ${CUR_YEAR} + ECMWF S2S (init ${INIT})" \
     --ylabel 'Weekly rainfall total (mm)' \
     --fontsize 15 \
     --figsize 16,9 \
