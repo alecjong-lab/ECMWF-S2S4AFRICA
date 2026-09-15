@@ -77,13 +77,13 @@ START_LABEL=$(pydate "$START" '%-d %b')
 END_LABEL=$(pydate "$END" '%-d %b %Y')
 
 $S plot-timeseries $IN_P $LBL --variable precip --fontsize 13 \
-  --title "TAHMO daily rainfall, 5 Kenyan cities (${START_LABEL} - ${END_LABEL})" \
+  --title "TAHMO Daily Rainfall Totals — Kenya Cities" \
   --ylabel 'Daily rainfall [mm]' --output tahmo_kenya_cities_rainfall.png
 
 $S plot-timeseries $IN_R $LBL --variable temperature --fontsize 13 \
-  --title "TAHMO daily mean temperature, 5 Kenyan cities (${START_LABEL} - ${END_LABEL})" \
+  --title "TAHMO Daily Mean Temperature — Kenya Cities" \
   --ylabel 'Temperature [°C]' --output tahmo_kenya_cities_temperature.png
 
 $S plot-timeseries $IN_R $LBL --variable humidity --fontsize 13 \
-  --title "TAHMO daily mean relative humidity, 5 Kenyan cities (${START_LABEL} - ${END_LABEL})" \
+  --title "TAHMO Daily Mean Relative Humidity — Kenya Cities" \
   --ylabel 'Relative humidity [fraction]' --output tahmo_kenya_cities_humidity.png
