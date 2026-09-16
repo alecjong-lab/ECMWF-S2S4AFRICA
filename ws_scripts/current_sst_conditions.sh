@@ -1,29 +1,56 @@
 #!/usr/bin/env bash
-# Global OISST v2.1 SST with Nino 3.4 and IOD monitoring boxes.
+# OISST SST anomaly, Indian Ocean basin, latest published day, with IOD boxes.
 set -eo pipefail
 
-S="git+https://github.com/rhiza-research/forecasting-skills@dev"
-run() { uvx --from "$S" forecasting-skills "$@"; }
+# shellcheck source=./_portable_date.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
 
-END=$(run oisst-fetch --probe-latest)
+REPO="git+https://github.com/rhiza-research/forecasting-skills"
+# all skills from the dev branch ...
+SK="uvx --from $REPO@dev forecasting-skills"
+# ... except clim-fetch, from the mohini/skills branch
+SK_CLIM="uvx --from $REPO@mohini/skills forecasting-skills"
 
-run oisst-fetch \
-  --start-time "$END" --end-time "$END" \
-  --output oisst_latest.zarr
+BBOX="30.0/20.0/-40.0/120.0"   # Indian Ocean basin, from: $SK resolve-region "Indian Ocean"
+DAY=$($SK oisst-fetch --probe-latest)
+DAY_LABEL=$(pydate "$DAY" '%-d %b %Y')
 
-run select \
-  --dim time --index 0 \
-  --input oisst_latest.zarr \
-  --output sst_map.zarr
+mkdir -p intermediate_results
 
-run plot \
-  --colormap RdYlBu_r \
-  --figsize 18,9 \
-  --style heatmap \
-  --title "Global SST — IOD West/East and Niño 3.4 Boxes" \
+# 1. Observed SST for the latest day
+$SK oisst-fetch \
+  --start-time "$DAY" --end-time "$DAY" \
+  --bbox "$BBOX" \
+  --output intermediate_results/oisst_io.zarr
+
+# 2. OISST daily climatology for the same day-of-year (same bbox -> identical grid)
+$SK_CLIM clim-fetch \
+  --dataset oisst --variable sst \
+  --start-time "$DAY" --end-time "$DAY" \
+  --bbox "$BBOX" \
+  --output intermediate_results/oisst_clim.zarr
+
+# 3. Rename sst_avg -> sst so difference can match the variable name
+$SK rename \
+  --input intermediate_results/oisst_clim.zarr \
+  --output intermediate_results/oisst_clim_renamed.zarr \
+  --variable sst_avg --to-name sst
+
+# 4. Anomaly = observed - climatological mean
+$SK difference \
+  --input intermediate_results/oisst_io.zarr \
+  --input intermediate_results/oisst_clim_renamed.zarr \
+  --variable sst \
+  --output intermediate_results/oisst_anomaly.zarr
+
+# 5. Plot, clamped to +/-1.5 C, with the west (WTIO) and east (SETIO) IOD boxes.
+# Output stem must stay sst_global_oisst_nino_iod so the briefing template
+# picture (and ai_weather_briefing.py) still match this slide.
+$SK plot \
+  --layer heatmap:intermediate_results/oisst_anomaly.zarr::variable=sst \
+  --label 'SST anom (°C)' \
+  --colormap RdBu_r --vmin -1.5 --vmax 1.5 \
+  --title "SST anomaly · ${DAY_LABEL}" \
   --draw-box 10/50/-10/70 \
   --draw-box 0/90/-10/110 \
-  --draw-box 5/-170/-5/-120 \
-  --variable sst \
-  --input sst_map.zarr \
   --output sst_global_oisst_nino_iod.png
