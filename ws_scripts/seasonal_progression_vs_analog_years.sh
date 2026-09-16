@@ -7,8 +7,10 @@ set -eo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/local_workflows/load_secrets.sh"
 
 # ---------------------------------------------------------------- skill pins
-# weather-skills @dev — every step in this pipeline comes from this repo.
+# weather-skills @dev, except the analog-years CHIRPS fetch below (FS) —
+# weather-skills started rejecting 2023 CHIRPS with a gap-detection error.
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
+FS="uvx --from git+https://github.com/rhiza-research/forecasting-skills@dev forecasting-skills"
 
 # chc-skills @dev — africa-itf, mjo-forecast-fetch, subc-mme-fetch,
 # iod-mode-index. Pinned per request; NOT used by this figure (see notes).
@@ -22,7 +24,8 @@ mkdir -p intermediate_results
 TODAY=$(date -u +%Y-%m-%d)
 CUR_YEAR=$(date -u +%Y)
 END=$($WS chirps-fetch --probe-latest)      # latest available CHIRPS day
-INIT=$($WS ecmwf-fetch --probe-latest)      # latest available S2S init
+# ANALOG_YEARS_INIT_OVERRIDE: pin an older init to skip the 2-day embargo.
+INIT="${ANALOG_YEARS_INIT_OVERRIDE:-$($WS ecmwf-fetch --probe-latest)}"      # latest available S2S init
 
 # ---------------------------------------------------------------- 0. inputs
 # Analog years for the current season -> 1982 1997 2006 2015 2019 2023
@@ -34,7 +37,7 @@ $WS resolve-region KEN --geojson "$GEOJSON"
 
 # ------------------------------------------------- 1. CHIRPS observed years
 for Y in 2006 2015 2019 2023; do
-  $WS chirps-fetch \
+  $FS chirps-fetch \
       --start-time "${Y}-08-01" --end-time "${Y}-12-31" \
       --bbox "$BBOX" --workers 8 \
       --output "intermediate_results/chirps_${Y}.zarr"
@@ -118,8 +121,9 @@ $WS summarize-dim \
 
 # ------------------------------------------------------------- 3. the plot
 # Analog years: thin colored lines. Current-year CHIRPS: heavy black.
-# S2S members: crimson spaghetti (--along number). Ensemble mean on top.
+# S2S members: grey spaghetti (--along number). Ensemble mean on top.
 # --trace selectors use full labels so "${CUR_YEAR}" is not ambiguous.
+# No --figsize: any value (even the tool's own default) kills the legend.
 $WS plot-timeseries \
     --input intermediate_results/tot_2006.zarr \
     --input intermediate_results/tot_2015.zarr \
@@ -139,7 +143,7 @@ $WS plot-timeseries \
     --along number \
     --align-day-of-year \
     --trace "${CUR_YEAR} CHIRPS obs:color=black,linewidth=3.5,zorder=10" \
-    --trace "${CUR_YEAR} S2S members:color=crimson,linewidth=0.5,zorder=3" \
+    --trace "${CUR_YEAR} S2S members:color=grey,linewidth=0.5,zorder=3" \
     --trace 'S2S ensemble mean:color=purple,linewidth=2.5,zorder=8' \
     --trace '2006 (analog):linewidth=3,color=#1b9e77' \
     --trace '2015 (analog):linewidth=3,color=#d95f02' \
@@ -147,6 +151,5 @@ $WS plot-timeseries \
     --trace '2023 (analog):linewidth=3,color=#e7298a' \
     --title "Weekly Rainfall Totals - Kenya"$'\n'"Analog Years, ${CUR_YEAR}, & ECMWF S2S (init ${INIT})" \
     --ylabel 'Rainfall (mm / week)' \
-    --fontsize 32 \
-    --figsize 25,10 \
+    --fontsize 20 \
     --output kenya_weekly_rainfall_analog_years.png
