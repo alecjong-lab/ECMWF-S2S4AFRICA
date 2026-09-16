@@ -3,9 +3,6 @@
 #   analog years + current-year observed (CHIRPS) + ECMWF S2S ensemble spread & mean
 set -eo pipefail
 
-# shellcheck source=../local_workflows/load_secrets.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/local_workflows/load_secrets.sh"
-
 # ---------------------------------------------------------------- skill pins
 # weather-skills @dev — every step in this pipeline comes from this repo.
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
