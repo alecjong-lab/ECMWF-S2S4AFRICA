@@ -326,6 +326,22 @@ for country in countries_to_downscale:
     )
 
     if country=='Kenya':
+        # Daily downscaled GeoTIFF, one band per lead day, staged for the Kenya bucket
+        # by the workflows. rioxarray only writes 2D/3D arrays, so write the ensemble
+        # mean -- disaggregation is linear in the weekly field, so meaning the members
+        # first gives the same result as meaning the per-member daily fields.
+        daily_downscaled=gef.disaggregate_weekly_to_daily(
+            rescaled_forecast.tp.mean('number', keep_attrs=True), data.tp.mean('number')
+        )
+        da = daily_downscaled.tp.reset_coords(drop=True).astype('float32')
+        da = da.transpose('step','latitude','longitude').sortby('latitude', ascending=False)
+        da = da.rio.set_spatial_dims(x_dim="longitude", y_dim="latitude")
+        da = da.rio.write_crs("EPSG:4326").rio.write_nodata(np.nan)
+        da.rio.to_raster(
+            f'{data_path}/daily_downscaled_kenya.tif',
+            tags={"band_dim_name": "day"},
+        )
+
         rescaled_forecast = rescaled_forecast.rio.write_crs("EPSG:4326")
         ds_to_plot = gef.clip_to_shapefile(rescaled_forecast, kenya_counties_shp, transpose=True)
         gef.plot_panel_and_save(
