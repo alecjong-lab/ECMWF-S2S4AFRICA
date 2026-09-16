@@ -153,4 +153,4 @@ $WS plot \
     --label 'Precip (mm/week)' --label '' \
     --title "Weekly Rainfall Forecast - ${COUNTRY}"$'\n'"HRES [w1-w${HRES_WEEKS}] + ECMWF S2S [w$((HRES_WEEKS + 1))-w${TOTAL_WEEKS}]" \
     --figsize 18,15 --fontsize 32 \
-    --output weekly_fcst_hres_s2s.png
+    --output ECMWF_raw_plot.png
