@@ -122,10 +122,12 @@ figures (not combined). State the current phase (El Nino/La Nina/neutral, or pos
 negative/neutral IOD) and forecast tendency using only labels/thresholds visible in the
 plot.
 
-**Q. Global OISST with monitoring boxes** (`sst_global_oisst_nino_iod`): a global daily
-OISST v2.1 SST map with three outlined boxes (Nino 3.4, IOD west, IOD east). Describe the
-SST pattern in those boxes and any basin-scale contrast the boxes sit in — not the whole
-globe equally.
+**Q. Indian Ocean OISST anomaly with IOD boxes** (`sst_global_oisst_nino_iod`): a single-day
+OISST v2.1 SST *anomaly* map (observed minus daily climatology) over the Indian Ocean basin
+(roughly 20E-120E, 40S-30N), `RdBu_r` clamped to about +-1.5 degC. Two outlined boxes are
+the IOD poles — west/WTIO (50-70E, 10S-10N) and east/SETIO (90-110E, 10S-equator). There is
+no Niño 3.4 box (Pacific, off this map). Describe the anomaly pattern in those boxes and
+any basin-scale dipole/contrast they sit in — not every coastline equally.
 
 **O. Convective diagnostics** (`itcz_africa_latest` — a single snapshot map of the ITCZ's
 current position over Africa; `hovmoller_olr_tropics` — a time-vs-longitude/latitude

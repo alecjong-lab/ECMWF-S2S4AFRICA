@@ -384,6 +384,11 @@ briefing_plots_path = f"plots/briefing/{date_str}/"
 # only the first len(plots) slide types have a "{type}_plot" shape
 plot_paths = {t: f"{kenya_path}/weekly/{p}.png" for t, p in zip(slide_types, plots)}
 
+# preferentially use skills plot, but fallback to template placeholder if not available
+_ecmwf_raw_ws_script_path = f"{briefing_plots_path}/ECMWF_raw_plot.png"
+if os.path.exists(_ecmwf_raw_ws_script_path):
+    plot_paths["ECMWF_raw"] = _ecmwf_raw_ws_script_path
+
 # Indian Ocean moisture diagnostics (see IndianOceanState.py)
 IOD_path = f"{diagnostics_path}/ECMWF_s2s_10wind_sst_anomaly_{date_str}.png"
 IO_ivt_weekly_path = f"{diagnostics_path}/ECMWF_s2s_ivt_u_{date_str}.png"

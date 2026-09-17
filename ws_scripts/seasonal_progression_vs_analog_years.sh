@@ -3,9 +3,6 @@
 #   analog years + current-year observed (CHIRPS) + ECMWF S2S ensemble spread & mean
 set -eo pipefail
 
-# shellcheck source=../local_workflows/load_secrets.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/local_workflows/load_secrets.sh"
-
 # ---------------------------------------------------------------- skill pins
 # weather-skills @dev — every step in this pipeline comes from this repo.
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
@@ -118,7 +115,7 @@ $WS summarize-dim \
 
 # ------------------------------------------------------------- 3. the plot
 # Analog years: thin colored lines. Current-year CHIRPS: heavy black.
-# S2S members: crimson spaghetti (--along number). Ensemble mean on top.
+# S2S members: grey spaghetti (--along number). Ensemble mean on top.
 # --trace selectors use full labels so "${CUR_YEAR}" is not ambiguous.
 $WS plot-timeseries \
     --input intermediate_results/tot_2006.zarr \
@@ -138,9 +135,9 @@ $WS plot-timeseries \
     --variable precip \
     --along number \
     --align-day-of-year \
-    --trace "${CUR_YEAR} observed (CHIRPS):color=black,linewidth=3.5,zorder=10" \
-    --trace "${CUR_YEAR} ECMWF S2S members:color=crimson,linewidth=0.5,zorder=3" \
-    --trace 'ECMWF S2S ensemble mean:color=purple,linewidth=2.5,zorder=8' \
+    --trace "${CUR_YEAR} observed (CHIRPS):color=black,linewidth=5,zorder=10" \
+    --trace "${CUR_YEAR} ECMWF S2S members:color=grey,linewidth=0.5,zorder=3" \
+    --trace 'ECMWF S2S ensemble mean:color=purple,linewidth=5,zorder=8' \
     --trace '2006 (analog):linewidth=1.4' \
     --trace '2015 (analog):linewidth=1.4' \
     --trace '2019 (analog):linewidth=1.4' \

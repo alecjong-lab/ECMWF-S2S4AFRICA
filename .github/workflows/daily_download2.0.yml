@@ -206,6 +206,14 @@ jobs:
         working-directory: main_repo/ws_scripts
         run: bash last_weeks_forecast_verification.sh
 
+      - name: Run weekly_precip_forecast_hres_s2s.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        env:
+          ECMWF_DATASTORES_URL: "https://ecds.ecmwf.int/api"
+          ECMWF_DATASTORES_KEY: ${{ secrets.CDSAPI_KEY }}
+        run: bash weekly_precip_forecast_hres_s2s.sh
+
     #  - name: Run timeseries_verification.sh
     #    continue-on-error: true
      #   working-directory: main_repo/ws_scripts
@@ -484,8 +492,13 @@ jobs:
             main_repo/plots/*/*/dekadal/dekadal_precip.png
             main_repo/plots/*/*/weekly/weekly_precip.png
             main_repo/plots/*/*/weekly/weekly_precip_downscaled_clipped.png
+            main_repo/plots/*/*/weekly/weekly_precip_downscaled.png
             main_repo/plots/*/*/weekly/weekly_medium_range_precip.png
+            main_repo/plots/*/*/weekly/chance_of_above_or_below.png
             main_repo/plots/briefing/*/kenya_weekly_rainfall_analog_years.png
+            main_repo/plots/briefing/*/iod_forecast.png
+            main_repo/plots/briefing/*/ECMWF_raw_plot.png
+            main_repo/plots/briefing/*/sst_global_oisst_nino_iod.png
             # main_repo/plots/*/*/dekadal/imerg_*_dekadal.png
             # main_repo/plots/*/*/weekly/imerg_*_weekly.png
             # main_repo/plots/*/*/dekadal/chirps_*_dekadal.png
@@ -601,10 +614,24 @@ jobs:
 
           if [ "$country" == "Kenya" ]; then
             analog="plots/briefing/${ecmwf_date}/kenya_weekly_rainfall_analog_years.png"
-            if [ ! -f "$analog" ] && [ -f "main_repo/$analog" ]; then
-              analog="main_repo/$analog"
-            fi
-            list="$analog"
+            [ ! -f "$analog" ] && [ -f "main_repo/$analog" ] && analog="main_repo/$analog"
+
+            sst="plots/briefing/${ecmwf_date}/sst_global_oisst_nino_iod.png"
+            [ ! -f "$sst" ] && [ -f "main_repo/$sst" ] && sst="main_repo/$sst"
+
+            iod="plots/briefing/${ecmwf_date}/iod_forecast.png"
+            [ ! -f "$iod" ] && [ -f "main_repo/$iod" ] && iod="main_repo/$iod"
+
+            ecmwf_raw="plots/briefing/${ecmwf_date}/ECMWF_raw_plot.png"
+            [ ! -f "$ecmwf_raw" ] && [ -f "main_repo/$ecmwf_raw" ] && ecmwf_raw="main_repo/$ecmwf_raw"
+
+            ecmwf_dwn="plots/Kenya/${ecmwf_date}/weekly/weekly_precip_downscaled.png"
+            [ ! -f "$ecmwf_dwn" ] && [ -f "main_repo/$ecmwf_dwn" ] && ecmwf_dwn="main_repo/$ecmwf_dwn"
+
+            ecmwf_tercile="plots/Kenya/${ecmwf_date}/weekly/chance_of_above_or_below.png"
+            [ ! -f "$ecmwf_tercile" ] && [ -f "main_repo/$ecmwf_tercile" ] && ecmwf_tercile="main_repo/$ecmwf_tercile"
+
+            list="$analog,$sst,$iod,$ecmwf_raw,$ecmwf_dwn,$ecmwf_tercile"
 
           else
             list="plots/${country}/${ecmwf_date}/dekadal/dekadal_precip.png,"
@@ -652,6 +679,14 @@ jobs:
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
             --emails "${{ matrix.emails }}"
 
+      - name: Find latest manual analysis deck
+        if: matrix.country == 'Kenya' && steps.check_plots.outputs.plots_ok == 'true'
+        id: manual_deck
+        continue-on-error: true
+        run: |
+          python -u repo_scripts/find_latest_manual_analysis.py \
+            --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"
+
       - name: Email Kenya briefing
         if: matrix.country == 'Kenya' && steps.check_plots.outputs.plots_ok == 'true'
         uses: dawidd6/action-send-mail@v16
@@ -664,10 +699,14 @@ jobs:
           to: ${{ matrix.emails }}
           from: "${{ matrix.country }} Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            kenya_weekly_rainfall_analog_years.png is attached.
+            kenya_weekly_rainfall_analog_years.png, sst_global_oisst_nino_iod.png,
+            iod_forecast.png, ECMWF_raw_plot.png, ECMWF_dwn_plot.png, and
+            ECMWF_tercile_plot.png are attached.
             Today's Kenya S2S briefing is a shared Google Slides deck:
             ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
             Please comment on that deck rather than a local copy.
+            Latest expert analysis deck:
+            ${{ steps.manual_deck.outputs.manual_analysis_url || '(none found)' }}
             You can browse the full plot archive (except station data) at
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org

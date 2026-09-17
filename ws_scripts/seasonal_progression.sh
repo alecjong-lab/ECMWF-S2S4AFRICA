@@ -174,5 +174,5 @@ uvx --from $S forecasting-skills plot \
   --draw-box "$BBOX" \
   --extent 33.4,42.4,-5.2,6.0 \
   --fontsize 18 \
-  --title "CHIRPS Weekly Rainfall Total — Kenya OND Region (${WEEK_START_LABEL})" \
+  --title "CHIRPS Weekly Rainfall (${WEEK_START_LABEL})"$'\n'"Kenya OND Region" \
   --output kenya_ond_last_week_rainfall_kenya_extent.png
