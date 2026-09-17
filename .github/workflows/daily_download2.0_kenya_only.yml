@@ -464,12 +464,24 @@ jobs:
         id: attachments
         run: |
           ecmwf_date="${{ inputs.date_str }}"
+          today_date="${{ steps.date.outputs.date }}"
 
           analog="plots/briefing/${ecmwf_date}/kenya_weekly_rainfall_analog_years.png"
           if [ ! -f "$analog" ] && [ -f "main_repo/$analog" ]; then
             analog="main_repo/$analog"
           fi
-          echo "list=$analog" >> "$GITHUB_OUTPUT"
+          list="$analog"
+
+          csv="private_data/station_data/Kenya/${today_date}/*.csv"
+          if ! compgen -G "$csv" > /dev/null; then
+            csv="main_repo/private_data/station_data/Kenya/${today_date}/*.csv"
+          fi
+          if compgen -G "$csv" > /dev/null; then
+            list="$list,$csv"
+          else
+            echo "::warning::No TAHMO CSV found for Kenya on ${today_date} — sending email without station data."
+          fi
+          echo "list=$list" >> "$GITHUB_OUTPUT"
 
       - name: Checkout publish script
         if: steps.check_plots.outputs.plots_ok == 'true'
@@ -518,7 +530,6 @@ jobs:
           to: ${{ matrix.emails }}
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            kenya_weekly_rainfall_analog_years.png is attached.
             Today's Kenya S2S briefing is a shared Google Slides deck:
             ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
             Please comment on that deck rather than a local copy.

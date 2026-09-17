@@ -86,6 +86,8 @@ jobs:
       DATE_STR: ${{ inputs.date_str }}
       COUNTRIES: ${{ inputs.countries }}
       CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
+      TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
+      TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
 
     steps:
       - name: Checkout repo
