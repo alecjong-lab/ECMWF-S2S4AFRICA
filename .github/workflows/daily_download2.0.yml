@@ -633,6 +633,16 @@ jobs:
 
             list="$analog,$sst,$iod,$ecmwf_raw,$ecmwf_dwn,$ecmwf_tercile"
 
+            csv="private_data/station_data/${country}/${today_date}/*.csv"
+            if ! compgen -G "$csv" > /dev/null; then
+              csv="main_repo/private_data/station_data/${country}/${today_date}/*.csv"
+            fi
+            if compgen -G "$csv" > /dev/null; then
+              list="$list,$csv"
+            else
+              echo "::warning::No TAHMO CSV found for Kenya on ${today_date} — sending email without station data."
+            fi
+
           else
             list="plots/${country}/${ecmwf_date}/dekadal/dekadal_precip.png,"
             list+="plots/${country}/${ecmwf_date}/weekly/weekly_precip.png,"
@@ -700,8 +710,8 @@ jobs:
           from: "${{ matrix.country }} Data Share <info@dashboards.rhizaresearch.org>"
           body: |
             kenya_weekly_rainfall_analog_years.png, sst_global_oisst_nino_iod.png,
-            iod_forecast.png, ECMWF_raw_plot.png, ECMWF_dwn_plot.png, and
-            ECMWF_tercile_plot.png are attached.
+            iod_forecast.png, ECMWF_raw_plot.png, ECMWF_dwn_plot.png,
+            ECMWF_tercile_plot.png, and tahmo_data_Kenya.csv are attached.
             Today's Kenya S2S briefing is a shared Google Slides deck:
             ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
             Please comment on that deck rather than a local copy.
