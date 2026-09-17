@@ -1,5 +1,6 @@
-"""Find the most recent "manual_analysis_YYYY-MM-DD" deck in a Drive folder
-and print its webViewLink, for inclusion in the daily Kenya briefing email.
+"""Find the most recent "<DECK_NAME_PREFIX>_YYYY-MM-DD" deck in a Drive
+folder and print its webViewLink, for inclusion in the daily Kenya briefing
+email. See DECK_NAME_PREFIX below to change the filename prefix.
 
 Uses the same GitHub Actions service-account access token as
 publish_briefing_to_drive.py (google-github-actions/auth,
@@ -17,7 +18,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-NAME_RE = re.compile(r"manual_analysis_(\d{4}-\d{2}-\d{2})")
+# First part of the deck filename to look for, e.g. "expert_analysis" for
+# "expert_analysis_2026-09-17". Change this if the naming convention changes.
+DECK_NAME_PREFIX = "expert_analysis"
+
+NAME_RE = re.compile(re.escape(DECK_NAME_PREFIX) + r"_(\d{4}-\d{2}-\d{2})")
 
 
 def drive_token():
@@ -51,7 +56,7 @@ def drive_get(url, token):
 
 
 def find_latest(folder_id, token):
-    query = f"'{folder_id}' in parents and name contains 'manual_analysis_' and trashed = false"
+    query = f"'{folder_id}' in parents and name contains '{DECK_NAME_PREFIX}_' and trashed = false"
     url = (
         "https://www.googleapis.com/drive/v3/files"
         f"?q={urllib.parse.quote(query)}"
@@ -74,7 +79,7 @@ def find_latest(folder_id, token):
 
 
 def write_outputs(name, url):
-    lines = [f"manual_analysis_name={name}\n", f"manual_analysis_url={url}\n"]
+    lines = [f"deck_name={name}\n", f"deck_url={url}\n"]
     gh_out = os.environ.get("GITHUB_OUTPUT")
     if gh_out:
         with open(gh_out, "a") as fh:
@@ -96,7 +101,7 @@ def main():
         return
 
     if not latest:
-        print("WARNING: no manual_analysis_* deck found", file=sys.stderr)
+        print(f"WARNING: no {DECK_NAME_PREFIX}_* deck found", file=sys.stderr)
         write_outputs("", "")
         return
 
