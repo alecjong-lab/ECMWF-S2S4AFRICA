@@ -4,8 +4,6 @@
 # rest, one 6-panel heatmap.
 set -eo pipefail
 
-# shellcheck source=../local_workflows/load_secrets.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/local_workflows/load_secrets.sh"
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
 
@@ -15,8 +13,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
 HRES="uvx --from git+https://github.com/rhiza-research/weather-skills@mohini/skills forecasting-skills"
 
-# CDSAPI_KEY/ECMWF_DATASTORES_KEY (from load_secrets.sh) must be set, or both
-# fetch tools fall back to a public mirror instead of the real ECMWF source.
+# CDSAPI_KEY/ECMWF_DATASTORES_KEY must be set (CI and run_skills.sh already
+# inject them), or both fetch tools fall back to a public mirror instead of
+# the real ECMWF source.
 : "${ECMWF_DATASTORES_KEY:?ECMWF_DATASTORES_KEY not set - check .env}"
 
 COUNTRY="${COUNTRY:-KEN}"
