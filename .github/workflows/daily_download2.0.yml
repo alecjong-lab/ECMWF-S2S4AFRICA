@@ -662,6 +662,7 @@ jobs:
 
       - name: Auth to Google Cloud
         if: matrix.country == 'Kenya' && steps.check_plots.outputs.plots_ok == 'true'
+        id: gcp_auth
         uses: google-github-actions/auth@v2
         with:
           create_credentials_file: true
@@ -679,6 +680,8 @@ jobs:
         if: matrix.country == 'Kenya' && steps.check_plots.outputs.plots_ok == 'true'
         id: drive
         continue-on-error: true
+        env:
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.gcp_auth.outputs.access_token }}
         run: |
           briefing="s2s_briefing_${{ steps.ecmwf_date.outputs.date }}.pptx"
           if [ ! -f "$briefing" ] && [ -f "main_repo/$briefing" ]; then
@@ -693,6 +696,8 @@ jobs:
         if: matrix.country == 'Kenya' && steps.check_plots.outputs.plots_ok == 'true'
         id: manual_deck
         continue-on-error: true
+        env:
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.gcp_auth.outputs.access_token }}
         run: |
           python -u repo_scripts/find_latest_manual_analysis.py \
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"
@@ -713,7 +718,7 @@ jobs:
             ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
             Please comment on that deck rather than a local copy.
             Latest expert analysis deck:
-            ${{ steps.manual_deck.outputs.manual_analysis_url || '(none found)' }}
+            ${{ steps.manual_deck.outputs.deck_url || '(none found)' }}
             You can browse the full plot archive (except station data) at
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
