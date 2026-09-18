@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       date_str:
-        description: "Forecast date YYYY-MM-DD (blank = 2 days ago)"
+        description: "Briefing date YYYY-MM-DD (blank = today). Skills scripts probe their own latest."
         required: false
         default: ""
       run_all:
@@ -93,7 +93,7 @@ jobs:
           if [ -n "${{ inputs.date_str }}" ]; then
             date="${{ inputs.date_str }}"
           else
-            date="$(date -u -d '2 days ago' +%Y-%m-%d)"
+            date="$(date -u +%Y-%m-%d)"
           fi
           echo "date=$date" >> "$GITHUB_OUTPUT"
           echo "Using DATE_STR=$date"

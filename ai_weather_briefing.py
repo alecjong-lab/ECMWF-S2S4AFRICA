@@ -44,12 +44,38 @@ DRIVE_MEDIA_URL = (
     "?alt=media&supportsAllDrives=true"
 )
 
-if "DATE_STR" in os.environ:
-    date_str=os.environ["DATE_STR"]
-else:
-    today = datetime.today()
-    two_days_earlier = today - timedelta(days=2)
-    date_str = two_days_earlier.strftime("%Y-%m-%d")
+# Briefing date is today. Original ECMWF/GEFS products are published ~2 days
+# late and live under that lagged init; skills plots use DATE_STR (today).
+ECMWF_LAG_DAYS = 2
+
+
+def _iso_today():
+    return datetime.today().strftime("%Y-%m-%d")
+
+
+def _lagged_date(date_str, days=ECMWF_LAG_DAYS):
+    return (datetime.fromisoformat(date_str) - timedelta(days=days)).strftime(
+        "%Y-%m-%d"
+    )
+
+
+def _resolve_dates():
+    date_str = os.environ.get("DATE_STR") or _iso_today()
+    if "ECMWF_DATE_STR" in os.environ:
+        ecmwf_date_str = os.environ["ECMWF_DATE_STR"]
+    elif os.path.isdir(f"plots/Kenya/{date_str}"):
+        # Historical / explicit DATE_STR rerun: original plots are under that date.
+        ecmwf_date_str = date_str
+    else:
+        ecmwf_date_str = _lagged_date(date_str)
+    return date_str, ecmwf_date_str
+
+
+date_str, ecmwf_date_str = _resolve_dates()
+print(
+    f"Briefing date {date_str}; ECMWF/GEFS product date {ecmwf_date_str}",
+    file=sys.stderr,
+)
 
 with open(f"{prefix}/prompts/system_prompt.md") as f:
             system_prompt = f.read()
@@ -66,16 +92,23 @@ promt_unformat3=_load_or_empty(f"{prefix}/promt_unformat3.json")
 
 try:
     promt_unformat1 = gef.add_onset_from_netcdf(
-        promt_unformat1, f"{prefix}/data/{date_str}/rainfall_onset_s2s_Kenya.nc"
+        promt_unformat1,
+        f"{prefix}/data/{ecmwf_date_str}/rainfall_onset_s2s_Kenya.nc",
     )
     gef.save_dict(promt_unformat1, f"{prefix}/promt_unformat1.json")
 except Exception as exc:
     print(f"add_onset_from_netcdf failed: {exc}")
 
 promt_unformat= promt_unformat1 | promt_unformat2 | promt_unformat3
+_ecmwf_lag_note = ""
+if ecmwf_date_str != date_str:
+    _ecmwf_lag_note = (
+        f"ECMWF / GEFS products are from init {ecmwf_date_str} "
+        f"({ECMWF_LAG_DAYS}-day publication lag).\n"
+    )
 user_prompt = f"""
 Forecast date: {date_str}
-Country: Kenya
+{_ecmwf_lag_note}Country: Kenya
 Month: {date_str[5:7]}
 Zone statistics (6-week forecast).
 Onset dates come from the rainfall-onset action (first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days), median over ensemble members and grid cells in each region. Use them in one sentence of the Overall Summary for **OND Short Rains** onset (typical mid-October). Never describe MAM Long Rains onset. Do not infer onset from weekly totals. Each forecast slide (2–10) should be 2–3 sentences only.
@@ -375,10 +408,10 @@ plots = ['hold', 'weekly_precip', "gefs_weekly_precip", "weekly_precip_downscale
          "weekly_medium_range_precip", "chance_of_above_or_below", "efi_sot_precip",
          "50th_percentile_exedance", "anomaly_from_50th", "summary"]
 
-kenya_path = f"plots/Kenya/{date_str}"
-great_horn_path = f"plots/Great_Horn/{date_str}"
-diagnostics_path = f"plots/diagnostics/{date_str}/weekly"
-diagnostics_monthly_path = f"plots/diagnostics/{date_str}/monthly"
+kenya_path = f"plots/Kenya/{ecmwf_date_str}"
+great_horn_path = f"plots/Great_Horn/{ecmwf_date_str}"
+diagnostics_path = f"plots/diagnostics/{ecmwf_date_str}/weekly"
+diagnostics_monthly_path = f"plots/diagnostics/{ecmwf_date_str}/monthly"
 briefing_plots_path = f"plots/briefing/{date_str}/"
 
 # only the first len(plots) slide types have a "{type}_plot" shape
@@ -390,12 +423,12 @@ if os.path.exists(_ecmwf_raw_ws_script_path):
     plot_paths["ECMWF_raw"] = _ecmwf_raw_ws_script_path
 
 # Indian Ocean moisture diagnostics (see IndianOceanState.py)
-IOD_path = f"{diagnostics_path}/ECMWF_s2s_10wind_sst_anomaly_{date_str}.png"
-IO_ivt_weekly_path = f"{diagnostics_path}/ECMWF_s2s_ivt_u_{date_str}.png"
-IO_ivt_monthly_path = f"{diagnostics_monthly_path}/ECMWF_s2s_ivt_u_{date_str}.png"
-IO_TCWV_anom_path = f"{diagnostics_path}/ECMWF_s2s_tcw_anomaly_{date_str}.png"
-IO_precip_anom_path = f"{diagnostics_path}/ECMWF_s2s_precip_anomaly_{date_str}.png"
-IO_precip_anom_std_path = f"{diagnostics_path}/ECMWF_s2s_precip_std_anomaly_{date_str}.png"
+IOD_path = f"{diagnostics_path}/ECMWF_s2s_10wind_sst_anomaly_{ecmwf_date_str}.png"
+IO_ivt_weekly_path = f"{diagnostics_path}/ECMWF_s2s_ivt_u_{ecmwf_date_str}.png"
+IO_ivt_monthly_path = f"{diagnostics_monthly_path}/ECMWF_s2s_ivt_u_{ecmwf_date_str}.png"
+IO_TCWV_anom_path = f"{diagnostics_path}/ECMWF_s2s_tcw_anomaly_{ecmwf_date_str}.png"
+IO_precip_anom_path = f"{diagnostics_path}/ECMWF_s2s_precip_anomaly_{ecmwf_date_str}.png"
+IO_precip_anom_std_path = f"{diagnostics_path}/ECMWF_s2s_precip_std_anomaly_{ecmwf_date_str}.png"
 
 # rainy season onset maps (see run_rainfall_onset.py) -- wet-spell/no-dry-spell
 # definition, the ICPAC 10 mm wet-spell variant, and the two-stage

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       date_str:
-        description: "Forecast date YYYY-MM-DD (blank = 2 days ago)"
+        description: "Briefing date YYYY-MM-DD (blank = today). Original ECMWF plots are pulled from 2 days earlier."
         required: false
         default: ""
       to_email:
@@ -42,10 +42,12 @@ jobs:
           if [ -n "${{ inputs.date_str }}" ]; then
             date="${{ inputs.date_str }}"
           else
-            date="$(date -u -d '2 days ago' +%Y-%m-%d)"
+            date="$(date -u +%Y-%m-%d)"
           fi
+          ecmwf="$(date -u -d "$date - 2 days" +%Y-%m-%d)"
           echo "date=$date" >> "$GITHUB_OUTPUT"
-          echo "Using DATE_STR=$date, emailing $TEST_EMAIL"
+          echo "ecmwf_date=$ecmwf" >> "$GITHUB_OUTPUT"
+          echo "Using DATE_STR=$date ECMWF_DATE_STR=$ecmwf, emailing $TEST_EMAIL"
 
       - name: Auth to Google Cloud
         uses: google-github-actions/auth@v2
@@ -64,11 +66,13 @@ jobs:
         continue-on-error: true
         run: |
           date="${{ steps.date.outputs.date }}"
+          ecmwf="${{ steps.date.outputs.ecmwf_date }}"
           for rel in \
-            "plots/Kenya/${date}" \
-            "plots/Great_Horn/${date}" \
-            "plots/diagnostics/${date}" \
-            "plots/briefing/${date}"
+            "plots/Kenya/${ecmwf}" \
+            "plots/Great_Horn/${ecmwf}" \
+            "plots/diagnostics/${ecmwf}" \
+            "plots/briefing/${date}" \
+            "plots/briefing/${ecmwf}"
           do
             mkdir -p "$rel"
             gcloud storage rsync -r "gs://${BUCKET}/${rel}" "$rel" || true
@@ -88,6 +92,7 @@ jobs:
         env:
           MAIN_PATH: ${{ github.workspace }}/
           DATE_STR: ${{ steps.date.outputs.date }}
+          ECMWF_DATE_STR: ${{ steps.date.outputs.ecmwf_date }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
         run: python ai_weather_briefing.py

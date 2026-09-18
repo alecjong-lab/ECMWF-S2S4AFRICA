@@ -22,7 +22,9 @@ cd "$REPO_ROOT"
 PYTHON="$(command -v python || command -v python3)"
 PIP="$(command -v pip || command -v pip3)"
 
-DATE_STR="${DATE_STR:-$(python3 -c "from datetime import datetime, timedelta; print((datetime.today() - timedelta(days=2)).strftime('%Y-%m-%d'))")}"
+# Briefing date is today. Skills scripts probe their own latest; original
+# ECMWF/GEFS scripts keep a hard-coded 2-day lag when they run.
+DATE_STR="${DATE_STR:-$(python3 -c "from datetime import datetime; print(datetime.today().strftime('%Y-%m-%d'))")}"
 COUNTRY="${COUNTRY:-Kenya}"
 export DATE_STR
 export MAIN_PATH="${REPO_ROOT}/"

@@ -14,9 +14,9 @@ mkdir -p intermediate_results
 
 CUR_YEAR=$(date -u +%Y)
 END=$($WS chirps-fetch --probe-latest)
-# DATE_STR pins the briefing init when the runner exports it; otherwise take
-# the latest published data_weekly_Kenya_downscaled.nc.
-INIT="${DATE_STR:-$($WS kenya-forecast-fetch --probe-latest precip_downscaled)}"
+# Do not inherit DATE_STR: KMSA/ECMWF inits lag the briefing date. Pin with
+# INIT_OVERRIDE for a local rerun.
+INIT="${INIT_OVERRIDE:-$($WS kenya-forecast-fetch --probe-latest precip_downscaled)}"
 
 # 1982 and 1997 are intentionally absent: CHIRPS v3.0 sat starts in 1998.
 ANALOG_YEARS=(2006 2015 2019 2023)

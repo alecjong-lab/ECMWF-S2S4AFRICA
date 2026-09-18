@@ -34,9 +34,9 @@ PLOT_LAYOUT='{"layout":{"colorbar":{"pad":0.02},"facet":{"wspace":0.04,"hspace":
 mkdir -p intermediate_results
 IR=intermediate_results
 
-# DATE_STR pins the briefing init when the runner exports it; otherwise take
-# the latest published daily_downscaled_kenya.tif.
-INIT="${DATE_STR:-$($WS kenya-forecast-fetch --probe-latest precip_downscaled_daily)}"
+# Do not inherit DATE_STR: KMSA daily inits lag the briefing date. Pin with
+# INIT_OVERRIDE for a local rerun.
+INIT="${INIT_OVERRIDE:-$($WS kenya-forecast-fetch --probe-latest precip_downscaled_daily)}"
 YEAR="${INIT:0:4}"
 
 # First four Mondays of Sept–Dec (static 4×4 briefing slots).

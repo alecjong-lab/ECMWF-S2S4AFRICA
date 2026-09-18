@@ -15,12 +15,17 @@ from datetime import datetime, timedelta
 
 prefix = os.environ["MAIN_PATH"]
 
-if "DATE_STR" in os.environ:
-    date_str = os.environ["DATE_STR"]
+# Briefing date is today. Original ECMWF plots live under the lagged init.
+ECMWF_LAG_DAYS = 2
+date_str = os.environ.get("DATE_STR") or datetime.today().strftime("%Y-%m-%d")
+if "ECMWF_DATE_STR" in os.environ:
+    ecmwf_date_str = os.environ["ECMWF_DATE_STR"]
+elif os.path.isdir(f"{prefix}/plots/Kenya/{date_str}"):
+    ecmwf_date_str = date_str
 else:
-    today = datetime.today()
-    two_days_earlier = today - timedelta(days=2)
-    date_str = two_days_earlier.strftime("%Y-%m-%d")
+    ecmwf_date_str = (
+        datetime.fromisoformat(date_str) - timedelta(days=ECMWF_LAG_DAYS)
+    ).strftime("%Y-%m-%d")
 
 with open(f"{prefix}/prompts/image_caption_prompt.md") as f:
     caption_system_prompt = f.read()
@@ -28,7 +33,7 @@ with open(f"{prefix}/prompts/image_caption_prompt.md") as f:
 with open(f"{prefix}/prompts/system_prompt_from_images.md") as f:
     synthesis_system_prompt = f.read()
 
-kenya_path = f"plots/Kenya/{date_str}"
+kenya_path = f"plots/Kenya/{ecmwf_date_str}"
 
 # Same plot_paths mapping as ai_weather_briefing.py (slide_types <-> plots), duplicated
 # here per this repo's convention of not sharing such mappings across scripts.
@@ -69,7 +74,7 @@ for t in slide_types:
         model=model_id,
         contents=[
             image_part,
-            f"Context: this is the pipeline's '{slide_labels[t]}' output for {date_str}.",
+            f"Context: this is the pipeline's '{slide_labels[t]}' output for {ecmwf_date_str}.",
         ],
         config=types.GenerateContentConfig(
             system_instruction=caption_system_prompt,
@@ -81,9 +86,15 @@ for t in slide_types:
 
 caption_block = "\n".join(f"{t} ({slide_labels[t]}): {captions[t]}" for t in slide_types)
 
+_ecmwf_lag_note = ""
+if ecmwf_date_str != date_str:
+    _ecmwf_lag_note = (
+        f"ECMWF / GEFS products are from init {ecmwf_date_str} "
+        f"({ECMWF_LAG_DAYS}-day publication lag).\n"
+    )
 user_prompt = f"""
 Forecast date: {date_str}
-Country: Kenya
+{_ecmwf_lag_note}Country: Kenya
 Month: {date_str[5:7]}
 Plot captions:
 {caption_block}

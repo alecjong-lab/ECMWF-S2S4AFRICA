@@ -60,9 +60,13 @@ jobs:
             cd main_repo
             python download_s2s.py
 
+      - name: Get briefing date
+        id: briefing_date
+        run: echo "date=$(date -u +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
       - name: Get ECMWF lagged date
         id: ecmwf_date
-        run: echo "date=$(date -d '2 days ago' +'%Y-%m-%d')" >> $GITHUB_OUTPUT          
+        run: echo "date=$(date -d '2 days ago' +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
       - name: Fetch forecast
         working-directory: main_repo
@@ -228,8 +232,8 @@ jobs:
         continue-on-error: true
         working-directory: main_repo
         run: |
-          mkdir -p "plots/briefing/${{ steps.ecmwf_date.outputs.date }}"
-          mv ws_scripts/*.png "plots/briefing/${{ steps.ecmwf_date.outputs.date }}/" 2>/dev/null || true
+          mkdir -p "plots/briefing/${{ steps.briefing_date.outputs.date }}"
+          mv ws_scripts/*.png "plots/briefing/${{ steps.briefing_date.outputs.date }}/" 2>/dev/null || true
 
       - name: Install rclone
         continue-on-error: true
@@ -248,7 +252,8 @@ jobs:
           python ai_weather_briefing.py
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
-          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+          DATE_STR: ${{ steps.briefing_date.outputs.date }}
+          ECMWF_DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
 
@@ -586,9 +591,10 @@ jobs:
         run: |
           country="${{ matrix.country }}"
           date="${{ steps.ecmwf_date.outputs.date }}"
+          briefing_date="${{ steps.date.outputs.date }}"
 
           if [ "$country" == "Kenya" ]; then
-            briefing="s2s_briefing_${date}.pptx"
+            briefing="s2s_briefing_${briefing_date}.pptx"
             if [ ! -f "$briefing" ] && [ -f "main_repo/$briefing" ]; then
               cp "main_repo/$briefing" "$briefing"
             fi
@@ -596,7 +602,7 @@ jobs:
               echo "plots_ok=true" >> "$GITHUB_OUTPUT"
             else
               echo "plots_ok=false" >> "$GITHUB_OUTPUT"
-              echo "::warning::Missing weather briefing PowerPoint for Kenya on ${date} — skipping email."
+              echo "::warning::Missing weather briefing PowerPoint for Kenya on ${briefing_date} — skipping email."
             fi
           else
             dekadal="plots/${country}/${date}/dekadal/dekadal_precip.png"
@@ -618,16 +624,16 @@ jobs:
           today_date="${{ steps.date.outputs.date }}"
 
           if [ "$country" == "Kenya" ]; then
-            analog="plots/briefing/${ecmwf_date}/kenya_weekly_rainfall_analog_years.png"
+            analog="plots/briefing/${today_date}/kenya_weekly_rainfall_analog_years.png"
             [ ! -f "$analog" ] && [ -f "main_repo/$analog" ] && analog="main_repo/$analog"
 
-            sst="plots/briefing/${ecmwf_date}/sst_global_oisst_nino_iod.png"
+            sst="plots/briefing/${today_date}/sst_global_oisst_nino_iod.png"
             [ ! -f "$sst" ] && [ -f "main_repo/$sst" ] && sst="main_repo/$sst"
 
-            iod="plots/briefing/${ecmwf_date}/iod_forecast.png"
+            iod="plots/briefing/${today_date}/iod_forecast.png"
             [ ! -f "$iod" ] && [ -f "main_repo/$iod" ] && iod="main_repo/$iod"
 
-            ecmwf_raw="plots/briefing/${ecmwf_date}/ECMWF_raw_plot.png"
+            ecmwf_raw="plots/briefing/${today_date}/ECMWF_raw_plot.png"
             [ ! -f "$ecmwf_raw" ] && [ -f "main_repo/$ecmwf_raw" ] && ecmwf_raw="main_repo/$ecmwf_raw"
 
             ecmwf_dwn="plots/Kenya/${ecmwf_date}/weekly/weekly_precip_downscaled.png"
@@ -685,7 +691,7 @@ jobs:
         id: drive
         continue-on-error: true
         run: |
-          briefing="s2s_briefing_${{ steps.ecmwf_date.outputs.date }}.pptx"
+          briefing="s2s_briefing_${{ steps.date.outputs.date }}.pptx"
           if [ ! -f "$briefing" ] && [ -f "main_repo/$briefing" ]; then
             briefing="main_repo/$briefing"
           fi

@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -10,7 +10,7 @@ prefix = os.environ.get("MAIN_PATH", ".")
 if "DATE_STR" in os.environ:
     date_str = os.environ["DATE_STR"]
 else:
-    date_str = (datetime.today() - timedelta(days=2)).strftime("%Y-%m-%d")
+    date_str = datetime.today().strftime("%Y-%m-%d")
 
 briefing_plots_dir = os.path.join(prefix, "plots", "briefing", date_str)
 template_path = os.path.join(prefix, "WeatherbriefingKenya_template3.pptx")
