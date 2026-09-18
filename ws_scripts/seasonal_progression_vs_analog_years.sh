@@ -87,9 +87,36 @@ $WS summarize-dim \
     --dim number --method mean \
     --output "$IR/s2s_ensmean.zarr"
 
-# Analog years: seaborn deep. Observed: black. Members: grey. Mean: purple.
-# --align-day-of-year overlays years on calendar-day ticks (e.g. 1 Oct).
-# Output stem stays kenya_weekly_rainfall_analog_years for the briefing.
+# +/- 1 std ensemble range, to show spread alongside the mean.
+$WS summarize-dim \
+    --input "$IR/s2s_final.zarr" \
+    --dim number --method std \
+    --output "$IR/s2s_std.zarr"
+
+$WS difference \
+    --input "$IR/s2s_ensmean.zarr" \
+    --input "$IR/s2s_std.zarr" \
+    --variable precip \
+    --output "$IR/s2s_lower.zarr"
+
+# No addition tool (mean + std), so do it manually.
+python3 - <<'PY'
+import xarray as xr
+with xr.set_options(keep_attrs=True):
+    ds = xr.open_zarr("intermediate_results/s2s_std.zarr")
+    ds["precip"] = -ds["precip"]
+    ds.to_zarr("intermediate_results/s2s_neg_std.zarr", mode="w")
+PY
+
+$WS difference \
+    --input "$IR/s2s_ensmean.zarr" \
+    --input "$IR/s2s_neg_std.zarr" \
+    --variable precip \
+    --output "$IR/s2s_upper.zarr"
+
+# Analog years: seaborn deep. Observed: black. Members: grey. Mean + spread:
+# purple. --align-day-of-year overlays years on calendar-day ticks (e.g. 1
+# Oct). Output stem stays kenya_weekly_rainfall_analog_years for the briefing.
 $WS plot-timeseries \
     --input "$IR/montot_2006.zarr" \
     --input "$IR/montot_2015.zarr" \
@@ -98,6 +125,8 @@ $WS plot-timeseries \
     --input "$IR/montot_${CUR_YEAR}.zarr" \
     --input "$IR/s2s_final.zarr" \
     --input "$IR/s2s_ensmean.zarr" \
+    --input "$IR/s2s_lower.zarr" \
+    --input "$IR/s2s_upper.zarr" \
     --label '2006 (analog)' \
     --label '2015 (analog)' \
     --label '2019 (analog)' \
@@ -105,6 +134,8 @@ $WS plot-timeseries \
     --label "${CUR_YEAR} CHIRPS (observed)" \
     --label "${CUR_YEAR} S2S members (101)" \
     --label "${CUR_YEAR} S2S ensemble mean" \
+    --label "${CUR_YEAR} S2S -1\$\\sigma\$" \
+    --label "${CUR_YEAR} S2S +1\$\\sigma\$" \
     --variable precip \
     --along number \
     --align-day-of-year \
@@ -121,4 +152,6 @@ $WS plot-timeseries \
     --trace "5:color=black,linewidth=4.2,zorder=10" \
     --trace '6:color=#9e9e9e,linewidth=0.8,zorder=2' \
     --trace '7:color=#7b1fa2,linewidth=5.0,zorder=12' \
+    --trace '8:color=#7b1fa2,linewidth=1.5,linestyle=dashed,zorder=11' \
+    --trace '9:color=#7b1fa2,linewidth=1.5,linestyle=dashed,zorder=11' \
     --output kenya_weekly_rainfall_analog_years.png
