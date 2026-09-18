@@ -10,8 +10,7 @@ set -eo pipefail
 # weather-skills @dev — every step in this pipeline comes from this repo.
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
 
-# chc-skills @dev — africa-itf, mjo-forecast-fetch, subc-mme-fetch,
-# iod-mode-index. Pinned per request; NOT used by this figure (see notes).
+# chc-skills @dev — analog-years supplies the observed-year list.
 CHC="uvx --from git+https://github.com/rhiza-research/chc-skills@dev chc-skills"
 
 BBOX="5.506/33.893569/-4.67677/41.855083"
@@ -27,10 +26,14 @@ END=$($WS chirps-fetch --probe-latest)      # latest available CHIRPS day
 INIT="${DATE_STR:-$($WS kenya-forecast-fetch --probe-latest precip_downscaled)}"
 
 # ---------------------------------------------------------------- 0. inputs
-# Analog years for the current season -> 1982 1994 1997 2006 2015 2019 2023
-# 1982 and 1997 are NOT fetched: CHIRPS v3.0 sat only reaches back to 1998.
-# 1994 uses CHIRPS v3.0 rnl (ERA5-disaggregated daily; same pentad totals).
-$CHC analog-years --date "$TODAY"
+# analog-years prints the year list on stdout (year=YYYY on stderr).
+# chirps-fetch uses sat from 1998 and rnl (ERA5-disaggregated pentads) for 1981–1997.
+ANALOG_YEARS=$($CHC analog-years --date "$TODAY")
+if [ -z "$ANALOG_YEARS" ]; then
+  echo "analog-years returned no years for ${TODAY}" >&2
+  exit 1
+fi
+echo "analog years: ${ANALOG_YEARS}" >&2
 
 # Kenya bbox + boundary polygon
 $WS resolve-region KEN --geojson "$GEOJSON"
@@ -109,7 +112,7 @@ PY
 }
 
 # ------------------------------------------------- 1. CHIRPS observed years
-for Y in 1994 2006 2015 2019 2023; do
+for Y in $ANALOG_YEARS; do
   $WS chirps-fetch \
       --start-time "${Y}-08-01" --end-time "${Y}-12-31" \
       --bbox "$BBOX" --workers 8 \
@@ -123,7 +126,7 @@ $WS chirps-fetch \
     --output "intermediate_results/chirps_${CUR_YEAR}.zarr"
 
 # Clip to the Kenya polygon -> area-weighted national mean -> weekly totals
-for Y in 1994 2006 2015 2019 2023 "$CUR_YEAR"; do
+for Y in $ANALOG_YEARS "$CUR_YEAR"; do
   $WS clip-region \
       --input "intermediate_results/chirps_${Y}.zarr" \
       --geojson "$GEOJSON" \
@@ -184,39 +187,40 @@ $WS summarize-dim \
     --output intermediate_results/kmsa_ds_ensmean.zarr
 
 # ------------------------------------------------------------- 3. the plot
-# Analog years: seaborn deep. Current-year CHIRPS: heavy black.
+# Analog years: seaborn cycle. Current-year CHIRPS: heavy black.
 # Downscaled members: grey spaghetti. Downscaled ensemble mean: purple.
 # --trace selectors use full labels so "${CUR_YEAR}" is not ambiguous.
-$WS plot-timeseries \
-    --input intermediate_results/tot_1994.zarr \
-    --input intermediate_results/tot_2006.zarr \
-    --input intermediate_results/tot_2015.zarr \
-    --input intermediate_results/tot_2019.zarr \
-    --input intermediate_results/tot_2023.zarr \
-    --input "intermediate_results/tot_${CUR_YEAR}.zarr" \
-    --input intermediate_results/kmsa_ds_final.zarr \
-    --input intermediate_results/kmsa_ds_ensmean.zarr \
-    --label '1994 (analog)' \
-    --label '2006 (analog)' \
-    --label '2015 (analog)' \
-    --label '2019 (analog)' \
-    --label '2023 (analog)' \
-    --label "${CUR_YEAR} observed (CHIRPS)" \
-    --label "${CUR_YEAR} KMSA downscaled members" \
-    --label "${CUR_YEAR} KMSA downscaled mean" \
-    --variable precip \
-    --along number \
-    --align-day-of-year \
-    --trace "${CUR_YEAR} observed (CHIRPS):color=black,linewidth=5,zorder=10" \
-    --trace "${CUR_YEAR} KMSA downscaled members:color=grey,linewidth=0.5,zorder=3" \
-    --trace "${CUR_YEAR} KMSA downscaled mean:color=purple,linewidth=5,zorder=8" \
-    --trace '1994 (analog):color=#4c72b0,linewidth=1.4' \
-    --trace '2006 (analog):color=#dd8452,linewidth=1.4' \
-    --trace '2015 (analog):color=#55a868,linewidth=1.4' \
-    --trace '2019 (analog):color=#c44e52,linewidth=1.4' \
-    --trace '2023 (analog):color=#8172b3,linewidth=1.4' \
-    --title "OND Seasonal Progression: analog years vs ${CUR_YEAR} + KMSA downscaled (init ${INIT})" \
-    --ylabel 'Weekly rainfall total (mm)' \
-    --fontsize 15 \
-    --figsize 16,9 \
-    --output kenya_weekly_rainfall_analog_years.png
+plot_args=()
+for Y in $ANALOG_YEARS; do
+  plot_args+=(--input "intermediate_results/tot_${Y}.zarr")
+done
+plot_args+=(
+  --input "intermediate_results/tot_${CUR_YEAR}.zarr"
+  --input intermediate_results/kmsa_ds_final.zarr
+  --input intermediate_results/kmsa_ds_ensmean.zarr
+)
+for Y in $ANALOG_YEARS; do
+  plot_args+=(--label "${Y} (analog)")
+done
+plot_args+=(
+  --label "${CUR_YEAR} observed (CHIRPS)"
+  --label "${CUR_YEAR} KMSA downscaled members"
+  --label "${CUR_YEAR} KMSA downscaled mean"
+  --variable precip
+  --along number
+  --align-day-of-year
+  --trace "${CUR_YEAR} observed (CHIRPS):color=black,linewidth=5,zorder=10"
+  --trace "${CUR_YEAR} KMSA downscaled members:color=grey,linewidth=0.5,zorder=3"
+  --trace "${CUR_YEAR} KMSA downscaled mean:color=purple,linewidth=5,zorder=8"
+)
+for Y in $ANALOG_YEARS; do
+  plot_args+=(--trace "${Y} (analog):linewidth=1.4")
+done
+plot_args+=(
+  --title "OND Seasonal Progression: analog years vs ${CUR_YEAR} + KMSA downscaled (init ${INIT})"
+  --ylabel 'Weekly rainfall total (mm)'
+  --fontsize 15
+  --figsize 16,9
+  --output kenya_weekly_rainfall_analog_years.png
+)
+$WS plot-timeseries "${plot_args[@]}"
