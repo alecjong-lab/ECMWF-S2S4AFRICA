@@ -50,6 +50,7 @@ STEPS=(
   ws_equatorial_waves_analyses_and_forecasts
   ws_current_sst_conditions
   ws_last_weeks_forecast_verification
+  ws_kenya_daily_downscaled_precip
   collect_briefing_plots
   ai_briefing
 )
@@ -64,10 +65,7 @@ step_ws_recent_rainfall_observations_eastern_africa() { _ws_script recent_rainfa
 step_ws_recent_observations_station_data() { _ws_script recent_observations_station_data.sh; }
 step_ws_seasonal_progression() { _ws_script seasonal_progression.sh; }
 step_ws_seasonal_progression_vs_analog_years() {
-  : "${CDSAPI_KEY:?CDSAPI_KEY not set — add it to .env}"
-  ECMWF_DATASTORES_URL="https://ecds.ecmwf.int/api" \
-  ECMWF_DATASTORES_KEY="$CDSAPI_KEY" \
-    _ws_script seasonal_progression_vs_analog_years.sh
+  _ws_script seasonal_progression_vs_analog_years.sh
 }
 step_ws_equatorial_waves_mjo() { _ws_script equatorial_waves_mjo.sh; }
 step_ws_equatorial_waves_iod_enso() { _ws_script equatorial_waves_iod_enso.sh; }
@@ -75,6 +73,7 @@ step_ws_itcz_state() { _ws_script itcz_state.sh; }
 step_ws_equatorial_waves_analyses_and_forecasts() { _ws_script equatorial_waves_analyses_and_forecasts.sh; }
 step_ws_current_sst_conditions() { _ws_script current_sst_conditions.sh; }
 step_ws_last_weeks_forecast_verification() { _ws_script last_weeks_forecast_verification.sh; }
+step_ws_kenya_daily_downscaled_precip() { _ws_script kenya_daily_downscaled_precip.sh; }
 
 step_collect_briefing_plots() {
   mkdir -p "plots/briefing/${DATE_STR}"

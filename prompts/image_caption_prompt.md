@@ -100,13 +100,15 @@ trailing ~30-day daily station observations, one line per named city (Nairobi, M
 Kisumu, Nakuru, Eldoret). Describe relative levels/trends between cities, not a spatial
 pattern — there is no map here.
 
-**L. GEFS-vs-CHIRPS skill verification grids** (`kenya_gefs_chirps_verify_5mm`, `_bias`,
-`_mae`): a multi-column grid, one column per forecast lead week (1-4), each column labeled
-with its own init date, all verified against the same observed week (CHIRPS, given in the
-title). The three files show three different metrics — hits/exceedance at a 5mm threshold,
-bias (forecast minus observed), and mean absolute error, respectively — identify which one
-from the title and describe how that metric changes across lead weeks (i.e. across columns),
-which is the actual skill-degradation story here.
+**L. Model-vs-CHIRPS skill verification grids** (`kenya_{ecmwf,kmsa,aifs,gefs}_chirps_verify_5mm`,
+plus matching `_bias` / `_mae` for each model): a multi-column
+grid, observation then one column per forecast lead week (1-4; AIFS may have
+fewer because it is ~15-day), each column labeled with its own init date, all
+verified against the same observed week (CHIRPS, given in the title). The
+`_verify_5mm` files are hits/exceedance at a 5 mm weekly threshold;
+`_bias` is forecast minus observed; `_mae` is mean absolute error. Identify the model
+and metric from the title and describe how that metric changes across lead
+weeks (i.e. across columns), which is the actual skill-degradation story here.
 `kenya_week1_forecast_mae_vs_chirps` is a 1D timeseries (not a map grid) of week-1 MAE
 versus CHIRPS over Kenya for GFS, AIFS-ENS, and IFS-ENS — compare models and how error
 changes over the months shown, not across lead weeks.
@@ -142,11 +144,11 @@ sits relative to climatology, don't extrapolate beyond the observed weeks shown.
 `kenya_ond_last_week_rainfall_kenya_extent` is a map of the latest complete CHIRPS week
 inside the Kenya OND box, drawn on the full Kenya extent (box outline = OND region) —
 use past-tense observed language and cardinal directions, same as family J.
-`kenya_weekly_rainfall_analog_years` overlays named analog years (thin colored lines),
-current-year CHIRPS observed (thick black line), the ECMWF S2S 101-member
-ensemble (thin crimson lines) and its ensemble mean (thicker purple line) — distinguish clearly
-between the observed-to-date portion, the analog-year comparison, and the forecast
-continuation.
+`kenya_weekly_rainfall_analog_years` overlays named analog years (seaborn-colored
+lines), current-year CHIRPS observed (thick black line), downscaled S2S members
+(thin grey spaghetti; 101-member ensemble) and the downscaled ensemble mean
+(thicker purple line) — distinguish clearly between the observed-to-date portion,
+the analog-year comparison, and the forecast continuation. Monday-labeled weeks.
 
 ## Task
 Step 1: Identify the plot family from the reference above, the variable shown, the region/

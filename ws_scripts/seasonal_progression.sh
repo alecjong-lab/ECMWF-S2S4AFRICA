@@ -34,8 +34,8 @@ uvx --from $S forecasting-skills rename \
 
 uvx --from $S forecasting-skills plot-timeseries \
   --input chirps_ond_mean.zarr --input clim_ond_series.zarr \
-  --variable precip --style bar \
-  --trace 2:style=line,color=black,linewidth=2 \
+  --variable precip --mark bar \
+  --trace 2:mark=line,color=black,linewidth=2 \
   --label "CHIRPS observed (${CUR_YEAR})" --label 'CHIRPS climatology' \
   --title "Daily rainfall, Kenya OND region (Aug-Dec ${CUR_YEAR}) vs climatology" \
   --ylabel 'Rainfall [mm/day]' --fontsize 16 \
@@ -62,8 +62,8 @@ uvx --from $S forecasting-skills convert-to-totals \
 
 uvx --from $S forecasting-skills plot-timeseries \
   --input chirps_ond_weekly_mm.zarr --input clim_ond_weekly_mm.zarr \
-  --variable precip --style bar \
-  --trace 2:style=line,color=red,linewidth=2,marker=o \
+  --variable precip --mark bar \
+  --trace 2:mark=line,color=red,linewidth=2,marker=o \
   --label "CHIRPS observed (${CUR_YEAR})" --label 'CHIRPS climatology' \
   --title "Weekly Rainfall Totals — Kenya OND Region" \
   --ylabel 'Rainfall [mm/week]' --fontsize 16 \
@@ -137,7 +137,7 @@ uvx --from $S forecasting-skills concat \
   --output anom_full.zarr
 
 uvx --from $S forecasting-skills plot-timeseries \
-  --input anom_full.zarr --variable precip_anomaly --style bar \
+  --input anom_full.zarr --variable precip_anomaly --mark bar \
   --label 'CHIRPS standardized anomaly' \
   --title "Weekly Rainfall Standardized Anomaly — Kenya OND Region" \
   --ylabel 'Standardized anomaly [z-score]' --fontsize 16 \
