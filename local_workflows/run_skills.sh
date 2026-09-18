@@ -50,12 +50,14 @@ STEPS=(
   ws_equatorial_waves_analyses_and_forecasts
   ws_current_sst_conditions
   ws_last_weeks_forecast_verification
+  ws_week1_mae_vs_chirps
   ws_kenya_daily_downscaled_precip
   collect_briefing_plots
   ai_briefing
 )
 # timeseries_verification.sh is commented out in daily_download2.0.yml
-# itself, so left out here too, matching run_local.sh.
+# (flaky GFS/AIFS/IFS line series). week1_mae_vs_chirps.sh is the
+# grouped-bar replacement that fills kenya_week1_forecast_mae_vs_chirps.
 
 _ws_script() {
   ( cd ws_scripts && bash "$1" )
@@ -73,6 +75,7 @@ step_ws_itcz_state() { _ws_script itcz_state.sh; }
 step_ws_equatorial_waves_analyses_and_forecasts() { _ws_script equatorial_waves_analyses_and_forecasts.sh; }
 step_ws_current_sst_conditions() { _ws_script current_sst_conditions.sh; }
 step_ws_last_weeks_forecast_verification() { _ws_script last_weeks_forecast_verification.sh; }
+step_ws_week1_mae_vs_chirps() { _ws_script week1_mae_vs_chirps.sh; }
 step_ws_kenya_daily_downscaled_precip() { _ws_script kenya_daily_downscaled_precip.sh; }
 
 step_collect_briefing_plots() {

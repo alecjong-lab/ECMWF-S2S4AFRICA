@@ -109,9 +109,11 @@ verified against the same observed week (CHIRPS, given in the title). The
 `_bias` is forecast minus observed; `_mae` is mean absolute error. Identify the model
 and metric from the title and describe how that metric changes across lead
 weeks (i.e. across columns), which is the actual skill-degradation story here.
-`kenya_week1_forecast_mae_vs_chirps` is a 1D timeseries (not a map grid) of week-1 MAE
-versus CHIRPS over Kenya for GFS, AIFS-ENS, and IFS-ENS — compare models and how error
-changes over the months shown, not across lead weeks.
+`kenya_week1_forecast_mae_vs_chirps` is a grouped-bar timeseries (not a map grid) of
+week-1 MAE versus CHIRPS over Kenya for AIFS-ENS, ECMWF HRES, ECMWF ER (S2S),
+KMSA downscaled, and GEFS — one bar group per Monday week for the last four
+complete verifying weeks. Compare models and how error changes across those
+weeks, not across lead weeks.
 
 **M. MJO RMM phase diagrams** (`mjo_rmm_gefs`, `mjo_rmm_ecmwf`): a phase-space diagram
 (RMM1 vs RMM2) with a unit circle — inside the circle = weak/inactive MJO, outside = active,

@@ -388,6 +388,12 @@ jobs:
         working-directory: main_repo/ws_scripts
         run: bash last_weeks_forecast_verification.sh
 
+      - name: Run week1_mae_vs_chirps.sh
+        if: ${{ inputs.run_briefing_slides }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash week1_mae_vs_chirps.sh
+
       - name: Run timeseries_verification.sh
         if: false  # temporarily skipped — script is failing
         continue-on-error: true

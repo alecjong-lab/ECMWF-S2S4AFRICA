@@ -206,6 +206,11 @@ jobs:
         working-directory: main_repo/ws_scripts
         run: bash last_weeks_forecast_verification.sh
 
+      - name: Run week1_mae_vs_chirps.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash week1_mae_vs_chirps.sh
+
       - name: Run weekly_precip_forecast_hres_s2s.sh
         continue-on-error: true
         working-directory: main_repo/ws_scripts
