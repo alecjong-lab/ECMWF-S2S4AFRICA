@@ -1,149 +1,124 @@
 #!/usr/bin/env bash
-# Kenya weekly rainfall totals, Aug-Dec:
-#   analog years + current-year observed (CHIRPS) + ECMWF S2S ensemble spread & mean
+# Kenya weekly rainfall: analog years + current-year CHIRPS + KMSA weekly
+# downscaled ensemble (101 members) and its national-mean line.
+# Observed weeks are 7-day windows strided on Mondays (Mon–Sun).
+# The weekly downscale is already weekly — convert-to-totals only.
 set -eo pipefail
 
-# ---------------------------------------------------------------- skill pins
-# weather-skills @dev — every step in this pipeline comes from this repo.
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
+IR=intermediate_results
+mkdir -p "$IR"
 
-# chc-skills @dev — africa-itf, mjo-forecast-fetch, subc-mme-fetch,
-# iod-mode-index. Pinned per request; NOT used by this figure (see notes).
-CHC="uvx --from git+https://github.com/rhiza-research/chc-skills@dev chc-skills"
-
-BBOX="5.506/33.893569/-4.67677/41.855083"
-GEOJSON="intermediate_results/kenya.geojson"
-mkdir -p intermediate_results
-
-# ---------------------------------------------------------------- dynamic dates
-TODAY=$(date -u +%Y-%m-%d)
 CUR_YEAR=$(date -u +%Y)
-END=$($WS chirps-fetch --probe-latest)      # latest available CHIRPS day
-INIT=$($WS ecmwf-fetch --probe-latest)      # latest available S2S init
+END=$($WS chirps-fetch --probe-latest)
+# Do not inherit DATE_STR: KMSA/ECMWF inits lag the briefing date. Pin with
+# INIT_OVERRIDE for a local rerun.
+INIT="${INIT_OVERRIDE:-$($WS kenya-forecast-fetch --probe-latest precip_downscaled)}"
+# 1982 and 1997 are intentionally absent: CHIRPS v3.0 sat starts in 1998.
+ANALOG_YEARS=(2006 2015 2019 2023)
 
-# ---------------------------------------------------------------- 0. inputs
-# Analog years for the current season -> 1982 1997 2006 2015 2019 2023
-# 1982 and 1997 are NOT fetched: CHIRPS v3.0 final only reaches back to 1998.
-$CHC analog-years --date "$TODAY"
+BBOX=$($WS resolve-region KEN --geojson "$IR/kenya.geojson")
 
-# Kenya bbox + boundary polygon
-$WS resolve-region KEN --geojson "$GEOJSON"
+# ---- CHIRPS observed branches -------------------------------------------
+for Y in "${ANALOG_YEARS[@]}" "$CUR_YEAR"; do
+  chirps_end="${Y}-12-31"
+  [[ "$Y" == "$CUR_YEAR" ]] && chirps_end="$END"
 
-# ------------------------------------------------- 1. CHIRPS observed years
-for Y in 2006 2015 2019 2023; do
   $WS chirps-fetch \
-      --start-time "${Y}-08-01" --end-time "${Y}-12-31" \
+      --start-time "${Y}-08-01" --end-time "$chirps_end" \
       --bbox "$BBOX" --workers 8 \
-      --output "intermediate_results/chirps_${Y}.zarr"
-done
+      --output "$IR/chirps_${Y}.zarr"
 
-# Current year: through the latest available CHIRPS day ($END).
-$WS chirps-fetch \
-    --start-time "${CUR_YEAR}-08-01" --end-time "$END" \
-    --bbox "$BBOX" --workers 8 \
-    --output "intermediate_results/chirps_${CUR_YEAR}.zarr"
-
-# Clip to the Kenya polygon -> area-weighted national mean -> weekly totals
-for Y in 2006 2015 2019 2023 "$CUR_YEAR"; do
   $WS clip-region \
-      --input "intermediate_results/chirps_${Y}.zarr" \
-      --geojson "$GEOJSON" \
-      --output "intermediate_results/clip_${Y}.zarr"
-
-  $WS summarize-dim \
-      --input "intermediate_results/clip_${Y}.zarr" \
-      --dim latitude --dim longitude --method mean --lat-weighted \
-      --output "intermediate_results/mean_${Y}.zarr"
+      --input "$IR/chirps_${Y}.zarr" \
+      --geojson "$IR/kenya.geojson" \
+      --output "$IR/clip_${Y}.zarr"
 
   $WS aggregate-temporal \
-      --input "intermediate_results/mean_${Y}.zarr" \
-      --period weekly --method mean --align left \
-      --output "intermediate_results/wk_${Y}.zarr"
+      --input "$IR/clip_${Y}.zarr" \
+      --output "$IR/mon_${Y}.zarr" \
+      --window 7 --align left --stride Monday
 
+  $WS summarize-dim \
+      --input "$IR/mon_${Y}.zarr" \
+      --dim latitude --dim longitude --method mean --lat-weighted \
+      --output "$IR/monavg_${Y}.zarr"
+
+  # 0.1 keeps partially-covered weeks (trailing CHIRPS / last analog week)
   $WS convert-to-totals \
-      --input "intermediate_results/wk_${Y}.zarr" \
-      --min-coverage 1.0 \
-      --output "intermediate_results/tot_${Y}.zarr"
+      --input "$IR/monavg_${Y}.zarr" \
+      --min-coverage 0.1 \
+      --output "$IR/montot_${Y}.zarr"
 done
 
-# --------------------------------------------------- 2. ECMWF S2S ensemble
-# Needs ECMWF_DATASTORES_URL and ECMWF_DATASTORES_KEY in the environment.
-# Real-time S2S is embargoed 2 days; ecmwf-fetch --probe-latest ($INIT)
-# already accounts for that embargo, so no extra offset is needed here.
-$WS ecmwf-fetch \
-    --date "$INIT" --bbox "$BBOX" -v tp \
-    --output intermediate_results/s2s_raw.zarr
+# ---- KMSA weekly downscaled forecast ------------------------------------
+# Already weekly — do not re-aggregate. Keep `number` through the spatial reduce.
+$WS kenya-forecast-fetch \
+    --dataset precip_downscaled \
+    --date "$INIT" -v tp \
+    --bbox "$BBOX" \
+    --output "$IR/s2s_downscaled.zarr"
 
 $WS clip-region \
-    --input intermediate_results/s2s_raw.zarr \
-    --geojson "$GEOJSON" \
-    --output intermediate_results/s2s_clip.zarr
+    --input "$IR/s2s_downscaled.zarr" \
+    --geojson "$IR/kenya.geojson" \
+    --output "$IR/clip_s2s.zarr"
 
-# step-to-time BEFORE the spatial reduction: it requires the lat/lon dims
-# to still be present, so reducing first fails.
 $WS step-to-time \
-    --input intermediate_results/s2s_clip.zarr \
-    --output intermediate_results/s2s_time.zarr
+    --input "$IR/clip_s2s.zarr" \
+    --output "$IR/s2s_t.zarr"
 
-# Reduce space but KEEP `number` so members survive as trajectories.
 $WS summarize-dim \
-    --input intermediate_results/s2s_time.zarr \
+    --input "$IR/s2s_t.zarr" \
     --dim latitude --dim longitude --method mean --lat-weighted \
-    --output intermediate_results/s2s_mean2.zarr
-
-$WS aggregate-temporal \
-    --input intermediate_results/s2s_mean2.zarr \
-    --period weekly --method mean --align left \
-    --output intermediate_results/s2s_wk.zarr
+    --output "$IR/s2s_avg.zarr"
 
 $WS convert-to-totals \
-    --input intermediate_results/s2s_wk.zarr \
-    --min-coverage 1.0 \
-    --output intermediate_results/s2s_tot.zarr
+    --input "$IR/s2s_avg.zarr" \
+    --output "$IR/s2s_totals.zarr"
 
-# Rename tp -> precip so the forecast shares one axis with the CHIRPS series.
 $WS rename \
-    --input intermediate_results/s2s_tot.zarr \
+    --input "$IR/s2s_totals.zarr" \
     --variable tp --to-name precip \
-    --output intermediate_results/s2s_final.zarr
+    --output "$IR/s2s_final.zarr"
 
-# Ensemble mean: same store as the spread, reduced over `number`.
 $WS summarize-dim \
-    --input intermediate_results/s2s_final.zarr \
+    --input "$IR/s2s_final.zarr" \
     --dim number --method mean \
-    --output intermediate_results/s2s_ensmean.zarr
+    --output "$IR/s2s_ensmean.zarr"
 
-# ------------------------------------------------------------- 3. the plot
-# Analog years: thin colored lines. Current-year CHIRPS: heavy black.
-# S2S members: grey spaghetti (--along number). Ensemble mean on top.
-# --trace selectors use full labels so "${CUR_YEAR}" is not ambiguous.
+# Analog years: seaborn deep. Observed: black. Members: grey. Mean: purple.
+# --align-day-of-year overlays years on calendar-day ticks (e.g. 1 Oct).
+# Output stem stays kenya_weekly_rainfall_analog_years for the briefing.
 $WS plot-timeseries \
-    --input intermediate_results/tot_2006.zarr \
-    --input intermediate_results/tot_2015.zarr \
-    --input intermediate_results/tot_2019.zarr \
-    --input intermediate_results/tot_2023.zarr \
-    --input "intermediate_results/tot_${CUR_YEAR}.zarr" \
-    --input intermediate_results/s2s_final.zarr \
-    --input intermediate_results/s2s_ensmean.zarr \
+    --input "$IR/montot_2006.zarr" \
+    --input "$IR/montot_2015.zarr" \
+    --input "$IR/montot_2019.zarr" \
+    --input "$IR/montot_2023.zarr" \
+    --input "$IR/montot_${CUR_YEAR}.zarr" \
+    --input "$IR/s2s_final.zarr" \
+    --input "$IR/s2s_ensmean.zarr" \
     --label '2006 (analog)' \
     --label '2015 (analog)' \
     --label '2019 (analog)' \
     --label '2023 (analog)' \
-    --label "${CUR_YEAR} observed (CHIRPS)" \
-    --label "${CUR_YEAR} ECMWF S2S members" \
-    --label 'ECMWF S2S ensemble mean' \
+    --label "${CUR_YEAR} CHIRPS (observed)" \
+    --label "${CUR_YEAR} S2S members (101)" \
+    --label "${CUR_YEAR} S2S ensemble mean" \
     --variable precip \
     --along number \
     --align-day-of-year \
-    --trace "${CUR_YEAR} observed (CHIRPS):color=black,linewidth=5,zorder=10" \
-    --trace "${CUR_YEAR} ECMWF S2S members:color=grey,linewidth=0.5,zorder=3" \
-    --trace 'ECMWF S2S ensemble mean:color=purple,linewidth=5,zorder=8' \
-    --trace '2006 (analog):linewidth=1.4' \
-    --trace '2015 (analog):linewidth=1.4' \
-    --trace '2019 (analog):linewidth=1.4' \
-    --trace '2023 (analog):linewidth=1.4' \
-    --title "OND Seasonal Progression: analog years vs ${CUR_YEAR} + ECMWF S2S (init ${INIT})" \
-    --ylabel 'Weekly rainfall total (mm)' \
-    --fontsize 15 \
-    --figsize 16,9 \
+    --theme weather_skills \
+    --title "Kenya weekly rainfall (init ${INIT})" \
+    --ylabel 'Weekly total (mm)' \
+    --xlabel 'Week starting (Monday)' \
+    --fontsize 26 \
+    --figsize 20,13 \
+    --trace '1:color=#4c72b0,linewidth=2.4' \
+    --trace '2:color=#dd8452,linewidth=2.4' \
+    --trace '3:color=#55a868,linewidth=2.4' \
+    --trace '4:color=#c44e52,linewidth=2.4' \
+    --trace "5:color=black,linewidth=4.2,zorder=10" \
+    --trace '6:color=#9e9e9e,linewidth=0.8,zorder=2' \
+    --trace '7:color=#7b1fa2,linewidth=5.0,zorder=12' \
     --output kenya_weekly_rainfall_analog_years.png

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       date_str:
-        description: "Forecast date YYYY-MM-DD (blank = 2 days ago)"
+        description: "Briefing date YYYY-MM-DD (blank = today). Skills scripts probe their own latest."
         required: false
         default: ""
       run_all:
@@ -58,6 +58,10 @@ on:
         description: "last_weeks_forecast_verification.sh"
         type: boolean
         default: false
+      run_week1_mae_vs_chirps:
+        description: "week1_mae_vs_chirps.sh"
+        type: boolean
+        default: false
       run_timeseries_verification:
         description: "timeseries_verification.sh (currently flaky)"
         type: boolean
@@ -89,7 +93,7 @@ jobs:
           if [ -n "${{ inputs.date_str }}" ]; then
             date="${{ inputs.date_str }}"
           else
-            date="$(date -u -d '2 days ago' +%Y-%m-%d)"
+            date="$(date -u +%Y-%m-%d)"
           fi
           echo "date=$date" >> "$GITHUB_OUTPUT"
           echo "Using DATE_STR=$date"
@@ -108,6 +112,7 @@ jobs:
           echo "analyses_forecasts=${{ inputs.run_equatorial_waves_analyses_and_forecasts }}"
           echo "sst=${{ inputs.run_current_sst_conditions }}"
           echo "last_week_verification=${{ inputs.run_last_weeks_forecast_verification }}"
+          echo "week1_mae_vs_chirps=${{ inputs.run_week1_mae_vs_chirps }}"
           echo "timeseries_verification=${{ inputs.run_timeseries_verification }}"
 
       - name: Run recent_rainfall_observations_kenya.sh
@@ -181,6 +186,12 @@ jobs:
         continue-on-error: true
         working-directory: ws_scripts
         run: bash last_weeks_forecast_verification.sh
+
+      - name: Run week1_mae_vs_chirps.sh
+        if: ${{ inputs.run_all == true || inputs.run_week1_mae_vs_chirps == true }}
+        continue-on-error: true
+        working-directory: ws_scripts
+        run: bash week1_mae_vs_chirps.sh
 
       - name: Run timeseries_verification.sh
         if: ${{ inputs.run_timeseries_verification == true }}

@@ -26,7 +26,7 @@ uvx --from "$SKILLS" forecasting-skills convert-to-totals \
   --min-coverage 1.0 --input step2.zarr --output step3.zarr
 
 uvx --from "$SKILLS" forecasting-skills plot \
-  --columns 4 --rows 1 --fontsize 13 --pair-on time --style heatmap \
+  --columns 4 --rows 1 --fontsize 13 --pair-on time --kind heatmap \
   --title "CHIRPS Weekly Rainfall Totals — East Africa" \
   --variable precip --input step3.zarr \
   --output chirps_east_africa_weekly_rainfall.png
@@ -69,7 +69,7 @@ uvx --from "$SKILLS" forecasting-skills rename \
   --to-name precip_anomaly --variable precip --input step4.zarr --output step5.zarr
 
 uvx --from "$SKILLS" forecasting-skills plot \
-  --columns 4 --rows 1 --fontsize 13 --pair-on time --style heatmap \
+  --columns 4 --rows 1 --fontsize 13 --pair-on time --kind heatmap \
   --title "CHIRPS Weekly Rainfall Anomaly — East Africa" \
   --variable precip_anomaly --input step5.zarr \
   --output chirps_east_africa_weekly_anomaly.png

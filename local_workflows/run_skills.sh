@@ -22,7 +22,9 @@ cd "$REPO_ROOT"
 PYTHON="$(command -v python || command -v python3)"
 PIP="$(command -v pip || command -v pip3)"
 
-DATE_STR="${DATE_STR:-$(python3 -c "from datetime import datetime, timedelta; print((datetime.today() - timedelta(days=2)).strftime('%Y-%m-%d'))")}"
+# Briefing date is today. Skills scripts probe their own latest; original
+# ECMWF/GEFS scripts keep a hard-coded 2-day lag when they run.
+DATE_STR="${DATE_STR:-$(python3 -c "from datetime import datetime; print(datetime.today().strftime('%Y-%m-%d'))")}"
 COUNTRY="${COUNTRY:-Kenya}"
 export DATE_STR
 export MAIN_PATH="${REPO_ROOT}/"
@@ -50,11 +52,14 @@ STEPS=(
   ws_equatorial_waves_analyses_and_forecasts
   ws_current_sst_conditions
   ws_last_weeks_forecast_verification
+  ws_week1_mae_vs_chirps
+  ws_kenya_daily_downscaled_precip
   collect_briefing_plots
   ai_briefing
 )
 # timeseries_verification.sh is commented out in daily_download2.0.yml
-# itself, so left out here too, matching run_local.sh.
+# (flaky GFS/AIFS/IFS line series). week1_mae_vs_chirps.sh is the
+# grouped-bar replacement that fills kenya_week1_forecast_mae_vs_chirps.
 
 _ws_script() {
   ( cd ws_scripts && bash "$1" )
@@ -64,10 +69,7 @@ step_ws_recent_rainfall_observations_eastern_africa() { _ws_script recent_rainfa
 step_ws_recent_observations_station_data() { _ws_script recent_observations_station_data.sh; }
 step_ws_seasonal_progression() { _ws_script seasonal_progression.sh; }
 step_ws_seasonal_progression_vs_analog_years() {
-  : "${CDSAPI_KEY:?CDSAPI_KEY not set — add it to .env}"
-  ECMWF_DATASTORES_URL="https://ecds.ecmwf.int/api" \
-  ECMWF_DATASTORES_KEY="$CDSAPI_KEY" \
-    _ws_script seasonal_progression_vs_analog_years.sh
+  _ws_script seasonal_progression_vs_analog_years.sh
 }
 step_ws_equatorial_waves_mjo() { _ws_script equatorial_waves_mjo.sh; }
 step_ws_equatorial_waves_iod_enso() { _ws_script equatorial_waves_iod_enso.sh; }
@@ -75,6 +77,8 @@ step_ws_itcz_state() { _ws_script itcz_state.sh; }
 step_ws_equatorial_waves_analyses_and_forecasts() { _ws_script equatorial_waves_analyses_and_forecasts.sh; }
 step_ws_current_sst_conditions() { _ws_script current_sst_conditions.sh; }
 step_ws_last_weeks_forecast_verification() { _ws_script last_weeks_forecast_verification.sh; }
+step_ws_week1_mae_vs_chirps() { _ws_script week1_mae_vs_chirps.sh; }
+step_ws_kenya_daily_downscaled_precip() { _ws_script kenya_daily_downscaled_precip.sh; }
 
 step_collect_briefing_plots() {
   mkdir -p "plots/briefing/${DATE_STR}"

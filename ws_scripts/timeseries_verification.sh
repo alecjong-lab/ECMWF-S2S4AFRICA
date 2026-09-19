@@ -145,7 +145,7 @@ run plot-timeseries \
   --input intermediate_results/mae_aifs_series.zarr \
   --input intermediate_results/mae_ifs_series.zarr \
   --variable mae \
-  --style line \
+  --mark line \
   --label GFS --label AIFS-ENS --label IFS-ENS \
   --trace 1:color='#1f77b4',marker=o \
   --trace 2:color='#ff7f0e',marker=o \
