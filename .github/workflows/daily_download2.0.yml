@@ -215,6 +215,11 @@ jobs:
         working-directory: main_repo/ws_scripts
         run: bash week1_mae_vs_chirps.sh
 
+      - name: Run kenya_daily_downscaled_precip.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash kenya_daily_downscaled_precip.sh
+
       - name: Run weekly_precip_forecast_hres_s2s.sh
         continue-on-error: true
         working-directory: main_repo/ws_scripts
