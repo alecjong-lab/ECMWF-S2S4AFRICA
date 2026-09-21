@@ -121,12 +121,13 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      # ── Read-only GCS auth, used only to pull existing output for stages
-      # you've turned off below. Nothing in this workflow uploads. ─────
+      # ── GCS is read-only here. Drive upload (if any) goes to the TEST
+      # subfolder of the Kenya briefing folder, never the live deck. ─────
       - name: Auth to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           token_format: 'access_token'
+          access_token_scopes: "https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/drive"
           workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
           service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
           export_environment_variables: true
@@ -462,6 +463,19 @@ jobs:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
+          BRIEFING_ALLOW_MISSING_PICTURES: "1"
+
+      - name: Upload briefing to Drive TEST folder
+        if: ${{ inputs.run_ai_briefing }}
+        id: drive
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python -u publish_briefing_to_drive.py \
+            --file "s2s_briefing_${{ inputs.date_str }}.pptx" \
+            --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
+            --subfolder TEST \
+            --emails "${{ inputs.email }}"
 
       # ── Convert NetCDF → JSON and update catalog (local only — never
       # committed/pushed, website_branch is discarded at the end) ──────
@@ -499,6 +513,38 @@ jobs:
             main_repo/prompts/digest_${{ inputs.date_str }}.txt
             main_repo/s2s_briefing_${{ inputs.date_str }}.pptx
 
+      - name: Build Kenya attachment list
+        if: ${{ contains(inputs.countries, 'Kenya') }}
+        id: kenya_attachments
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          today_date="${{ inputs.date_str }}"
+          ecmwf_date="$(date -u -d "$today_date - 2 days" +%Y-%m-%d)"
+          if [ -d "plots/Kenya/${today_date}/weekly" ]; then
+            ecmwf_date="$today_date"
+          fi
+          list=""
+          for f in \
+            "plots/briefing/${today_date}/kenya_weekly_rainfall_analog_years.png" \
+            "plots/briefing/${today_date}/sst_global_oisst_nino_iod.png" \
+            "plots/briefing/${today_date}/iod_forecast.png" \
+            "plots/briefing/${today_date}/ECMWF_raw_plot.png" \
+            "plots/Kenya/${ecmwf_date}/weekly/weekly_precip_downscaled.png" \
+            "plots/Kenya/${ecmwf_date}/weekly/chance_of_above_or_below.png"
+          do
+            if [ -f "$f" ]; then
+              list="${list:+$list,}main_repo/$f"
+            else
+              echo "::warning::Missing attachment $f"
+            fi
+          done
+          csv="private_data/station_data/Kenya/${today_date}/*.csv"
+          if compgen -G "$csv" > /dev/null; then
+            list="${list:+$list,}main_repo/$csv"
+          fi
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+
       - name: Email test run results (Kenya)
         if: ${{ contains(inputs.countries, 'Kenya') }}
         continue-on-error: true
@@ -513,12 +559,12 @@ jobs:
           from: "S2S Test Pipeline <info@dashboards.rhizaresearch.org>"
           body: |
             Test pipeline run for date ${{ inputs.date_str }}, countries: ${{ inputs.countries }}.
-            kenya_weekly_rainfall_analog_years.png is attached.
-            Full output (briefing plots, pptx, digest): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            Nothing from this run was uploaded to GCS or committed to main/website — this is
-            output from the test workflow only. Any stage you turned off was backfilled from
-            the production GCS bucket instead of regenerated.
-          attachments: main_repo/plots/briefing/${{ inputs.date_str }}/kenya_weekly_rainfall_analog_years.png
+            Shared test deck (Drive TEST folder, not the live briefing folder):
+            ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            Same plot attachments as the daily Kenya email (pptx is in artifacts / Drive TEST, not attached — Resend 10 MB cap).
+            Full output: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Nothing from this run was uploaded to GCS or committed to main/website.
+          attachments: ${{ steps.kenya_attachments.outputs.list }}
 
       - name: Email test run results
         if: ${{ !contains(inputs.countries, 'Kenya') }}

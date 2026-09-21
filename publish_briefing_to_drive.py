@@ -15,12 +15,14 @@ import shutil
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
 DEFAULT_FOLDER_ID = "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"
 DEFAULT_EDITORS = "genevieve@rhizaresearch.org"
 SLIDES_MIME = "application/vnd.google-apps.presentation"
+FOLDER_MIME = "application/vnd.google-apps.folder"
 
 
 def rclone(*args, check=True):
@@ -99,6 +101,45 @@ def drive_request(method, url, token, body=None):
 
 def _split_emails(raw):
     return [e.strip() for e in (raw or "").split(",") if e.strip()]
+
+
+def find_or_create_subfolder(parent_id, name, token):
+    """Return the id of ``name`` under ``parent_id``, creating it if needed."""
+    query = (
+        f"'{parent_id}' in parents and name = '{name}' "
+        f"and mimeType = '{FOLDER_MIME}' and trashed = false"
+    )
+    listed = drive_request(
+        "GET",
+        "https://www.googleapis.com/drive/v3/files?"
+        + urllib.parse.urlencode(
+            {
+                "q": query,
+                "fields": "files(id,name)",
+                "supportsAllDrives": "true",
+                "includeItemsFromAllDrives": "true",
+            }
+        ),
+        token,
+    )
+    files = listed.get("files") or []
+    if files:
+        return files[0]["id"]
+    created = drive_request(
+        "POST",
+        "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+        token,
+        {
+            "name": name,
+            "mimeType": FOLDER_MIME,
+            "parents": [parent_id],
+        },
+    )
+    folder_id = created.get("id")
+    if not folder_id:
+        raise SystemExit(f"Drive did not return an id for folder {name!r}")
+    print(f"created Drive subfolder {name} id={folder_id}", file=sys.stderr)
+    return folder_id
 
 
 def _permission_for_email(file_id, email, token):
@@ -231,6 +272,12 @@ def main():
         help="Google Drive folder id to upload into",
     )
     parser.add_argument(
+        "--subfolder",
+        default="",
+        help="Upload into this named child of --folder-id (created if missing). "
+        "Use TEST for workflow_dispatch dry-runs so they stay out of the live folder.",
+    )
+    parser.add_argument(
         "--emails",
         default="",
         help="Comma-separated addresses to grant commenter access",
@@ -246,7 +293,13 @@ def main():
     if not os.path.isfile(local):
         raise SystemExit(f"briefing file not found: {local}")
 
-    file_id, drive_url = upload_pptx(local, args.folder_id)
+    folder_id = args.folder_id
+    if args.subfolder:
+        token = drive_token()
+        folder_id = find_or_create_subfolder(folder_id, args.subfolder, token)
+        print(f"uploading into subfolder {args.subfolder} id={folder_id}", file=sys.stderr)
+
+    file_id, drive_url = upload_pptx(local, folder_id)
     # Write the Slides URL before share/metadata so a later API error
     # cannot blank the email.
     write_outputs(file_id, drive_url)

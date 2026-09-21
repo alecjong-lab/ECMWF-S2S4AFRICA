@@ -1,8 +1,9 @@
 # Manual dry-run of the Kenya briefing email/Drive path.
 # Skips ECMWF/GEFS downloads: reuses plots already on GCS for DATE_STR.
 # Bakes the live Drive Kenya template (weather_briefing_kenya_template) via
-# ai_weather_briefing.py. Missing pictures become blank boxes so the test
-# still emails a deck.
+# ai_weather_briefing.py. The pptx is uploaded to a TEST subfolder of the
+# Kenya briefing Drive folder (not the live deck). The email attaches the
+# same PNGs as daily_download2.0.yml (not the pptx — Resend caps at 10 MB).
 name: Test Kenya briefing email
 
 on:
@@ -116,6 +117,36 @@ jobs:
           path: s2s_briefing_${{ steps.date.outputs.date }}.pptx
           if-no-files-found: warn
 
+      - name: Build attachment list
+        id: attachments
+        run: |
+          today_date="${{ steps.date.outputs.date }}"
+          ecmwf_date="${{ steps.date.outputs.ecmwf_date }}"
+
+          list=""
+          for f in \
+            "plots/briefing/${today_date}/kenya_weekly_rainfall_analog_years.png" \
+            "plots/briefing/${today_date}/sst_global_oisst_nino_iod.png" \
+            "plots/briefing/${today_date}/iod_forecast.png" \
+            "plots/briefing/${today_date}/ECMWF_raw_plot.png" \
+            "plots/Kenya/${ecmwf_date}/weekly/weekly_precip_downscaled.png" \
+            "plots/Kenya/${ecmwf_date}/weekly/chance_of_above_or_below.png"
+          do
+            if [ -f "$f" ]; then
+              list="${list:+$list,}$f"
+            else
+              echo "::warning::Missing attachment $f"
+            fi
+          done
+
+          csv="private_data/station_data/Kenya/${today_date}/*.csv"
+          if compgen -G "$csv" > /dev/null; then
+            list="$list,$csv"
+          else
+            echo "::warning::No TAHMO CSV found for Kenya on ${today_date} — sending email without station data."
+          fi
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+
       - name: Upload briefing to Drive and share
         if: hashFiles(format('s2s_briefing_{0}.pptx', steps.date.outputs.date)) != ''
         id: drive
@@ -124,7 +155,15 @@ jobs:
           python -u publish_briefing_to_drive.py \
             --file "s2s_briefing_${{ steps.date.outputs.date }}.pptx" \
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
+            --subfolder TEST \
             --emails "${{ env.TEST_EMAIL }}"
+
+      - name: Find latest manual analysis deck
+        continue-on-error: true
+        id: manual_deck
+        run: |
+          python -u find_latest_manual_analysis.py \
+            --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"
 
       - name: Email test briefing
         if: hashFiles(format('s2s_briefing_{0}.pptx', steps.date.outputs.date)) != ''
@@ -138,8 +177,12 @@ jobs:
           to: ${{ env.TEST_EMAIL }}
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            s2s_briefing_${{ steps.date.outputs.date }}.pptx is attached.
-            Date: ${{ steps.date.outputs.date }}
-            Please comment on this shared deck: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            Today's Kenya S2S briefing is a shared Google Slides deck:
+            ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            Please comment on that deck rather than a local copy.
+            Latest expert analysis deck:
+            ${{ steps.manual_deck.outputs.deck_url || '(none found)' }}
+            You can browse the full plot archive (except station data) at
+            https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
-          attachments: s2s_briefing_${{ steps.date.outputs.date }}.pptx
+          attachments: ${{ steps.attachments.outputs.list }}
