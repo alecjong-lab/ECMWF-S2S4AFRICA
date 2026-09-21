@@ -539,7 +539,7 @@ briefing_plot_names = [
     "kenya_kmsa_chirps_bias",
     "kenya_kmsa_chirps_mae",
     "sst_global_oisst_nino_iod",
-    "kenya_week1_forecast_mae_vs_chirps",
+    "kenya_week1_mae_vs_chirps_4wk",
     "kenya_daily_downscaled_precip",
     "kenya_aifs_daily_precip",
     "kenya_gefs_daily_precip",

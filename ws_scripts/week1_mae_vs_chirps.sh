@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Kenya week-1 rainfall MAE vs CHIRPS over the last 4 complete Monday weeks.
 # Models: AIFS-ENS, ECMWF HRES, ECMWF ER (S2S), KMSA downscaled, GEFS.
-# Fills the briefing picture kenya_week1_forecast_mae_vs_chirps.
+# Writes kenya_week1_mae_vs_chirps_4wk.png (briefing template picture name).
 set -eo pipefail
 
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
@@ -186,4 +186,4 @@ $WS plot-timeseries \
   --title "Kenya week-1 rainfall forecast MAE vs CHIRPS · ${WEEKS[0]} – ${LAST_SUN}" \
   --ylabel "MAE (mm / week)" \
   --fontsize 16 --figsize 12,6 \
-  --output kenya_week1_forecast_mae_vs_chirps.png
+  --output kenya_week1_mae_vs_chirps_4wk.png

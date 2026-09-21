@@ -59,7 +59,7 @@ STEPS=(
 )
 # timeseries_verification.sh is commented out in daily_download2.0.yml
 # (flaky GFS/AIFS/IFS line series). week1_mae_vs_chirps.sh is the
-# grouped-bar replacement that fills kenya_week1_forecast_mae_vs_chirps.
+# grouped-bar replacement that fills kenya_week1_mae_vs_chirps_4wk.
 
 _ws_script() {
   ( cd ws_scripts && bash "$1" )
