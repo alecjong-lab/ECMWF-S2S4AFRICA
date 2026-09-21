@@ -6,36 +6,44 @@
 #   kenya_daily_downscaled_precip[_anomaly]  — CHIRPS-resolution S2S ensemble-mean
 #   kenya_aifs_daily_precip[_anomaly]        — dynamical.org AIFS-ENS (0.25°)
 #   kenya_gefs_daily_precip[_anomaly]        — dynamical.org GEFS 35-day (0.25°)
-# Also writes kenya_daily_downscaled_onset (ICPAC onset on the same daily
-# composite, last/max value in each Monday week) plus a CHIRPS "already
-# occurred" overlay.
 #
 # Output stems must stay as above so the briefing template pictures
 # (and ai_weather_briefing.py) still match these slides.
 set -eo pipefail
 
+# shellcheck source=./_portable_date.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
+
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
+WS_PY="uv run --no-project --with xarray --with zarr --with pandas python"
 
 # Kenya product extent used by the archive weekly/daily maps (N/W/S/E).
 BBOX="7/32/-6/43"
 # Kenya-extent panel plus a little extra width so long week titles do not collide.
 FIGSIZE="17.973,20.000"
-PLOT_LAYOUT='{"layout":{"colorbar":{"pad":0.02},"facet":{"wspace":0.04,"hspace":0.02}},"theme":{"rc":{"xtick.labelsize":28,"axes.labelsize":28,"axes.titlesize":14}}}'
+PLOT_LAYOUT='{"layout":{"colorbar":{"pad":0.02},"facet":{"wspace":0.04,"hspace":0.16}},"theme":{"rc":{"xtick.labelsize":28,"axes.labelsize":28,"axes.titlesize":14}}}'
+# 4×4 SOND canvas. First Monday on/after 1 Sept + 16 weeks (2026: 7 Sep–27 Dec).
+SOND_WEEKS=16
+# Keep the CHIRPS↔forecast transition week (often ~4/7 days) and a nearly
+# complete last lead. Empty future weeks are never in the rate cube.
+MIN_COVERAGE=0.5
 
 mkdir -p intermediate_results
 IR=intermediate_results
 
 # Do not inherit DATE_STR: KMSA daily inits lag the briefing date. Pin with
-# INIT_OVERRIDE for a local rerun.
-INIT="${INIT_OVERRIDE:-$($WS kenya-forecast-fetch --probe-latest precip_downscaled_daily)}"
+# INIT_OVERRIDE for a local rerun. Last line / YYYY-MM-DD so uvx chatter
+# cannot poison date compares or --as-of.
+INIT="${INIT_OVERRIDE:-$($WS kenya-forecast-fetch --probe-latest precip_downscaled_daily | tail -n1)}"
+INIT="${INIT:0:10}"
 YEAR="${INIT:0:4}"
 
-# First Monday on or after 1 Sept (this-week of the 7th), through 1 Jan.
-SEP_WEEK=$($WS resolve-time this-week --as-of "${YEAR}-09-07" --emit iso)
+SEP_WEEK=$($WS resolve-time this-week --as-of "${YEAR}-09-07" --emit iso | tail -n1)
 GRID_START="${SEP_WEEK%%/*}"
-GRID_END_EXCL="$((YEAR + 1))-01-01"
-CHIRPS_END=$($WS resolve-time now-1d --as-of "$INIT" --emit iso)
-CLIM_END=$($WS resolve-time "${YEAR}-12" --emit iso)
+GRID_END_EXCL=$(pydate "${GRID_START} +$((SOND_WEEKS * 7)) days" %Y-%m-%d)
+CHIRPS_END=$($WS resolve-time now-1d --as-of "$INIT" --emit iso | tail -n1)
+CHIRPS_END="${CHIRPS_END%%/*}"
+CLIM_END=$($WS resolve-time "${YEAR}-12" --emit iso | tail -n1)
 CLIM_END="${CLIM_END##*/}"
 
 # Daily rate on a wall-clock time axis, variable renamed to precip.
@@ -72,8 +80,43 @@ align_to_grid() {
       --output "$dest"
 }
 
-# CHIRPS (before init) + forecast → Monday weekly totals.
-# plot --rows 4 --columns 4 leaves later SOND slots blank.
+# Reindex a weekly cube onto the 16 SOND Mondays. Missing weeks stay all-NaN
+# so plot always gets a 4×4 season canvas.
+pad_sond_weeks() {
+  local src="$1"
+  $WS_PY - "$src" "$GRID_START" "$SOND_WEEKS" <<'PY'
+import shutil
+import sys
+from datetime import date, timedelta
+from pathlib import Path
+
+import pandas as pd
+import xarray as xr
+
+src, start, n = sys.argv[1], sys.argv[2], int(sys.argv[3])
+mondays = pd.to_datetime(
+    [date.fromisoformat(start) + timedelta(days=7 * i) for i in range(n)]
+)
+try:
+    ds = xr.open_zarr(src, consolidated=True)
+except Exception:
+    ds = xr.open_zarr(src, consolidated=False)
+ds = ds.assign_coords(time=pd.to_datetime(ds["time"].values)).load()
+ds.close()
+out = ds.reindex(time=mondays)
+tmp = Path(str(src) + ".padtmp")
+if tmp.exists():
+    shutil.rmtree(tmp)
+out.to_zarr(tmp, mode="w", consolidated=True)
+dest = Path(src)
+if dest.exists():
+    shutil.rmtree(dest)
+tmp.rename(dest)
+print(f"padded {src} -> {n} SOND weeks from {start}", file=sys.stderr)
+PY
+}
+
+# CHIRPS (before init) + forecast → Monday weekly totals, then pad to 4×4.
 compose_sond() {
   local fcst="$1" dest_daily="$2" dest_weekly="$3"
   local stem="${dest_weekly%.zarr}"
@@ -98,8 +141,9 @@ compose_sond() {
       --start-time "$GRID_START" --end-time "$GRID_END_EXCL" \
       --output "${stem}_wk_rate.zarr"
   $WS convert-to-totals \
-      --input "${stem}_wk_rate.zarr" --min-coverage 1.0 \
+      --input "${stem}_wk_rate.zarr" --min-coverage "$MIN_COVERAGE" \
       --output "$dest_weekly"
+  pad_sond_weeks "$dest_weekly"
 }
 
 align_clim_to() {
@@ -124,37 +168,57 @@ make_weekly_anomaly() {
       --variable precip --to-name precip_anomaly --output "$dest"
 }
 
-# Static badge geometry; panel / label / color filled from the weekly time axis.
+# Badge only weeks that have finite data. Empty SOND slots stay unlabeled.
 write_source_patch() {
   local weekly="$1" dest="$2"
-  local mondays=() d
-  while IFS= read -r d; do
+  local mondays=() finite=() line d ok
+  while IFS=$'\t' read -r d ok; do
     mondays+=("$d")
+    finite+=("$ok")
   done < <(
-    $WS inspect-zarr --input "$weekly" --format json --max-values 0 | python3 -c '
-import json, sys
-coords = json.load(sys.stdin)["coords"]
-axis = next(c for c in coords if c["name"] == "time")
-for v in axis["values"]:
-    print(str(v)[:10])
-'
+    $WS_PY - "$weekly" <<'PY'
+import sys
+import pandas as pd
+import xarray as xr
+
+ds = xr.open_zarr(sys.argv[1], consolidated=True)
+var = "precip" if "precip" in ds.data_vars else next(iter(ds.data_vars))
+other = [d for d in ds[var].dims if d != "time"]
+has = ~ds[var].isnull().all(dim=other)
+for t, ok in zip(pd.to_datetime(ds["time"].values), has.values):
+    print(f"{t.strftime('%Y-%m-%d')}\t{int(bool(ok))}")
+PY
   )
-  local anns="" i monday next color label
+  local anns="" shapes="" i monday next color label
+  # BBOX is N/W/S/E; grey wash uses W/E/S/N in data coords.
+  local west="${BBOX#*/}" east south
+  east="${BBOX##*/}"
+  west="${west%%/*}"
+  south="${BBOX#*/*/}"
+  south="${south%%/*}"
+  local north="${BBOX%%/*}"
   for i in "${!mondays[@]}"; do
     monday="${mondays[$i]}"
     next="${mondays[$((i + 1))]:-}"
-    # Sunday < INIT ⇔ next Monday ≤ INIT (weeks in the cube are consecutive).
-    if [[ -n "$next" && ( "$next" < "$INIT" || "$next" == "$INIT" ) ]]; then
-      color="#1b9e77"; label="OBS"
-    elif [[ "$monday" < "$INIT" ]]; then
-      color="#d95f02"; label="OBS + FORECAST"
+    if [[ "${finite[$i]}" == "1" ]]; then
+      # Sunday < INIT ⇔ next Monday ≤ INIT (weeks in the cube are consecutive).
+      if [[ -n "$next" && ( "$next" < "$INIT" || "$next" == "$INIT" ) ]]; then
+        color="#1b9e77"; label="OBS"
+      elif [[ "$monday" < "$INIT" ]]; then
+        color="#d95f02"; label="OBS + FORECAST"
+      else
+        color="#b22222"; label="FORECAST"
+      fi
+      [[ -n "$anns" ]] && anns+=","
+      anns+="{\"panel\":${i},\"text\":\"${label}\",\"x\":0.5,\"y\":0.04,\"transform\":\"axes\",\"ha\":\"center\",\"va\":\"bottom\",\"fontsize\":12,\"fontweight\":\"bold\",\"color\":\"white\",\"zorder\":10,\"bbox\":{\"facecolor\":\"${color}\",\"edgecolor\":\"none\",\"boxstyle\":\"round,pad=0.28\"}}"
     else
-      color="#b22222"; label="FORECAST"
+      [[ -n "$anns" ]] && anns+=","
+      anns+="{\"panel\":${i},\"text\":\"N/A\",\"x\":0.5,\"y\":0.5,\"transform\":\"axes\",\"ha\":\"center\",\"va\":\"center\",\"fontsize\":20,\"fontweight\":\"bold\",\"color\":\"#5a5a5a\",\"zorder\":12,\"bbox\":{\"facecolor\":\"#d0d0d0\",\"edgecolor\":\"none\",\"boxstyle\":\"round,pad=0.45\"}}"
+      [[ -n "$shapes" ]] && shapes+=","
+      shapes+="{\"type\":\"rect\",\"panel\":${i},\"x0\":${west},\"x1\":${east},\"y0\":${south},\"y1\":${north},\"facecolor\":\"#c8c8c8\",\"edgecolor\":\"none\",\"fill\":true,\"alpha\":0.62,\"zorder\":8}"
     fi
-    [[ -n "$anns" ]] && anns+=","
-    anns+="{\"panel\":${i},\"text\":\"${label}\",\"x\":0.5,\"y\":0.04,\"transform\":\"axes\",\"ha\":\"center\",\"va\":\"bottom\",\"fontsize\":12,\"fontweight\":\"bold\",\"color\":\"white\",\"zorder\":10,\"bbox\":{\"facecolor\":\"${color}\",\"edgecolor\":\"none\",\"boxstyle\":\"round,pad=0.28\"}}"
   done
-  printf '%s' "${PLOT_LAYOUT%\}},\"annotations\":[${anns}]}" >"$dest"
+  printf '%s' "${PLOT_LAYOUT%\}},\"annotations\":[${anns}],\"shapes\":[${shapes}]}" >"$dest"
 }
 
 plot_weekly() {
@@ -167,7 +231,7 @@ plot_weekly() {
 plot_weekly_anomaly() {
   $WS plot --input "$1" --variable precip_anomaly --bbox "$BBOX" \
       --rows 4 --columns 4 --figsize "$FIGSIZE" --fontsize 22 \
-      --colormap ppt_anomaly --title "$2" \
+      --colormap ppt_anom_week --title "$2" \
       --cbar-label "Weekly rainfall anomaly [mm]" \
       --patch "$4" --output "$3"
 }
@@ -181,6 +245,10 @@ fetch_dynamical_daily() {
   compose_sond "$IR/${stem}_daily.zarr" \
       "$IR/${stem}_sond_daily.zarr" "$IR/${stem}_wk.zarr"
 }
+
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+  return 0
+fi
 
 # ---- KMSA daily downscale ------------------------------------------------
 $WS kenya-forecast-fetch \
@@ -245,6 +313,7 @@ $WS convert-to-totals \
     --input "$IR/kenya_chirps_clim_wk_rate.zarr" \
     --variable precip \
     --output "$IR/kenya_chirps_clim_wk_mm.zarr"
+pad_sond_weeks "$IR/kenya_chirps_clim_wk_mm.zarr"
 
 make_weekly_anomaly "$IR/kenya_sond_weekly.zarr" "$IR/kenya_sond_weekly_anom.zarr"
 plot_weekly_anomaly \
@@ -266,42 +335,3 @@ plot_weekly_anomaly \
     "Kenya weekly precip anomaly (CHIRPS obs → GEFS)" \
     kenya_gefs_daily_precip_anomaly.png \
     "$IR/kenya_gefs_daily_wk.patch.json"
-
-# Cumulative P(onset) on the blended daily cube, then the last (max) value
-# in each Monday week. Overlay CHIRPS of the last 40 published days: cells
-# where onset has already occurred.
-$WS indicator \
-    --input "$IR/kenya_sond_daily.zarr" \
-    --output "$IR/kenya_sond_daily_onset_p.zarr" \
-    --rule icpac-onset -v precip \
-    --cumulative --probability
-$WS aggregate-temporal \
-    --input "$IR/kenya_sond_daily_onset_p.zarr" \
-    --period weekly --method max \
-    --start-time "$GRID_START" --end-time "$GRID_END_EXCL" \
-    --output "$IR/kenya_sond_weekly_onset.zarr"
-
-CHIRPS_LATEST=$($WS chirps-fetch --probe-latest)
-CHIRPS_TIME=$($WS resolve-time last-40d --as-of "$CHIRPS_LATEST")
-$WS chirps-fetch \
-    $CHIRPS_TIME --bbox "$BBOX" --workers 8 \
-    --output "$IR/kenya_chirps_40d.zarr"
-$WS indicator \
-    --input "$IR/kenya_chirps_40d.zarr" \
-    --output "$IR/kenya_chirps_onset_any.zarr" \
-    --rule icpac-onset -v precip \
-    --detect any
-
-$WS plot \
-    --layer "heatmap:$IR/kenya_sond_weekly_onset.zarr::variable=probability,colormap={\"colors\":[\"#ffffff\",\"#deebf7\",\"#c6dbef\",\"#9ecae1\",\"#6baed6\",\"#4292c6\",\"#2171b5\",\"#08519c\",\"#08306b\",\"#021530\"],\"bounds\":[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]}" \
-    --layer "heatmap:$IR/kenya_chirps_onset_any.zarr::variable=indicator,colormap={\"colors\":[\"#00000000\",\"#2ca25f\"],\"bounds\":[0,0.5,1.5]}" \
-    --independent-scale \
-    --label "P(onset)" \
-    --label "already occurred" \
-    --bbox "$BBOX" \
-    --rows 4 --columns 4 \
-    --figsize "$FIGSIZE" \
-    --fontsize 22 \
-    --title "Kenya downscaled weekly P(ICPAC onset)" \
-    --patch "$PLOT_LAYOUT" \
-    --output kenya_daily_downscaled_onset.png
