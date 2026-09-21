@@ -110,7 +110,7 @@ verified against the same observed week (CHIRPS, given in the title). The
 and metric from the title and describe how that metric changes across lead
 weeks (i.e. across columns), which is the actual skill-degradation story here.
 `kenya_week1_mae_vs_chirps_4wk` is a grouped-bar timeseries (not a map grid) of
-week-1 MAE versus CHIRPS over Kenya for AIFS-ENS, ECMWF HRES, ECMWF ER (S2S),
+week-1 MAE versus CHIRPS over Kenya for AIFS-ENS, ECMWF ENS (IFS 15-day), ECMWF ER (S2S),
 KMSA downscaled, and GEFS — one bar group per Monday week for the last four
 complete verifying weeks. Compare models and how error changes across those
 weeks, not across lead weeks.

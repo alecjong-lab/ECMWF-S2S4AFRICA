@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 # Kenya week-1 rainfall MAE vs CHIRPS over the last 4 complete Monday weeks.
-# Models: AIFS-ENS, ECMWF HRES, ECMWF ER (S2S), KMSA downscaled, GEFS.
+# Models: AIFS-ENS, ECMWF ENS (IFS 15-day), ECMWF ER (S2S), KMSA downscaled, GEFS.
 # Writes kenya_week1_mae_vs_chirps_4wk.png (briefing template picture name).
 set -eo pipefail
 
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
-# ecmwf-hres-fetch is still only on mohini/skills.
-HRES="uvx --from git+https://github.com/rhiza-research/weather-skills@mohini/skills forecasting-skills"
 
 BBOX="5.506/33.893569/-4.67677/41.855083"
 N_WEEKS=4
@@ -27,14 +25,15 @@ fi
 
 LAST_ISO=$($WS resolve-time last-week --as-of "$ASOF" --emit iso)
 LAST_SUN="${LAST_ISO##*/}"
+LAST_MON="${LAST_ISO%%/*}"
 
+# Walk back 7 days from the last complete Monday. Calling last-week again
+# on that Monday (or the Sunday before it) skips a week.
 WEEKS=()
-asof="$ASOF"
+start="$LAST_MON"
 for ((i = 0; i < N_WEEKS; i++)); do
-  iso=$($WS resolve-time last-week --as-of "$asof" --emit iso)
-  start="${iso%%/*}"
   WEEKS=("$start" "${WEEKS[@]}")
-  asof=$($WS resolve-time now-1d --as-of "$start" --emit iso)
+  start=$($WS resolve-time now-7d --as-of "$start" --emit iso)
 done
 LAST_WEEK="${WEEKS[$((N_WEEKS - 1))]}"
 echo "MAE weeks: ${WEEKS[0]} -> ${LAST_WEEK} ($N_WEEKS weeks)" >&2
@@ -57,18 +56,20 @@ $WS convert-to-totals \
 
 # ---------------------------------------------------------------- per model-week
 # Already-weekly KMSA is stamped on fetch — convert-to-totals only.
-# Daily KMSA / AIFS / GEFS / ER / HRES: weekly-bin, then totals.
+# Daily KMSA / AIFS / IFS-ENS / GEFS / ER: weekly-bin, then totals.
 week_mae() {  # $1=key $2=week
   local key="$1" w="$2"
   local p="${key}_${w}"
   local var=tp
   case "$key" in
-    aifs|gefs) var=precipitation_surface ;;
+    aifs|ifs|gefs) var=precipitation_surface ;;
   esac
 
   case "$key" in
-    aifs)
-      $WS dynamical-fetch --dataset ecmwf-aifs-ens-forecast --date "$w" \
+    aifs|ifs)
+      local ds=ecmwf-aifs-ens-forecast
+      [[ "$key" == ifs ]] && ds=ecmwf-ifs-ens-forecast-15-day-0-25-degree
+      $WS dynamical-fetch --dataset "$ds" --date "$w" \
         --variable precipitation_surface --bbox "$BBOX" --output "${p}_raw.zarr" || return 1
       $WS aggregate-temporal --period weekly --method mean --align left \
         --input "${p}_raw.zarr" --output "${p}_wk.zarr" || return 1
@@ -116,15 +117,6 @@ week_mae() {  # $1=key $2=week
           --input "${p}_time.zarr" --output "${p}_mm.zarr" || return 1
       fi
       ;;
-    hres)
-      $HRES ecmwf-hres-fetch --date "$w" --run 0 -v tp \
-        --bbox "$BBOX" --output "${p}_raw.zarr" || return 1
-      $WS step-to-time --input "${p}_raw.zarr" --output "${p}_st.zarr" || return 1
-      $WS aggregate-temporal --period weekly --method mean --align left \
-        --input "${p}_st.zarr" --output "${p}_wk.zarr" || return 1
-      $WS convert-to-totals --min-coverage 0.85 \
-        --input "${p}_wk.zarr" --output "${p}_mm.zarr" || return 1
-      ;;
     *)
       echo "ERROR: unknown model $key" >&2
       return 1
@@ -148,7 +140,7 @@ week_mae() {  # $1=key $2=week
     --input "mae_${p}_clip.zarr" --output "mae_${p}_mean.zarr" || return 1
 }
 
-for key in aifs hres er kmsa gefs; do
+for key in aifs ifs er kmsa gefs; do
   ok=()
   for w in "${WEEKS[@]}"; do
     if week_mae "$key" "$w"; then
@@ -175,13 +167,13 @@ cd ..
 
 $WS plot-timeseries \
   --input intermediate_results/mae_aifs_series.zarr \
-  --input intermediate_results/mae_hres_series.zarr \
+  --input intermediate_results/mae_ifs_series.zarr \
   --input intermediate_results/mae_er_series.zarr \
   --input intermediate_results/mae_kmsa_series.zarr \
   --input intermediate_results/mae_gefs_series.zarr \
   --variable mae \
   --mark bar --bar-mode grouped \
-  --label AIFS --label "ECMWF HRES" --label "ECMWF ER" \
+  --label AIFS --label "ECMWF ENS" --label "ECMWF ER" \
   --label "KMSA downscaled" --label GEFS \
   --title "Kenya week-1 rainfall forecast MAE vs CHIRPS · ${WEEKS[0]} – ${LAST_SUN}" \
   --ylabel "MAE (mm / week)" \
