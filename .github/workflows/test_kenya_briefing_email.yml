@@ -1,5 +1,8 @@
 # Manual dry-run of the Kenya briefing email/Drive path.
 # Skips ECMWF/GEFS downloads: reuses plots already on GCS for DATE_STR.
+# Bakes the live Drive Kenya template (weather_briefing_kenya_template) via
+# ai_weather_briefing.py. Missing pictures become blank boxes so the test
+# still emails a deck.
 name: Test Kenya briefing email
 
 on:
@@ -89,20 +92,29 @@ jobs:
           echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
 
       - name: Generate AI weather briefing
+        continue-on-error: true
         env:
           MAIN_PATH: ${{ github.workspace }}/
           DATE_STR: ${{ steps.date.outputs.date }}
           ECMWF_DATE_STR: ${{ steps.date.outputs.ecmwf_date }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
+          BRIEFING_ALLOW_MISSING_PICTURES: "1"
         run: python ai_weather_briefing.py
 
+      - name: Upload briefing plots
+        uses: actions/upload-artifact@v4
+        with:
+          name: briefing-plots
+          path: plots/briefing/${{ steps.date.outputs.date }}/*.png
+          if-no-files-found: warn
+
       - name: Upload briefing artifact
-        if: hashFiles(format('s2s_briefing_{0}.pptx', steps.date.outputs.date)) != ''
         uses: actions/upload-artifact@v4
         with:
           name: test-s2s-briefing
           path: s2s_briefing_${{ steps.date.outputs.date }}.pptx
+          if-no-files-found: warn
 
       - name: Upload briefing to Drive and share
         if: hashFiles(format('s2s_briefing_{0}.pptx', steps.date.outputs.date)) != ''
@@ -126,8 +138,8 @@ jobs:
           to: ${{ env.TEST_EMAIL }}
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            kenya_weekly_rainfall_analog_years.png is attached.
+            s2s_briefing_${{ steps.date.outputs.date }}.pptx is attached.
             Date: ${{ steps.date.outputs.date }}
             Please comment on this shared deck: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
           reply_to: genevieve@rhizaresearch.org
-          attachments: plots/briefing/${{ steps.date.outputs.date }}/kenya_weekly_rainfall_analog_years.png
+          attachments: s2s_briefing_${{ steps.date.outputs.date }}.pptx
