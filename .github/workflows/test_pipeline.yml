@@ -100,7 +100,9 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          ref: main
+          # Use the branch selected in the Actions "Run workflow" dropdown
+          # (workflow_dispatch default). Do not pin main — that ignored the
+          # selected ref and always ran production code.
           path: main_repo
 
       - name: Check out website branch
