@@ -43,13 +43,13 @@ $SK difference \
   --variable sst \
   --output intermediate_results/oisst_anomaly.zarr
 
-# 5. Plot, clamped to +/-1.5 C, with the west (WTIO) and east (SETIO) IOD boxes.
+# 5. Plot, clamped to +/-2 C, with the west (WTIO) and east (SETIO) IOD boxes.
 # Output stem must stay sst_global_oisst_nino_iod so the briefing template
 # picture (and ai_weather_briefing.py) still match this slide.
 $SK plot \
   --layer heatmap:intermediate_results/oisst_anomaly.zarr::variable=sst \
   --label 'SST anom (°C)' \
-  --colormap RdBu_r --vmin -1.5 --vmax 1.5 \
+  --colormap RdBu_r --vmin -2 --vmax 2 \
   --title "SST anomaly · ${DAY_LABEL}" \
   --draw-box 10/50/-10/70 \
   --draw-box 0/90/-10/110 \
