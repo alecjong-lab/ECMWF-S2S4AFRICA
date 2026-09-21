@@ -228,6 +228,11 @@ jobs:
           ECMWF_DATASTORES_KEY: ${{ secrets.CDSAPI_KEY }}
         run: bash weekly_precip_forecast_hres_s2s.sh
 
+      - name: Run fcst_above_normal.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash fcst_above_normal.sh
+
     #  - name: Run timeseries_verification.sh
     #    continue-on-error: true
      #   working-directory: main_repo/ws_scripts

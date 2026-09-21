@@ -422,6 +422,13 @@ _ecmwf_raw_ws_script_path = f"{briefing_plots_path}/ECMWF_raw_plot.png"
 if os.path.exists(_ecmwf_raw_ws_script_path):
     plot_paths["ECMWF_raw"] = _ecmwf_raw_ws_script_path
 
+# preferentially use ws_scripts/fcst_above_normal.sh's plot over the default
+# plot_s2s.py-generated Kenya chance_of_above_or_below.png (still generated,
+# just no longer used for this slide) if available.
+_ecmwf_tercile_ws_script_path = f"{briefing_plots_path}/ECMWF_tercile_plot.png"
+if os.path.exists(_ecmwf_tercile_ws_script_path):
+    plot_paths["ECMWF_tercile"] = _ecmwf_tercile_ws_script_path
+
 # Indian Ocean moisture diagnostics (see IndianOceanState.py)
 IOD_path = f"{diagnostics_path}/ECMWF_s2s_10wind_sst_anomaly_{ecmwf_date_str}.png"
 IO_ivt_weekly_path = f"{diagnostics_path}/ECMWF_s2s_ivt_u_{ecmwf_date_str}.png"
