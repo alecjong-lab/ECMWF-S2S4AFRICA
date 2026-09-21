@@ -20,7 +20,7 @@ WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecast
 BBOX="7/32/-6/43"
 # Kenya-extent panel plus a little extra width so long week titles do not collide.
 FIGSIZE="17.973,20.000"
-PLOT_LAYOUT='{"layout":{"colorbar":{"pad":0.02},"facet":{"wspace":0.04,"hspace":0.02}},"theme":{"rc":{"xtick.labelsize":28,"axes.labelsize":28}}}'
+PLOT_LAYOUT='{"layout":{"colorbar":{"pad":0.02},"facet":{"wspace":0.04,"hspace":0.02}},"theme":{"rc":{"xtick.labelsize":28,"axes.labelsize":28,"axes.titlesize":14}}}'
 
 mkdir -p intermediate_results
 IR=intermediate_results
