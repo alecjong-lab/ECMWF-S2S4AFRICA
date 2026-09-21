@@ -24,6 +24,10 @@ jobs:
       TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
       EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
       EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+      # uvx unpacks forecasting-skills into UV_CACHE_DIR; uv 0.11 then
+      # refuses `uv run --script` on those bundled skill scripts unless
+      # project discovery is off.
+      UV_NO_PROJECT: "1"
 
     steps:
       - name: Checkout repo
