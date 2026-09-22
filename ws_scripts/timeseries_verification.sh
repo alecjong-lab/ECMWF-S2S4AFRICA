@@ -153,4 +153,4 @@ run plot-timeseries \
   --title "Kenya week-1 rainfall forecast MAE vs CHIRPS (${START_LABEL} - ${END_LABEL})" \
   --ylabel "Mean absolute error" \
   --fontsize 16 \
-  --output kenya_week1_forecast_mae_vs_chirps.png
+  --output kenya_week1_mae_vs_chirps_4wk.png

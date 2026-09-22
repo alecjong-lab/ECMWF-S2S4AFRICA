@@ -1,5 +1,10 @@
 # Manual dry-run of the Kenya briefing email/Drive path.
 # Skips ECMWF/GEFS downloads: reuses plots already on GCS for DATE_STR.
+# Bakes the live Drive Kenya template (weather_briefing_kenya_template) via
+# ai_weather_briefing.py. The pptx is uploaded to a TEST subfolder of the
+# Kenya briefing Drive folder (not the live deck root). GCS is pull-only.
+# The email attaches every PNG present after the pull (not the pptx —
+# Resend caps at 10 MB).
 name: Test Kenya briefing email
 
 on:
@@ -89,20 +94,82 @@ jobs:
           echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
 
       - name: Generate AI weather briefing
+        continue-on-error: true
         env:
           MAIN_PATH: ${{ github.workspace }}/
           DATE_STR: ${{ steps.date.outputs.date }}
           ECMWF_DATE_STR: ${{ steps.date.outputs.ecmwf_date }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
+          BRIEFING_ALLOW_MISSING_PICTURES: "1"
         run: python ai_weather_briefing.py
 
+      - name: Upload briefing plots
+        uses: actions/upload-artifact@v4
+        with:
+          name: briefing-plots
+          path: plots/briefing/${{ steps.date.outputs.date }}/*.png
+          if-no-files-found: warn
+
       - name: Upload briefing artifact
-        if: hashFiles(format('s2s_briefing_{0}.pptx', steps.date.outputs.date)) != ''
         uses: actions/upload-artifact@v4
         with:
           name: test-s2s-briefing
           path: s2s_briefing_${{ steps.date.outputs.date }}.pptx
+          if-no-files-found: warn
+
+      - name: Build attachment list
+        id: attachments
+        run: |
+          set -euo pipefail
+          MAX_BYTES=9500000
+          mapfile -t files < <(
+            {
+              find plots/briefing -type f -name '*.png' 2>/dev/null
+              find plots -type f -name '*.png' 2>/dev/null | grep -v '/plots/briefing/' || true
+            } | sort -u
+          )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            echo "list=" >> "$GITHUB_OUTPUT"
+            echo "note=No PNGs found." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          total=0
+          for f in "${files[@]}"; do
+            total=$((total + $(stat -c%s "$f")))
+          done
+          echo "Found ${#files[@]} PNGs totaling ${total} bytes"
+          if [ "$total" -le "$MAX_BYTES" ]; then
+            list=$(IFS=,; echo "${files[*]}")
+            echo "list=$list" >> "$GITHUB_OUTPUT"
+            echo "count=${#files[@]}" >> "$GITHUB_OUTPUT"
+            echo "note=All ${#files[@]} PNGs are attached." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          zip -q test_run_plots.zip "${files[@]}"
+          zip_bytes=$(stat -c%s test_run_plots.zip)
+          echo "Zip is ${zip_bytes} bytes"
+          if [ "$zip_bytes" -le "$MAX_BYTES" ]; then
+            echo "list=test_run_plots.zip" >> "$GITHUB_OUTPUT"
+            echo "count=${#files[@]}" >> "$GITHUB_OUTPUT"
+            echo "note=All ${#files[@]} PNGs packed into a zip (over Resend's 10 MB as individuals)." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          packed=()
+          packed_bytes=0
+          for f in "${files[@]}"; do
+            sz=$(stat -c%s "$f")
+            if [ $((packed_bytes + sz)) -le "$MAX_BYTES" ]; then
+              packed+=("$f")
+              packed_bytes=$((packed_bytes + sz))
+            fi
+          done
+          list=$(IFS=,; echo "${packed[*]}")
+          skipped=$(( ${#files[@]} - ${#packed[@]} ))
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+          echo "count=${#packed[@]}" >> "$GITHUB_OUTPUT"
+          echo "note=Attached ${#packed[@]} of ${#files[@]} PNGs (${skipped} omitted — Resend 10 MB cap). Full set is in the run artifacts." >> "$GITHUB_OUTPUT"
 
       - name: Upload briefing to Drive and share
         if: hashFiles(format('s2s_briefing_{0}.pptx', steps.date.outputs.date)) != ''
@@ -112,7 +179,15 @@ jobs:
           python -u publish_briefing_to_drive.py \
             --file "s2s_briefing_${{ steps.date.outputs.date }}.pptx" \
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
+            --subfolder TEST \
             --emails "${{ env.TEST_EMAIL }}"
+
+      - name: Find latest manual analysis deck
+        continue-on-error: true
+        id: manual_deck
+        run: |
+          python -u find_latest_manual_analysis.py \
+            --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"
 
       - name: Email test briefing
         if: hashFiles(format('s2s_briefing_{0}.pptx', steps.date.outputs.date)) != ''
@@ -126,8 +201,13 @@ jobs:
           to: ${{ env.TEST_EMAIL }}
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            kenya_weekly_rainfall_analog_years.png is attached.
-            Date: ${{ steps.date.outputs.date }}
-            Please comment on this shared deck: ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            Today's Kenya S2S briefing is a shared Google Slides deck:
+            ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            Please comment on that deck rather than a local copy.
+            Latest expert analysis deck:
+            ${{ steps.manual_deck.outputs.deck_url || '(none found)' }}
+            ${{ steps.attachments.outputs.note || '' }}
+            You can browse the full plot archive (except station data) at
+            https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
-          attachments: plots/briefing/${{ steps.date.outputs.date }}/kenya_weekly_rainfall_analog_years.png
+          attachments: ${{ steps.attachments.outputs.list }}

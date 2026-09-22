@@ -82,7 +82,9 @@ jobs:
         working-directory: main_repo
         run: |
           if [ -d plots ]; then
-            gcloud storage rsync -r plots "gs://${BUCKET}/plots" --exclude='.*index\.md$'
+            # Do not touch the live briefing plot folder.
+            gcloud storage rsync -r plots "gs://${BUCKET}/plots" \
+              --exclude='.*index\.md$' --exclude='^briefing/.*'
             find plots -type f ! -name "index.md" > ../uploaded_plots.txt
           else
             echo "No plots directory found, skipping."

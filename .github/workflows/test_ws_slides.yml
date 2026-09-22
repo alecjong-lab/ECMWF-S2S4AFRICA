@@ -1,7 +1,14 @@
 name: Test ws_slides
 
-# Manual dry-run of ws_scripts/*.sh briefing plots. Only checked scripts run.
-# "Run every plot" is off unless you tick it.
+# Manual dry-run of ws_scripts/*.sh briefing plots, then bake them into the
+# live Drive Kenya template (weather_briefing_kenya_template) via
+# ai_weather_briefing.py. Only checked scripts run. "Run every plot" is off
+# unless you tick it. Missing core ECMWF/GEFS pictures become blank boxes
+# (BRIEFING_ALLOW_MISSING_PICTURES) so a skills-only run still produces a pptx.
+#
+# Never write to the live briefing location: no Drive upload, no GCS
+# rsync to gs://africa-forecasting-data/plots/briefing/. Outputs stay in
+# the runner and GitHub Actions artifacts.
 
 on:
   workflow_dispatch:
@@ -62,6 +69,10 @@ on:
         description: "week1_mae_vs_chirps.sh"
         type: boolean
         default: false
+      run_kenya_daily_downscaled_precip:
+        description: "kenya_daily_downscaled_precip.sh (KMSA / AIFS / GEFS daily maps)"
+        type: boolean
+        default: false
       run_timeseries_verification:
         description: "timeseries_verification.sh (currently flaky)"
         type: boolean
@@ -89,8 +100,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install python-pptx
-        run: pip install python-pptx
+      - name: Install briefing dependencies
+        run: pip install -r requirements.txt
 
       - name: Compute DATE_STR
         id: date
@@ -118,6 +129,7 @@ jobs:
           echo "sst=${{ inputs.run_current_sst_conditions }}"
           echo "last_week_verification=${{ inputs.run_last_weeks_forecast_verification }}"
           echo "week1_mae_vs_chirps=${{ inputs.run_week1_mae_vs_chirps }}"
+          echo "kenya_daily_downscaled_precip=${{ inputs.run_kenya_daily_downscaled_precip }}"
           echo "timeseries_verification=${{ inputs.run_timeseries_verification }}"
 
       - name: Run recent_rainfall_observations_kenya.sh
@@ -198,6 +210,12 @@ jobs:
         working-directory: ws_scripts
         run: bash week1_mae_vs_chirps.sh
 
+      - name: Run kenya_daily_downscaled_precip.sh
+        if: ${{ inputs.run_all == true || inputs.run_kenya_daily_downscaled_precip == true }}
+        continue-on-error: true
+        working-directory: ws_scripts
+        run: bash kenya_daily_downscaled_precip.sh
+
       - name: Run timeseries_verification.sh
         if: ${{ inputs.run_timeseries_verification == true }}
         continue-on-error: true
@@ -209,21 +227,36 @@ jobs:
           mkdir -p "plots/briefing/${{ steps.date.outputs.date }}"
           mv ws_scripts/*.png "plots/briefing/${{ steps.date.outputs.date }}/" 2>/dev/null || true
 
-      - name: Build briefing3 pptx
+      - name: Install rclone
+        continue-on-error: true
+        run: curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        continue-on-error: true
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
+
+      - name: Generate AI weather briefing
         continue-on-error: true
         env:
           DATE_STR: ${{ steps.date.outputs.date }}
-          MAIN_PATH: ${{ github.workspace }}
-        run: python populate_briefing_template3.py
+          MAIN_PATH: ${{ github.workspace }}/
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
+          BRIEFING_ALLOW_MISSING_PICTURES: "1"
+        run: python ai_weather_briefing.py
 
       - name: Upload briefing plots
         uses: actions/upload-artifact@v4
         with:
           name: briefing-plots
           path: plots/briefing/${{ steps.date.outputs.date }}/*.png
+          if-no-files-found: warn
 
       - name: Upload briefing pptx
         uses: actions/upload-artifact@v4
         with:
           name: briefing-pptx
-          path: s2s_briefing3_*.pptx
+          path: s2s_briefing_${{ steps.date.outputs.date }}.pptx
+          if-no-files-found: warn

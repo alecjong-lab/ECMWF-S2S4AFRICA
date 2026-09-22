@@ -224,14 +224,6 @@ jobs:
         working-directory: main_repo/ws_scripts
         run: bash kenya_daily_downscaled_precip.sh
 
-      - name: Run weekly_precip_forecast_hres_s2s.sh
-        continue-on-error: true
-        working-directory: main_repo/ws_scripts
-        env:
-          ECMWF_DATASTORES_URL: "https://ecds.ecmwf.int/api"
-          ECMWF_DATASTORES_KEY: ${{ secrets.CDSAPI_KEY }}
-        run: bash weekly_precip_forecast_hres_s2s.sh
-
     #  - name: Run timeseries_verification.sh
     #    continue-on-error: true
      #   working-directory: main_repo/ws_scripts
@@ -516,7 +508,6 @@ jobs:
             main_repo/plots/*/*/weekly/chance_of_above_or_below.png
             main_repo/plots/briefing/*/kenya_weekly_rainfall_analog_years.png
             main_repo/plots/briefing/*/iod_forecast.png
-            main_repo/plots/briefing/*/ECMWF_raw_plot.png
             main_repo/plots/briefing/*/sst_global_oisst_nino_iod.png
             # main_repo/plots/*/*/dekadal/imerg_*_dekadal.png
             # main_repo/plots/*/*/weekly/imerg_*_weekly.png
@@ -642,16 +633,13 @@ jobs:
             iod="plots/briefing/${today_date}/iod_forecast.png"
             [ ! -f "$iod" ] && [ -f "main_repo/$iod" ] && iod="main_repo/$iod"
 
-            ecmwf_raw="plots/briefing/${today_date}/ECMWF_raw_plot.png"
-            [ ! -f "$ecmwf_raw" ] && [ -f "main_repo/$ecmwf_raw" ] && ecmwf_raw="main_repo/$ecmwf_raw"
-
             ecmwf_dwn="plots/Kenya/${ecmwf_date}/weekly/weekly_precip_downscaled.png"
             [ ! -f "$ecmwf_dwn" ] && [ -f "main_repo/$ecmwf_dwn" ] && ecmwf_dwn="main_repo/$ecmwf_dwn"
 
             ecmwf_tercile="plots/Kenya/${ecmwf_date}/weekly/chance_of_above_or_below.png"
             [ ! -f "$ecmwf_tercile" ] && [ -f "main_repo/$ecmwf_tercile" ] && ecmwf_tercile="main_repo/$ecmwf_tercile"
 
-            list="$analog,$sst,$iod,$ecmwf_raw,$ecmwf_dwn,$ecmwf_tercile"
+            list="$analog,$sst,$iod,$ecmwf_dwn,$ecmwf_tercile"
 
             csv="private_data/station_data/${country}/${today_date}/*.csv"
             if ! compgen -G "$csv" > /dev/null; then
@@ -710,6 +698,7 @@ jobs:
           python -u repo_scripts/publish_briefing_to_drive.py \
             --file "$briefing" \
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
+            --live \
             --emails "${{ matrix.emails }}"
 
       - name: Find latest manual analysis deck
