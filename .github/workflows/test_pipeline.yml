@@ -127,6 +127,7 @@ jobs:
       - name: Auth to Google Cloud
         uses: google-github-actions/auth@v2
         with:
+          create_credentials_file: true
           token_format: 'access_token'
           access_token_scopes: "https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/drive"
           workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
@@ -417,6 +418,17 @@ jobs:
         working-directory: main_repo/ws_scripts
         run: bash timeseries_verification.sh
 
+      # Seed briefing PNGs from GCS first. Collect then overwrites any
+      # name the ws_scripts just produced (gcloud rsync is not additive —
+      # a later pull would replace fresh GEFS/AIFS/… files with the bucket).
+      - name: Restore briefing slides from GCS
+        if: ${{ inputs.run_briefing_slides || inputs.run_ai_briefing }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          mkdir -p "plots/briefing/${DATE_STR}"
+          gcloud storage rsync -r "gs://${BUCKET}/plots/briefing/${DATE_STR}" "plots/briefing/${DATE_STR}" || true
+
       - name: Collect briefing plots
         if: ${{ inputs.run_briefing_slides }}
         continue-on-error: true
@@ -425,20 +437,11 @@ jobs:
           mkdir -p "plots/briefing/${{ inputs.date_str }}"
           mv ws_scripts/*.png "plots/briefing/${{ inputs.date_str }}/" 2>/dev/null || true
 
-      - name: Restore briefing slides from GCS
-        if: ${{ !inputs.run_briefing_slides }}
-        continue-on-error: true
-        working-directory: main_repo
-        run: |
-          mkdir -p "plots/briefing/${DATE_STR}"
-          gcloud storage rsync -r "gs://${BUCKET}/plots/briefing/${DATE_STR}" "plots/briefing/${DATE_STR}"
-
       # ── Stage: ai_briefing (Kenya/Great_Horn-hardcoded, ignores
-      # countries input — top up its fixed prerequisites from GCS first so
+      # countries input — top up its fixed prerequisites from GCS so
       # it has something to read even if you're testing a different country
-      # or skipped an upstream stage above; additive only, never overwrites
-      # files an enabled stage just generated fresh, since filenames don't
-      # collide across stages). ─────────────────────────────────────────
+      # or skipped an upstream stage above). Briefing PNGs were already
+      # rsynced and then overwritten by collect; do not pull them again.
       - name: Top up ai_briefing prerequisites from GCS
         if: ${{ inputs.run_ai_briefing }}
         continue-on-error: true
@@ -447,8 +450,7 @@ jobs:
           for rel in \
             "plots/Kenya/${DATE_STR}" \
             "plots/Great_Horn/${DATE_STR}" \
-            "plots/diagnostics/${DATE_STR}" \
-            "plots/briefing/${DATE_STR}"
+            "plots/diagnostics/${DATE_STR}"
           do
             mkdir -p "$rel"
             gcloud storage rsync -r "gs://${BUCKET}/${rel}" "$rel" || true
@@ -466,11 +468,28 @@ jobs:
           BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
           BRIEFING_ALLOW_MISSING_PICTURES: "1"
 
+      # Fresh Drive-scoped token immediately before upload. The job-start
+      # auth is for GCS; setup-gcloud can replace it with a cloud-platform
+      # token that Drive rejects (ACCESS_TOKEN_SCOPE_INSUFFICIENT).
+      - name: Auth to Google Drive
+        if: ${{ inputs.run_ai_briefing }}
+        id: drive_auth
+        uses: google-github-actions/auth@v2
+        with:
+          create_credentials_file: true
+          token_format: "access_token"
+          access_token_scopes: "https://www.googleapis.com/auth/drive"
+          workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
+          service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
+          export_environment_variables: true
+
       - name: Upload briefing to Drive TEST folder
         if: ${{ inputs.run_ai_briefing }}
         id: drive
         continue-on-error: true
         working-directory: main_repo
+        env:
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.drive_auth.outputs.access_token }}
         run: |
           python -u publish_briefing_to_drive.py \
             --file "s2s_briefing_${{ inputs.date_str }}.pptx" \

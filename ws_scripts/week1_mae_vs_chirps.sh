@@ -165,6 +165,30 @@ done
 
 cd ..
 
+# Concat leaves time as 0..n-1. Label each bar with the week start–end.
+TICK_LABELS=$(python3 - "${WEEKS[@]}" <<'PY'
+import json, sys
+from datetime import date, timedelta
+months = ("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sept","Oct","Nov","Dec")
+def fmt(d):
+    return f"{d.day} {months[d.month-1]} '{d.year % 100:02d}"
+labels = []
+for raw in sys.argv[1:]:
+    start = date.fromisoformat(raw)
+    labels.append(f"{fmt(start)} - {fmt(start + timedelta(days=6))}")
+print(json.dumps(labels))
+PY
+)
+TICK_VALUES=$(python3 -c "import json,sys; print(json.dumps(list(range(len(sys.argv)-1))))" _ "${WEEKS[@]}")
+PATCH=$(python3 -c "import json,sys; print(json.dumps({
+  'theme': {'rc': {'xtick.labelsize': 12}},
+  'axes': {
+    'xlabel': '',
+    'legend': {'loc': 'upper center', 'bbox_to_anchor': [0.5, -0.22], 'ncol': 4},
+    'xticks': {'values': json.loads(sys.argv[1]), 'labels': json.loads(sys.argv[2])},
+  }
+}))" "$TICK_VALUES" "$TICK_LABELS")
+
 $WS plot-timeseries \
   --input intermediate_results/mae_aifs_series.zarr \
   --input intermediate_results/mae_ifs_series.zarr \
@@ -177,5 +201,7 @@ $WS plot-timeseries \
   --label "KMSA downscaled" --label GEFS \
   --title "Kenya week-1 rainfall forecast MAE vs CHIRPS · ${WEEKS[0]} – ${LAST_SUN}" \
   --ylabel "MAE (mm / week)" \
-  --fontsize 16 --figsize 12,6 \
+  --fontsize 16 --figsize 13,6.5 \
+  --patch "$PATCH" \
   --output kenya_week1_mae_vs_chirps_4wk.png
+cp -f kenya_week1_mae_vs_chirps_4wk.png kenya_week1_forecast_mae_vs_chirps.png
