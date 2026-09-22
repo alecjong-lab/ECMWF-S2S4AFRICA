@@ -32,4 +32,4 @@ already been exercised in `test_pipeline.yml`.
 
 ## Timing
 
-cron job is scheduled to start at 3:33 AM UTC +0, so all changes that will me merged must be tested before this time. 
+cron job is scheduled to start at 3:33 AM UTC +0, so all changes that will me merged must be tested before this time.
