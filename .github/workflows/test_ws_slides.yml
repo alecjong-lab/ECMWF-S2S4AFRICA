@@ -5,6 +5,10 @@ name: Test ws_slides
 # ai_weather_briefing.py. Only checked scripts run. "Run every plot" is off
 # unless you tick it. Missing core ECMWF/GEFS pictures become blank boxes
 # (BRIEFING_ALLOW_MISSING_PICTURES) so a skills-only run still produces a pptx.
+#
+# Never write to the live briefing location: no Drive upload, no GCS
+# rsync to gs://africa-forecasting-data/plots/briefing/. Outputs stay in
+# the runner and GitHub Actions artifacts.
 
 on:
   workflow_dispatch:

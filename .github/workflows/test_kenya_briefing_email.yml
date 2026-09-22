@@ -2,8 +2,9 @@
 # Skips ECMWF/GEFS downloads: reuses plots already on GCS for DATE_STR.
 # Bakes the live Drive Kenya template (weather_briefing_kenya_template) via
 # ai_weather_briefing.py. The pptx is uploaded to a TEST subfolder of the
-# Kenya briefing Drive folder (not the live deck). The email attaches every
-# PNG present after the pull (not the pptx — Resend caps at 10 MB).
+# Kenya briefing Drive folder (not the live deck root). GCS is pull-only.
+# The email attaches every PNG present after the pull (not the pptx —
+# Resend caps at 10 MB).
 name: Test Kenya briefing email
 
 on:

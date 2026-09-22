@@ -706,6 +706,7 @@ jobs:
           python -u repo_scripts/publish_briefing_to_drive.py \
             --file "$briefing" \
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
+            --live \
             --emails "${{ matrix.emails }}"
 
       - name: Find latest manual analysis deck

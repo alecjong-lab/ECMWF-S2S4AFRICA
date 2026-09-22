@@ -5,6 +5,10 @@ Uses the GitHub Actions service account via Application Default Credentials
 pptx into ``application/vnd.google-apps.presentation``, and writes the Slides
 edit URL into
 https://drive.google.com/drive/folders/1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho
+
+Test workflows must pass ``--subfolder TEST``. Writing to the live folder
+root requires ``--live`` and is refused when ``GITHUB_WORKFLOW`` starts
+with ``Test``.
 """
 from __future__ import annotations
 
@@ -272,6 +276,15 @@ def main():
         help="Google Drive folder id to upload into",
     )
     parser.add_argument(
+        "--live",
+        action="store_true",
+        help=(
+            "Write into --folder-id itself (the live Kenya briefing folder). "
+            "Required for the production daily deck. Test workflows must use "
+            "--subfolder TEST instead."
+        ),
+    )
+    parser.add_argument(
         "--subfolder",
         default="",
         help="Upload into this named child of --folder-id (created if missing). "
@@ -294,10 +307,24 @@ def main():
         raise SystemExit(f"briefing file not found: {local}")
 
     folder_id = args.folder_id
-    if args.subfolder:
+    subfolder = (args.subfolder or "").strip()
+    if args.live and subfolder:
+        raise SystemExit("pass --live or --subfolder, not both")
+    if not args.live and not subfolder:
+        raise SystemExit(
+            "refusing to write to the live briefing folder root. "
+            "Pass --subfolder TEST for a dry-run, or --live for the production daily deck."
+        )
+    workflow = os.environ.get("GITHUB_WORKFLOW", "")
+    if args.live and workflow.lower().startswith("test"):
+        raise SystemExit(
+            f"refusing --live in GitHub workflow {workflow!r}; "
+            "test workflows must use --subfolder TEST"
+        )
+    if subfolder:
         token = drive_token()
-        folder_id = find_or_create_subfolder(folder_id, args.subfolder, token)
-        print(f"uploading into subfolder {args.subfolder} id={folder_id}", file=sys.stderr)
+        folder_id = find_or_create_subfolder(folder_id, subfolder, token)
+        print(f"uploading into subfolder {subfolder} id={folder_id}", file=sys.stderr)
 
     file_id, drive_url = upload_pptx(local, folder_id)
     # Write the Slides URL before share/metadata so a later API error

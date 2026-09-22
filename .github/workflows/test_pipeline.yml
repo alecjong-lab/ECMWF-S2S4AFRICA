@@ -121,8 +121,9 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      # ── GCS is read-only here. Drive upload (if any) goes to the TEST
-      # subfolder of the Kenya briefing folder, never the live deck. ─────
+      # ── GCS is read-only here (rsync FROM the bucket only). Drive
+      # upload goes to the TEST subfolder, never the live briefing folder
+      # root. publish_briefing_to_drive.py refuses --live in Test* workflows. ─────
       - name: Auth to Google Cloud
         uses: google-github-actions/auth@v2
         with:
