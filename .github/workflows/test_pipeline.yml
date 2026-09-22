@@ -513,37 +513,61 @@ jobs:
             main_repo/prompts/digest_${{ inputs.date_str }}.txt
             main_repo/s2s_briefing_${{ inputs.date_str }}.pptx
 
-      - name: Build Kenya attachment list
-        if: ${{ contains(inputs.countries, 'Kenya') }}
-        id: kenya_attachments
+      - name: Build attachment list
+        id: attachments
         continue-on-error: true
-        working-directory: main_repo
         run: |
-          today_date="${{ inputs.date_str }}"
-          ecmwf_date="$(date -u -d "$today_date - 2 days" +%Y-%m-%d)"
-          if [ -d "plots/Kenya/${today_date}/weekly" ]; then
-            ecmwf_date="$today_date"
+          set -euo pipefail
+          MAX_BYTES=9500000
+          mapfile -t files < <(
+            {
+              find main_repo/plots/briefing -type f -name '*.png' 2>/dev/null
+              find main_repo/plots main_repo/private_plots main_repo/ws_scripts \
+                -type f -name '*.png' 2>/dev/null | grep -v '/plots/briefing/' || true
+            } | sort -u
+          )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            echo "list=" >> "$GITHUB_OUTPUT"
+            echo "note=No PNGs found." >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          list=""
-          for f in \
-            "plots/briefing/${today_date}/kenya_weekly_rainfall_analog_years.png" \
-            "plots/briefing/${today_date}/sst_global_oisst_nino_iod.png" \
-            "plots/briefing/${today_date}/iod_forecast.png" \
-            "plots/briefing/${today_date}/ECMWF_raw_plot.png" \
-            "plots/Kenya/${ecmwf_date}/weekly/weekly_precip_downscaled.png" \
-            "plots/Kenya/${ecmwf_date}/weekly/chance_of_above_or_below.png"
-          do
-            if [ -f "$f" ]; then
-              list="${list:+$list,}main_repo/$f"
-            else
-              echo "::warning::Missing attachment $f"
+          total=0
+          for f in "${files[@]}"; do
+            total=$((total + $(stat -c%s "$f")))
+          done
+          echo "Found ${#files[@]} PNGs totaling ${total} bytes"
+          if [ "$total" -le "$MAX_BYTES" ]; then
+            list=$(IFS=,; echo "${files[*]}")
+            echo "list=$list" >> "$GITHUB_OUTPUT"
+            echo "count=${#files[@]}" >> "$GITHUB_OUTPUT"
+            echo "note=All ${#files[@]} PNGs are attached." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          zip -q main_repo/test_run_plots.zip "${files[@]}"
+          zip_bytes=$(stat -c%s main_repo/test_run_plots.zip)
+          echo "Zip is ${zip_bytes} bytes"
+          if [ "$zip_bytes" -le "$MAX_BYTES" ]; then
+            echo "list=main_repo/test_run_plots.zip" >> "$GITHUB_OUTPUT"
+            echo "count=${#files[@]}" >> "$GITHUB_OUTPUT"
+            echo "note=All ${#files[@]} PNGs packed into a zip (over Resend's 10 MB as individuals)." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Prefer briefing plots, then fill remaining budget.
+          packed=()
+          packed_bytes=0
+          for f in "${files[@]}"; do
+            sz=$(stat -c%s "$f")
+            if [ $((packed_bytes + sz)) -le "$MAX_BYTES" ]; then
+              packed+=("$f")
+              packed_bytes=$((packed_bytes + sz))
             fi
           done
-          csv="private_data/station_data/Kenya/${today_date}/*.csv"
-          if compgen -G "$csv" > /dev/null; then
-            list="${list:+$list,}main_repo/$csv"
-          fi
+          list=$(IFS=,; echo "${packed[*]}")
+          skipped=$(( ${#files[@]} - ${#packed[@]} ))
           echo "list=$list" >> "$GITHUB_OUTPUT"
+          echo "count=${#packed[@]}" >> "$GITHUB_OUTPUT"
+          echo "note=Attached ${#packed[@]} of ${#files[@]} PNGs (${skipped} omitted — Resend 10 MB cap). Full set is in the run artifacts." >> "$GITHUB_OUTPUT"
 
       - name: Email test run results (Kenya)
         if: ${{ contains(inputs.countries, 'Kenya') }}
@@ -561,10 +585,11 @@ jobs:
             Test pipeline run for date ${{ inputs.date_str }}, countries: ${{ inputs.countries }}.
             Shared test deck (Drive TEST folder, not the live briefing folder):
             ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
-            Same plot attachments as the daily Kenya email (pptx is in artifacts / Drive TEST, not attached — Resend 10 MB cap).
+            ${{ steps.attachments.outputs.note || '' }}
+            pptx is in artifacts / Drive TEST, not attached (Resend 10 MB cap).
             Full output: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             Nothing from this run was uploaded to GCS or committed to main/website.
-          attachments: ${{ steps.kenya_attachments.outputs.list }}
+          attachments: ${{ steps.attachments.outputs.list }}
 
       - name: Email test run results
         if: ${{ !contains(inputs.countries, 'Kenya') }}
@@ -580,13 +605,9 @@ jobs:
           from: "S2S Test Pipeline <info@dashboards.rhizaresearch.org>"
           body: |
             Test pipeline run for date ${{ inputs.date_str }}, countries: ${{ inputs.countries }}.
+            ${{ steps.attachments.outputs.note || '' }}
             Full output: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             Nothing from this run was uploaded to GCS or committed to main/website — this is
             output from the test workflow only. Any stage you turned off was backfilled from
             the production GCS bucket instead of regenerated.
-          attachments: |
-            main_repo/plots/*/${{ inputs.date_str }}/dekadal/dekadal_precip.png,
-            main_repo/plots/*/${{ inputs.date_str }}/weekly/weekly_precip.png,
-            main_repo/plots/*/${{ inputs.date_str }}/weekly/weekly_precip_downscaled_clipped.png,
-            main_repo/plots/*/${{ inputs.date_str }}/weekly/weekly_medium_range_precip.png,
-            main_repo/prompts/digest_${{ inputs.date_str }}.txt
+          attachments: ${{ steps.attachments.outputs.list }}
