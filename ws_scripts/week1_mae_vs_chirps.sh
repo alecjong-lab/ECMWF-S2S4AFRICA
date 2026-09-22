@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Kenya week-1 rainfall MAE vs CHIRPS over the last 4 weeks from today.
+# Kenya week-1 rainfall MAE vs CHIRPS over the last 4 complete weeks.
 # Models: AIFS-ENS, ECMWF ENS (IFS 15-day), ECMWF ER (S2S), KMSA downscaled, GEFS.
 # Writes kenya_week1_mae_vs_chirps_4wk.png (briefing template picture name).
 set -eo pipefail
@@ -16,36 +16,42 @@ mkdir -p intermediate_results
 cd intermediate_results
 
 # ---------------------------------------------------------------- dates
-# Four 7-day windows ending at the current date: today, today-7, today-14,
-# today-21. Incomplete weeks are skipped later at verify.
-TODAY=$($WS resolve-time latest --emit iso)
+# Last complete week whose Monday init is also outside the ~2-day forecast
+# delay. resolve-time last-week is Monday–Sunday.
+CHIRPS_LATEST=$($WS chirps-fetch --probe-latest | tail -n1)
+CHIRPS_LATEST="${CHIRPS_LATEST:0:10}"
+FCST_REF=$($WS resolve-time now-2d --emit iso)
+if [[ "$CHIRPS_LATEST" > "$FCST_REF" ]]; then
+  ASOF="$FCST_REF"
+else
+  ASOF="$CHIRPS_LATEST"
+fi
 
+LAST_ISO=$($WS resolve-time last-week --as-of "$ASOF" --emit iso)
+LAST_SUN="${LAST_ISO##*/}"
+LAST_MON="${LAST_ISO%%/*}"
+
+# Walk back 7 days from that Monday. Calling last-week again on the Monday
+# (or the Sunday before it) skips a week.
 WEEKS=()
-start="$TODAY"
+start="$LAST_MON"
 for ((i = 0; i < N_WEEKS; i++)); do
   WEEKS=("$start" "${WEEKS[@]}")
   start=$($WS resolve-time now-7d --as-of "$start" --emit iso)
 done
 LAST_WEEK="${WEEKS[$((N_WEEKS - 1))]}"
-LAST_SUN=$(pydate "${LAST_WEEK} +6 days" %Y-%m-%d)
-echo "MAE weeks: ${WEEKS[0]} -> ${LAST_WEEK} ($N_WEEKS weeks, as of $TODAY)" >&2
+echo "MAE weeks: ${WEEKS[0]} -> ${LAST_WEEK} ($N_WEEKS complete weeks, as of $ASOF)" >&2
 
 $WS resolve-region KEN --geojson kenya.geojson
 
-CHIRPS_END="${CHIRPS_END_OVERRIDE:-$($WS chirps-fetch --probe-latest | tail -n1)}"
-CHIRPS_END="${CHIRPS_END:0:10}"
-if [[ "$CHIRPS_END" > "$TODAY" ]]; then
-  CHIRPS_END="$TODAY"
-fi
+CHIRPS_RANGE=$($WS resolve-time last-4w --as-of "$LAST_SUN" --emit iso)
 $WS chirps-fetch \
-  --start-time "${WEEKS[0]}" --end-time "$CHIRPS_END" \
+  --start-time "${CHIRPS_RANGE%%/*}" --end-time "${CHIRPS_RANGE##*/}" \
   --bbox "$BBOX" --workers 8 \
   --output chirps_raw.zarr
 
 $WS aggregate-temporal \
-  --period weekly --method mean \
-  --start-time "${WEEKS[0]}" \
-  --end-time "$(pydate "${LAST_WEEK} +7 days" %Y-%m-%d)" \
+  --period weekly --method mean --align left \
   --input chirps_raw.zarr --output chirps_weekly.zarr
 
 $WS convert-to-totals \
