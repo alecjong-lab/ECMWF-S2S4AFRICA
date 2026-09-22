@@ -177,7 +177,7 @@ for raw in sys.argv[1:]:
 print(json.dumps(labels))
 PY
 )
-TICK_VALUES=$(python3 -c "import json,sys; print(json.dumps(list(range(len(sys.argv)-1))))" _ "${WEEKS[@]}")
+TICK_VALUES=$(python3 -c "import json,sys; print(json.dumps(list(range(len(sys.argv)-1))))" "${WEEKS[@]}")
 PATCH=$(python3 -c "import json,sys; print(json.dumps({
   'theme': {'rc': {'xtick.labelsize': 12}},
   'axes': {
