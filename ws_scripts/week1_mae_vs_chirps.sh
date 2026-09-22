@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Kenya week-1 rainfall MAE vs CHIRPS over the last 4 Monday weeks ending
-# on this week's Monday (today's date, not last-week).
+# Kenya week-1 rainfall MAE vs CHIRPS over the last 4 weeks from today.
 # Models: AIFS-ENS, ECMWF ENS (IFS 15-day), ECMWF ER (S2S), KMSA downscaled, GEFS.
 # Writes kenya_week1_mae_vs_chirps_4wk.png (briefing template picture name).
 set -eo pipefail
@@ -17,14 +16,12 @@ mkdir -p intermediate_results
 cd intermediate_results
 
 # ---------------------------------------------------------------- dates
-# This week's Monday from the current date. Do not step back to last-week
-# or wait on CHIRPS / forecast lag — incomplete weeks are skipped later.
+# Four 7-day windows ending at the current date: today, today-7, today-14,
+# today-21. Incomplete weeks are skipped later at verify.
 TODAY=$($WS resolve-time latest --emit iso)
-THIS_WEEK=$($WS resolve-time this-week --as-of "$TODAY" --emit iso)
-THIS_MON="${THIS_WEEK%%/*}"
 
 WEEKS=()
-start="$THIS_MON"
+start="$TODAY"
 for ((i = 0; i < N_WEEKS; i++)); do
   WEEKS=("$start" "${WEEKS[@]}")
   start=$($WS resolve-time now-7d --as-of "$start" --emit iso)
@@ -35,11 +32,10 @@ echo "MAE weeks: ${WEEKS[0]} -> ${LAST_WEEK} ($N_WEEKS weeks, as of $TODAY)" >&2
 
 $WS resolve-region KEN --geojson kenya.geojson
 
-# Monday-aligned bins: end-time is exclusive and must be a Monday.
 CHIRPS_END="${CHIRPS_END_OVERRIDE:-$($WS chirps-fetch --probe-latest | tail -n1)}"
 CHIRPS_END="${CHIRPS_END:0:10}"
-if [[ "$CHIRPS_END" > "$LAST_SUN" ]]; then
-  CHIRPS_END="$LAST_SUN"
+if [[ "$CHIRPS_END" > "$TODAY" ]]; then
+  CHIRPS_END="$TODAY"
 fi
 $WS chirps-fetch \
   --start-time "${WEEKS[0]}" --end-time "$CHIRPS_END" \
@@ -49,7 +45,7 @@ $WS chirps-fetch \
 $WS aggregate-temporal \
   --period weekly --method mean \
   --start-time "${WEEKS[0]}" \
-  --end-time "$(pydate "${THIS_MON} +7 days" %Y-%m-%d)" \
+  --end-time "$(pydate "${LAST_WEEK} +7 days" %Y-%m-%d)" \
   --input chirps_raw.zarr --output chirps_weekly.zarr
 
 $WS convert-to-totals \
