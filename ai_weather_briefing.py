@@ -417,11 +417,6 @@ briefing_plots_path = f"plots/briefing/{date_str}/"
 # only the first len(plots) slide types have a "{type}_plot" shape
 plot_paths = {t: f"{kenya_path}/weekly/{p}.png" for t, p in zip(slide_types, plots)}
 
-# preferentially use skills plot, but fallback to template placeholder if not available
-_ecmwf_raw_ws_script_path = f"{briefing_plots_path}/ECMWF_raw_plot.png"
-if os.path.exists(_ecmwf_raw_ws_script_path):
-    plot_paths["ECMWF_raw"] = _ecmwf_raw_ws_script_path
-
 # preferentially use ws_scripts/fcst_above_normal.sh's plot over the default
 # plot_s2s.py-generated Kenya chance_of_above_or_below.png (still generated,
 # just no longer used for this slide) if available.
