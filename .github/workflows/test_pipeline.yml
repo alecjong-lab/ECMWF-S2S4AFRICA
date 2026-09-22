@@ -8,7 +8,9 @@ name: Test Pipeline (manual)
 #
 # Each stage can be turned off. Tick skills_only to skip every non-ws_scripts
 # stage (download, plot_s2s, Indian Ocean, climate indices, GEFS, downscale,
-# rainfall onset) in one go; those still restore from GCS. A skipped stage
+# rainfall onset) in one go; those still restore from GCS. Fill ws_scripts
+# with comma-separated stems to rebuild only those briefing plots (blank
+# keeps the current "all except timeseries_verification" set). A skipped stage
 # pulls its known output for DATE_STR from the (read-only) production GCS
 # bucket instead of regenerating it, so downstream stages/the email still
 # have something to work with. Two
@@ -30,15 +32,17 @@ on:
   workflow_dispatch:
     inputs:
       date_str:
-        description: "Forecast date (YYYY-MM-DD)"
-        required: true
+        description: "Forecast date YYYY-MM-DD (blank = today UTC)"
+        required: false
+        default: ""
       countries:
         description: "Comma-separated country list (e.g. Kenya,Ghana)"
         required: true
         default: "Kenya"
       email:
         description: "Where to send the test run results"
-        required: true
+        required: false
+        default: "genevieve@rhizaresearch.org"
       skills_only:
         description: "Skip all non-weather-skills stages (download / plot_s2s / GEFS / downscale / onset / Indian Ocean / climate indices). Still runs ws_scripts + AI briefing; skipped stages restore from GCS."
         type: boolean
@@ -72,9 +76,13 @@ on:
         type: boolean
         default: true
       run_briefing_slides:
-        description: "Run ws_scripts briefing slides (Kenya-only, ignores countries input)"
+        description: "Run ws_scripts briefing slides (Kenya-only). Filtered by ws_scripts when that box is filled."
         type: boolean
         default: true
+      ws_scripts:
+        description: "Optional subset of ws_scripts stems, comma-separated, no .sh. Blank + run_briefing_slides = all except timeseries_verification. Example: kenya_daily_downscaled_precip,week1_mae_vs_chirps"
+        required: false
+        default: ""
       run_ai_briefing:
         description: "Generate AI weather briefing (Kenya/Great_Horn-only, ignores countries input)"
         type: boolean
@@ -91,12 +99,19 @@ jobs:
       OUTPUT_DIR: data
       BUCKET: africa-forecasting-data
       DATE_STR: ${{ inputs.date_str }}
+      TEST_EMAIL: ${{ inputs.email || 'genevieve@rhizaresearch.org' }}
       COUNTRIES: ${{ inputs.countries }}
       CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
       TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
       TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
 
     steps:
+      - name: Resolve DATE_STR
+        run: |
+          date="${DATE_STR:-$(date -u +%Y-%m-%d)}"
+          echo "DATE_STR=$date" >> "$GITHUB_ENV"
+          echo "Using DATE_STR=$date  email=$TEST_EMAIL"
+
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
@@ -157,10 +172,10 @@ jobs:
         run: |
           uv run fetch_dynamical.py \
             --dataset noaa-gefs-forecast-35-day\
-            --date ${{ inputs.date_str }} \
+            --date ${{ env.DATE_STR }} \
             --countries "${{ inputs.countries }}"\
             --variable precipitation_surface \
-            --output ./data/${{ inputs.date_str }}/gefs/
+            --output ./data/${{ env.DATE_STR }}/gefs/
 
       - name: Restore forecast data from GCS
         if: ${{ !inputs.run_download || inputs.skills_only }}
@@ -325,38 +340,115 @@ jobs:
           done
 
       # ── Stage: briefing_slides (ws_scripts/*.sh, Kenya-hardcoded) ──
+      - name: Resolve ws_scripts selection
+        id: ws
+        run: |
+          allowed=(
+            recent_rainfall_observations_kenya
+            recent_rainfall_observations_eastern_africa
+            recent_observations_station_data
+            seasonal_progression
+            seasonal_progression_vs_analog_years
+            equatorial_waves_mjo
+            equatorial_waves_iod_enso
+            itcz_state
+            equatorial_waves_analyses_and_forecasts
+            current_sst_conditions
+            last_weeks_forecast_verification
+            week1_mae_vs_chirps
+            kenya_daily_downscaled_precip
+            timeseries_verification
+          )
+          # timeseries_verification stays opt-in; it is still flaky.
+          default=(
+            recent_rainfall_observations_kenya
+            recent_rainfall_observations_eastern_africa
+            recent_observations_station_data
+            seasonal_progression
+            seasonal_progression_vs_analog_years
+            equatorial_waves_mjo
+            equatorial_waves_iod_enso
+            itcz_state
+            equatorial_waves_analyses_and_forecasts
+            current_sst_conditions
+            last_weeks_forecast_verification
+            week1_mae_vs_chirps
+            kenya_daily_downscaled_precip
+          )
+          raw='${{ inputs.ws_scripts }}'
+          raw="${raw// /}"
+          raw="${raw//$'\n'/}"
+          declare -a want=()
+          if [ -n "$raw" ]; then
+            IFS=',' read -ra tokens <<< "$raw"
+            for t in "${tokens[@]}"; do
+              t="${t%.sh}"
+              [ -z "$t" ] && continue
+              if [ "$t" = "all" ]; then
+                want+=("${default[@]}")
+              else
+                want+=("$t")
+              fi
+            done
+          elif [ "${{ inputs.run_briefing_slides }}" = "true" ]; then
+            want=("${default[@]}")
+          fi
+          unknown=()
+          selected=()
+          for w in "${want[@]}"; do
+            ok=0
+            for a in "${allowed[@]}"; do
+              if [ "$w" = "$a" ]; then ok=1; break; fi
+            done
+            if [ "$ok" = "0" ]; then
+              unknown+=("$w")
+              continue
+            fi
+            echo "$w=true" >> "$GITHUB_OUTPUT"
+            selected+=("$w")
+          done
+          if [ ${#unknown[@]} -gt 0 ]; then
+            echo "Unknown ws_scripts: ${unknown[*]}" >&2
+            echo "Allowed: ${allowed[*]}" >&2
+            exit 1
+          fi
+          any=false
+          [ ${#selected[@]} -gt 0 ] && any=true
+          echo "any=$any" >> "$GITHUB_OUTPUT"
+          echo "Selected ws_scripts (${#selected[@]}): ${selected[*]:-none}"
+
       - name: Install uv for ws_scripts
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.any == 'true' }}
         uses: astral-sh/setup-uv@v5
         with:
           version: "0.11.20"
 
       - name: Run recent_rainfall_observations_kenya.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.recent_rainfall_observations_kenya == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash recent_rainfall_observations_kenya.sh
 
       - name: Run recent_rainfall_observations_eastern_africa.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.recent_rainfall_observations_eastern_africa == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash recent_rainfall_observations_eastern_africa.sh
 
       - name: Run recent_observations_station_data.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.recent_observations_station_data == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash recent_observations_station_data.sh
 
       - name: Run seasonal_progression.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.seasonal_progression == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash seasonal_progression.sh
 
       - name: Run seasonal_progression_vs_analog_years.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.seasonal_progression_vs_analog_years == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         env:
@@ -365,55 +457,55 @@ jobs:
         run: bash seasonal_progression_vs_analog_years.sh
 
       - name: Run equatorial_waves_mjo.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.equatorial_waves_mjo == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash equatorial_waves_mjo.sh
 
       - name: Run equatorial_waves_iod_enso.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.equatorial_waves_iod_enso == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash equatorial_waves_iod_enso.sh
 
       - name: Run itcz_state.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.itcz_state == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash itcz_state.sh
 
       - name: Run equatorial_waves_analyses_and_forecasts.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.equatorial_waves_analyses_and_forecasts == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash equatorial_waves_analyses_and_forecasts.sh
 
       - name: Run current_sst_conditions.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.current_sst_conditions == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash current_sst_conditions.sh
 
       - name: Run last_weeks_forecast_verification.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.last_weeks_forecast_verification == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash last_weeks_forecast_verification.sh
 
       - name: Run week1_mae_vs_chirps.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.week1_mae_vs_chirps == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash week1_mae_vs_chirps.sh
 
       - name: Run kenya_daily_downscaled_precip.sh
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.kenya_daily_downscaled_precip == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash kenya_daily_downscaled_precip.sh
 
       - name: Run timeseries_verification.sh
-        if: false  # temporarily skipped — script is failing
+        if: ${{ steps.ws.outputs.timeseries_verification == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         run: bash timeseries_verification.sh
@@ -422,7 +514,7 @@ jobs:
       # name the ws_scripts just produced (gcloud rsync is not additive —
       # a later pull would replace fresh GEFS/AIFS/… files with the bucket).
       - name: Restore briefing slides from GCS
-        if: ${{ inputs.run_briefing_slides || inputs.run_ai_briefing }}
+        if: ${{ steps.ws.outputs.any == 'true' || inputs.run_ai_briefing }}
         continue-on-error: true
         working-directory: main_repo
         run: |
@@ -430,12 +522,12 @@ jobs:
           gcloud storage rsync -r "gs://${BUCKET}/plots/briefing/${DATE_STR}" "plots/briefing/${DATE_STR}" || true
 
       - name: Collect briefing plots
-        if: ${{ inputs.run_briefing_slides }}
+        if: ${{ steps.ws.outputs.any == 'true' }}
         continue-on-error: true
         working-directory: main_repo
         run: |
-          mkdir -p "plots/briefing/${{ inputs.date_str }}"
-          mv ws_scripts/*.png "plots/briefing/${{ inputs.date_str }}/" 2>/dev/null || true
+          mkdir -p "plots/briefing/${{ env.DATE_STR }}"
+          mv ws_scripts/*.png "plots/briefing/${{ env.DATE_STR }}/" 2>/dev/null || true
 
       # ── Stage: ai_briefing (Kenya/Great_Horn-hardcoded, ignores
       # countries input — top up its fixed prerequisites from GCS so
@@ -492,10 +584,10 @@ jobs:
           GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.drive_auth.outputs.access_token }}
         run: |
           python -u publish_briefing_to_drive.py \
-            --file "s2s_briefing_${{ inputs.date_str }}.pptx" \
+            --file "s2s_briefing_${{ env.DATE_STR }}.pptx" \
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
             --subfolder TEST \
-            --emails "${{ inputs.email }}"
+            --emails "${{ env.TEST_EMAIL }}"
 
       # ── Convert NetCDF → JSON and update catalog (local only — never
       # committed/pushed, website_branch is discarded at the end) ──────
@@ -526,12 +618,12 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: test-pipeline-${{ inputs.date_str }}
+          name: test-pipeline-${{ env.DATE_STR }}
           if-no-files-found: warn
           path: |
-            main_repo/plots/**/${{ inputs.date_str }}/**
-            main_repo/prompts/digest_${{ inputs.date_str }}.txt
-            main_repo/s2s_briefing_${{ inputs.date_str }}.pptx
+            main_repo/plots/**/${{ env.DATE_STR }}/**
+            main_repo/prompts/digest_${{ env.DATE_STR }}.txt
+            main_repo/s2s_briefing_${{ env.DATE_STR }}.pptx
 
       - name: Build attachment list
         id: attachments
@@ -598,11 +690,11 @@ jobs:
           server_port: 587
           username: resend
           password: ${{ secrets.RESEND_API_KEY }}
-          subject: "[TEST] S2S Pipeline Run — ${{ inputs.date_str }} (${{ inputs.countries }})"
-          to: ${{ inputs.email }}
+          subject: "[TEST] S2S Pipeline Run — ${{ env.DATE_STR }} (${{ inputs.countries }})"
+          to: ${{ env.TEST_EMAIL }}
           from: "S2S Test Pipeline <info@dashboards.rhizaresearch.org>"
           body: |
-            Test pipeline run for date ${{ inputs.date_str }}, countries: ${{ inputs.countries }}.
+            Test pipeline run for date ${{ env.DATE_STR }}, countries: ${{ inputs.countries }}.
             Shared test deck (Drive TEST folder, not the live briefing folder):
             ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
             ${{ steps.attachments.outputs.note || '' }}
@@ -620,11 +712,11 @@ jobs:
           server_port: 587
           username: resend
           password: ${{ secrets.RESEND_API_KEY }}
-          subject: "[TEST] S2S Pipeline Run — ${{ inputs.date_str }} (${{ inputs.countries }})"
-          to: ${{ inputs.email }}
+          subject: "[TEST] S2S Pipeline Run — ${{ env.DATE_STR }} (${{ inputs.countries }})"
+          to: ${{ env.TEST_EMAIL }}
           from: "S2S Test Pipeline <info@dashboards.rhizaresearch.org>"
           body: |
-            Test pipeline run for date ${{ inputs.date_str }}, countries: ${{ inputs.countries }}.
+            Test pipeline run for date ${{ env.DATE_STR }}, countries: ${{ inputs.countries }}.
             ${{ steps.attachments.outputs.note || '' }}
             Full output: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             Nothing from this run was uploaded to GCS or committed to main/website — this is
