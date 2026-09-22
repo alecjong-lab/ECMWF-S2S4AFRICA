@@ -1,0 +1,91 @@
+# Fast pre-merge checks. Deliberately cheap: no ECMWF/GCS credentials, no data
+# download, no plotting. The point is to catch the class of mistake that would
+# otherwise first surface at 00:16 UTC in daily_download2.0.yml, in front of
+# subscribers -- a syntax error, an unparseable workflow, a broken import.
+#
+# This is gate 1 of the promotion path. It does NOT prove the pipeline produces
+# correct output; only a test_pipeline.yml run on a real date does that.
+name: Checks
+
+on:
+  pull_request:
+    branches: [dev, main]
+  workflow_dispatch:
+
+# A new push to the PR makes the in-flight run irrelevant.
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: Syntax and workflow lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Compiles every tracked .py without importing it -- plot_s2s.py and
+      # plot_gefs.py run the whole pipeline at module level, so importing them
+      # here is not an option.
+      - name: Python syntax
+        run: git ls-files -z '*.py' | xargs -0 python -m py_compile
+
+      # ws_scripts/*.sh run unattended in production; `bash -n` parses without
+      # executing.
+      - name: Shell syntax
+        run: |
+          status=0
+          while IFS= read -r -d '' script; do
+            bash -n "$script" || { echo "::error file=$script::does not parse"; status=1; }
+          done < <(git ls-files -z '*.sh')
+          exit $status
+
+      - name: Lint workflows
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          # -shellcheck= / -pyflakes= disable the embedded linters. They report 31
+          # pre-existing style findings (SC2086, SC2129, ...) across the four big
+          # workflows; turning them on would make this check red on arrival. Worth
+          # enabling once those are cleaned up.
+          #
+          # The two -ignore patterns are known, accepted findings:
+          #   1. setup-python@v4 is flagged as too old to run on GitHub Actions.
+          #      This is real and worth fixing (bump to v5 in all five workflows),
+          #      but it is not this PR's job. Delete the ignore once bumped.
+          #   2. actionlint enforces a 10-input cap on workflow_dispatch;
+          #      test_pipeline.yml has 14 and test_ws_slides.yml has 16, and both
+          #      dispatch fine in practice.
+          ./actionlint -color -shellcheck= -pyflakes= \
+            -ignore 'the runner of "actions/setup-python@v4" action is too old' \
+            -ignore 'maximum number of inputs for "workflow_dispatch" event'
+
+  imports:
+    name: Shared library imports
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # get_ECMWF_functions is imported as `gef` by nearly every pipeline script,
+      # so importing it exercises the whole cartopy/xarray/regionmask stack and
+      # catches a bad import or a module-level error before the nightly run does.
+      # Only modules guarded by `if __name__ == "__main__"` are safe to import.
+      - name: Import get_ECMWF_functions
+        env:
+          MPLBACKEND: Agg
+        run: python -c "import get_ECMWF_functions; print('get_ECMWF_functions imported OK')"
