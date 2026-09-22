@@ -723,13 +723,14 @@ jobs:
           to: ${{ matrix.emails }}
           from: "${{ matrix.country }} Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            Today's Kenya S2S briefing is a shared Google Slides deck:
+            Your Kenya S2S briefing for ${{ steps.ecmwf_date.outputs.date }} is available here:
             ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
-            Please comment on that deck rather than a local copy.
-            Latest expert analysis deck:
+            The latest expert analysis deck is available here:
             ${{ steps.manual_deck.outputs.deck_url || '(none found)' }}
+            These are shared Google Slide Decks; you are welcome to leave comments.
             You can browse the full plot archive (except station data) at
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
+            Deck highlights are also included as direct attachments: ${{ steps.attachments.outputs.list }}
           reply_to: genevieve@rhizaresearch.org
           attachments: ${{ steps.attachments.outputs.list }}
 
