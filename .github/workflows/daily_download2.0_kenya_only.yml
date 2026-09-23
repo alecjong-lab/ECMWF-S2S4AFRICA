@@ -324,6 +324,34 @@ jobs:
           DATE_STR: "${{ inputs.date_str }}"
           COUNTRY: Kenya
 
+      # ── Briefing prerequisites this workflow cannot produce ───────
+      # ai_weather_briefing.py is Kenya/Great_Horn-hardcoded, but this workflow
+      # runs with COUNTRIES=Kenya and no ws_scripts, so two of its figure trees
+      # can never exist locally no matter what inputs are given:
+      #   - plots/Great_Horn/.../chance_of_above_or_below.png is a *required*
+      #     picture; without it the script exits 1 before prs.save() and no
+      #     .pptx is written at all (the step is continue-on-error, so that
+      #     failure is silent and the email just goes out with no deck).
+      #   - plots/briefing/<date>/*.png are the ws_scripts/skills plots. Missing
+      #     ones are tolerated (blank placeholder), so this only improves the
+      #     deck rather than unblocking it.
+      # Deliberately not gated on force_all, unlike "Restore completed stages
+      # from GCS" above: force_all means "regenerate what this workflow can
+      # build", and it cannot build either of these.
+      - name: Top up briefing prerequisites from GCS
+        continue-on-error: true
+        working-directory: main_repo
+        env:
+          DATE_STR: ${{ inputs.date_str }}
+        run: |
+          for rel in \
+            "plots/Great_Horn/${DATE_STR}" \
+            "plots/briefing/${DATE_STR}"
+          do
+            mkdir -p "$rel"
+            gcloud storage rsync -r "gs://${BUCKET}/${rel}" "$rel" || true
+          done
+
       - name: Generate AI weather briefing
         continue-on-error: true
         working-directory: main_repo
