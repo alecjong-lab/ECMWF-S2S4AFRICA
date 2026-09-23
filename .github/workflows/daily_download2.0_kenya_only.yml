@@ -54,6 +54,10 @@ jobs:
       TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
       EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
       EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+      # uvx unpacks forecasting-skills into UV_CACHE_DIR; uv 0.11 then
+      # refuses `uv run --script` on those bundled skill scripts unless
+      # project discovery is off.
+      UV_NO_PROJECT: "1"
 
     steps:
       - name: Checkout repo
@@ -324,33 +328,183 @@ jobs:
           DATE_STR: "${{ inputs.date_str }}"
           COUNTRY: Kenya
 
-      # ── Briefing prerequisites this workflow cannot produce ───────
-      # ai_weather_briefing.py is Kenya/Great_Horn-hardcoded, but this workflow
-      # runs with COUNTRIES=Kenya and no ws_scripts, so two of its figure trees
-      # can never exist locally no matter what inputs are given:
-      #   - plots/Great_Horn/.../chance_of_above_or_below.png is a *required*
-      #     picture; without it the script exits 1 before prs.save() and no
-      #     .pptx is written at all (the step is continue-on-error, so that
-      #     failure is silent and the email just goes out with no deck).
-      #   - plots/briefing/<date>/*.png are the ws_scripts/skills plots. Missing
-      #     ones are tolerated (blank placeholder), so this only improves the
-      #     deck rather than unblocking it.
-      # Deliberately not gated on force_all, unlike "Restore completed stages
-      # from GCS" above: force_all means "regenerate what this workflow can
-      # build", and it cannot build either of these.
+      # ── Briefing prerequisites, and the ws_scripts that make them ────
+      # ai_weather_briefing.py reads two date-keyed trees with DIFFERENT dates
+      # (see ai_weather_briefing.py's _resolve_dates):
+      #   - forecast/diagnostic plots under the lagged ECMWF date (date_str input)
+      #   - ws_scripts/skills plots under *today*, because those are latest-
+      #     observation products and carry no 2-day forecast lag
+      # so BRIEFING_DATE below is today, not the date_str input, and the
+      # briefing step is given DATE_STR=today + ECMWF_DATE_STR=date_str exactly
+      # as daily_download2.0.yml does.
+      - name: Get briefing date
+        id: briefing_date
+        run: echo "date=$(date -u +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      # Great_Horn is fetched because ai_weather_briefing.py is
+      # Kenya/Great_Horn-hardcoded while this workflow runs COUNTRIES=Kenya, so
+      # plots/Great_Horn/.../chance_of_above_or_below.png can never exist
+      # locally -- and it is a *required* picture, so without it the script
+      # exits 1 before prs.save() and writes no .pptx at all (the step is
+      # continue-on-error, so that failure is silent and the email goes out with
+      # no deck). Not gated on force_all: force_all means "regenerate what this
+      # workflow can build", and it cannot build this.
       - name: Top up briefing prerequisites from GCS
         continue-on-error: true
         working-directory: main_repo
         env:
           DATE_STR: ${{ inputs.date_str }}
+          BRIEFING_DATE: ${{ steps.briefing_date.outputs.date }}
         run: |
-          for rel in \
-            "plots/Great_Horn/${DATE_STR}" \
-            "plots/briefing/${DATE_STR}"
-          do
-            mkdir -p "$rel"
-            gcloud storage rsync -r "gs://${BUCKET}/${rel}" "$rel" || true
-          done
+          mkdir -p "plots/Great_Horn/${DATE_STR}" "plots/briefing/${BRIEFING_DATE}"
+          gcloud storage rsync -r "gs://${BUCKET}/plots/Great_Horn/${DATE_STR}" "plots/Great_Horn/${DATE_STR}" || true
+          gcloud storage rsync -r "gs://${BUCKET}/plots/briefing/${BRIEFING_DATE}" "plots/briefing/${BRIEFING_DATE}" || true
+
+      # ── Weather-skills briefing plots (ws_scripts/*.sh) ──────
+      - name: Install uv for ws_scripts
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.20"
+
+      # Same skip-if-already-published idea as "Detect completed stages" above,
+      # but per ws_script rather than per pipeline stage, and against the plots
+      # the rsync just restored. A script re-runs if *any* figure it writes is
+      # missing: they are cheap to redo relative to a blank slide, and several
+      # scripts emit a whole family from one pipeline (last_weeks_forecast_
+      # verification writes 12, one per model x metric). Only figures the deck
+      # actually places are gated on -- a script's other outputs (e.g.
+      # kenya_{aifs,gefs}_prob_above.png) are not in briefing_plot_names and are
+      # not published, so gating on them would re-run the script every time.
+      - name: Detect existing briefing plots
+        id: ws
+        working-directory: main_repo
+        env:
+          BRIEFING_DATE: ${{ steps.briefing_date.outputs.date }}
+          FORCE_ALL: ${{ inputs.force_all }}
+        run: |
+          dir="plots/briefing/${BRIEFING_DATE}"
+          check() {
+            name="$1"; shift
+            if [ "$FORCE_ALL" = "true" ]; then
+              echo "${name}=true" >> "$GITHUB_OUTPUT"
+              echo "run  ${name} (force_all)"
+              return
+            fi
+            missing=""
+            for f in "$@"; do
+              [ -s "$dir/$f" ] || missing="${missing} ${f}"
+            done
+            if [ -n "$missing" ]; then
+              echo "${name}=true" >> "$GITHUB_OUTPUT"
+              echo "run  ${name} -- missing:${missing}"
+            else
+              echo "${name}=false" >> "$GITHUB_OUTPUT"
+              echo "skip ${name} (all figures restored)"
+            fi
+          }
+          check recent_rainfall_observations_kenya chirps_kenya_weekly_rainfall.png chirps_kenya_weekly_anomaly.png
+          check recent_rainfall_observations_eastern_africa chirps_east_africa_weekly_rainfall.png chirps_east_africa_weekly_anomaly.png
+          check recent_observations_station_data tahmo_kenya_cities_rainfall.png tahmo_kenya_cities_temperature.png tahmo_kenya_cities_humidity.png
+          check seasonal_progression kenya_ond_last_week_rainfall_kenya_extent.png kenya_ond_weekly_rainfall_vs_climatology.png kenya_ond_weekly_standardized_anomaly.png
+          check seasonal_progression_vs_analog_years kenya_weekly_rainfall_analog_years.png
+          check equatorial_waves_mjo mjo_rmm_ecmwf.png mjo_rmm_gefs.png
+          check equatorial_waves_iod_enso enso_forecast.png enso_observed.png iod_forecast.png iod_observed.png
+          check itcz_state itcz_africa_latest.png
+          check equatorial_waves_analyses_and_forecasts hovmoller_olr_tropics.png olr_map_africa.png
+          check current_sst_conditions sst_global_oisst_nino_iod.png
+          check last_weeks_forecast_verification kenya_gefs_chirps_verify_5mm.png kenya_gefs_chirps_bias.png kenya_gefs_chirps_mae.png kenya_aifs_chirps_verify_5mm.png kenya_aifs_chirps_bias.png kenya_aifs_chirps_mae.png kenya_ecmwf_chirps_verify_5mm.png kenya_ecmwf_chirps_bias.png kenya_ecmwf_chirps_mae.png kenya_kmsa_chirps_verify_5mm.png kenya_kmsa_chirps_bias.png kenya_kmsa_chirps_mae.png
+          check week1_mae_vs_chirps kenya_week1_mae_vs_chirps_4wk.png
+          check kenya_daily_downscaled_precip kenya_daily_downscaled_precip.png kenya_daily_downscaled_precip_anomaly.png kenya_aifs_daily_precip.png kenya_aifs_daily_precip_anomaly.png kenya_gefs_daily_precip.png kenya_gefs_daily_precip_anomaly.png
+      - name: Run recent_rainfall_observations_kenya.sh
+        if: ${{ steps.ws.outputs.recent_rainfall_observations_kenya == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash recent_rainfall_observations_kenya.sh
+
+      - name: Run recent_rainfall_observations_eastern_africa.sh
+        if: ${{ steps.ws.outputs.recent_rainfall_observations_eastern_africa == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash recent_rainfall_observations_eastern_africa.sh
+
+      - name: Run recent_observations_station_data.sh
+        if: ${{ steps.ws.outputs.recent_observations_station_data == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash recent_observations_station_data.sh
+
+      - name: Run seasonal_progression.sh
+        if: ${{ steps.ws.outputs.seasonal_progression == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash seasonal_progression.sh
+
+      - name: Run seasonal_progression_vs_analog_years.sh
+        if: ${{ steps.ws.outputs.seasonal_progression_vs_analog_years == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        env:
+          ECMWF_DATASTORES_URL: "https://ecds.ecmwf.int/api"
+          ECMWF_DATASTORES_KEY: ${{ secrets.CDSAPI_KEY }}
+        run: bash seasonal_progression_vs_analog_years.sh
+
+      - name: Run equatorial_waves_mjo.sh
+        if: ${{ steps.ws.outputs.equatorial_waves_mjo == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash equatorial_waves_mjo.sh
+
+      - name: Run equatorial_waves_iod_enso.sh
+        if: ${{ steps.ws.outputs.equatorial_waves_iod_enso == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash equatorial_waves_iod_enso.sh
+
+      - name: Run itcz_state.sh
+        if: ${{ steps.ws.outputs.itcz_state == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash itcz_state.sh
+
+      - name: Run equatorial_waves_analyses_and_forecasts.sh
+        if: ${{ steps.ws.outputs.equatorial_waves_analyses_and_forecasts == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash equatorial_waves_analyses_and_forecasts.sh
+
+      - name: Run current_sst_conditions.sh
+        if: ${{ steps.ws.outputs.current_sst_conditions == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash current_sst_conditions.sh
+
+      - name: Run last_weeks_forecast_verification.sh
+        if: ${{ steps.ws.outputs.last_weeks_forecast_verification == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash last_weeks_forecast_verification.sh
+
+      - name: Run week1_mae_vs_chirps.sh
+        if: ${{ steps.ws.outputs.week1_mae_vs_chirps == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash week1_mae_vs_chirps.sh
+
+      - name: Run kenya_daily_downscaled_precip.sh
+        if: ${{ steps.ws.outputs.kenya_daily_downscaled_precip == 'true' }}
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash kenya_daily_downscaled_precip.sh
+
+      # Collected before the briefing step, unlike the analog-years move this
+      # replaces, which sat after it and so could only ever reach the email
+      # attachment. Overwrites anything the rsync restored under the same name.
+      - name: Collect briefing plots
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          mkdir -p "plots/briefing/${{ steps.briefing_date.outputs.date }}"
+          mv ws_scripts/*.png "plots/briefing/${{ steps.briefing_date.outputs.date }}/" 2>/dev/null || true
 
       - name: Generate AI weather briefing
         continue-on-error: true
@@ -360,7 +514,8 @@ jobs:
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          DATE_STR: "${{ inputs.date_str }}"
+          DATE_STR: "${{ steps.briefing_date.outputs.date }}"
+          ECMWF_DATE_STR: "${{ inputs.date_str }}"
           BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
 
       # ── Convert NetCDF → JSON and update catalog ─────────────────
@@ -561,19 +716,6 @@ jobs:
         run: |
           yes | python plot_sat_vs_stations.py --country Kenya
 
-      - name: Collect analog-years briefing plot
-        continue-on-error: true
-        working-directory: main_repo
-        run: |
-          date="${{ inputs.date_str }}"
-          mkdir -p "plots/briefing/${date}"
-          mv ws_scripts/kenya_weekly_rainfall_analog_years.png "plots/briefing/${date}/" 2>/dev/null || true
-          if [ ! -f "plots/briefing/${date}/kenya_weekly_rainfall_analog_years.png" ]; then
-            gcloud storage cp \
-              "gs://${BUCKET}/plots/briefing/${date}/kenya_weekly_rainfall_analog_years.png" \
-              "plots/briefing/${date}/kenya_weekly_rainfall_analog_years.png" || true
-          fi
-
       - name: Upload files as artifact
         uses: actions/upload-artifact@v4
         with:
@@ -656,7 +798,7 @@ jobs:
       - name: Check required attachments exist
         id: check_plots
         run: |
-          date="${{ inputs.date_str }}"
+          date="${{ steps.date.outputs.date }}"
 
           briefing="s2s_briefing_${date}.pptx"
           if [ ! -f "$briefing" ] && [ -f "main_repo/$briefing" ]; then
@@ -718,7 +860,7 @@ jobs:
         id: drive
         continue-on-error: true
         run: |
-          briefing="s2s_briefing_${{ inputs.date_str }}.pptx"
+          briefing="s2s_briefing_${{ steps.date.outputs.date }}.pptx"
           if [ ! -f "$briefing" ] && [ -f "main_repo/$briefing" ]; then
             briefing="main_repo/$briefing"
           fi
