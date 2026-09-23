@@ -46,31 +46,31 @@ on:
         type: boolean
         default: false
       run_download:
-        description: "Download ECMWF S2S + GEFS forecast data — ignored when skills_only is ticked (restored from GCS instead)"
+        description: "Download ECMWF S2S + GEFS forecast data"
         type: boolean
         default: true
       run_plot_s2s:
-        description: "Generate plot_s2s.py weekly/dekadal/monthly plots — ignored when skills_only is ticked (restored from GCS instead)"
+        description: "Generate plot_s2s.py weekly/dekadal/monthly plots"
         type: boolean
         default: true
       run_indian_ocean_state:
-        description: "Generate Indian Ocean state plot — ignored when skills_only is ticked (restored from GCS instead)"
+        description: "Generate Indian Ocean state plot"
         type: boolean
         default: true
       run_climate_indices:
-        description: "Generate climate indices timeseries — ignored when skills_only is ticked (restored from GCS instead)"
+        description: "Generate climate indices timeseries"
         type: boolean
         default: true
       run_plot_gefs:
-        description: "Generate GEFS plots — ignored when skills_only is ticked (restored from GCS instead)"
+        description: "Generate GEFS plots"
         type: boolean
         default: true
       run_downscale_dekade:
-        description: "Perform downscaling — ignored when skills_only is ticked (restored from GCS instead)"
+        description: "Perform downscaling"
         type: boolean
         default: true
       run_rainfall_onset:
-        description: "Run rainfall onset — ignored when skills_only is ticked (restored from GCS instead)"
+        description: "Run rainfall onset"
         type: boolean
         default: true
       run_briefing_slides:
