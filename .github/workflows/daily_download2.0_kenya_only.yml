@@ -14,6 +14,9 @@ on:
         description: "Rebuild every stage instead of skipping the ones already published for this date"
         type: boolean
         default: false
+      preview_email:
+        description: "Send a preview here first; the mailing-list email then waits for approval (kenya-mailing-list environment)"
+        required: true
 
 jobs:
   download:
@@ -684,7 +687,19 @@ jobs:
           path: main_repo/.nuthatch/caches
           key: nuthatch-
 
+      # Reuse today's Kenya TAHMO CSV if the daily run (on main) or an earlier
+      # run on this branch already downloaded it. get_tahmo_data.py's window
+      # ends on the run day, so only a same-day entry is valid (exact key).
+      - name: Restore Kenya TAHMO data
+        id: tahmo_cache
+        if: ${{ !inputs.force_all }}
+        uses: actions/cache/restore@v4
+        with:
+          path: main_repo/private_data/station_data/Kenya/${{ steps.briefing_date.outputs.date }}
+          key: tahmo-Kenya-${{ steps.briefing_date.outputs.date }}
+
       - name: Download TAHMO data
+        if: steps.tahmo_cache.outputs.cache-hit != 'true'
         uses: nick-fields/retry@v3
         continue-on-error: true
         with:
@@ -692,7 +707,15 @@ jobs:
           max_attempts: 2
           command: |
             cd main_repo
-            yes | python get_tahmo_data.py --country Kenya
+            yes | python get_tahmo_data.py --country Kenya --time ${{ steps.briefing_date.outputs.date }}
+
+      - name: Cache Kenya TAHMO data
+        if: steps.tahmo_cache.outputs.cache-hit != 'true' && hashFiles(format('main_repo/private_data/station_data/Kenya/{0}/*.csv', steps.briefing_date.outputs.date)) != ''
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: main_repo/private_data/station_data/Kenya/${{ steps.briefing_date.outputs.date }}
+          key: tahmo-Kenya-${{ steps.briefing_date.outputs.date }}
 
       - name: Download IMERG satellite data
         uses: nick-fields/retry@v3
@@ -790,11 +813,19 @@ jobs:
               f.write(f"matrix={json.dumps({'include': matrix})}\n")
           EOF
 
-  email:
-    needs: build-matrix
-    strategy:
-      matrix: ${{ fromJson(needs.build-matrix.outputs.matrix) }}
+  # Builds the Kenya email once and sends it only to inputs.preview_email. The
+  # Drive deck it uploads is the one the mailing list later gets shared, and its
+  # attachment list / deck links are handed to the `email` job below.
+  preview:
+    needs: download
     runs-on: ubuntu-latest
+    outputs:
+      plots_ok: ${{ steps.check_plots.outputs.plots_ok }}
+      briefing: ${{ steps.check_plots.outputs.briefing }}
+      attachments: ${{ steps.attachments.outputs.list }}
+      drive_file_id: ${{ steps.drive.outputs.drive_file_id }}
+      drive_url: ${{ steps.drive.outputs.drive_url }}
+      deck_url: ${{ steps.manual_deck.outputs.deck_url }}
     steps:
       - name: Get current date
         id: date
@@ -816,10 +847,11 @@ jobs:
 
           briefing="s2s_briefing_${briefing_date}.pptx"
           if [ ! -f "$briefing" ] && [ -f "main_repo/$briefing" ]; then
-            cp "main_repo/$briefing" "$briefing"
+            briefing="main_repo/$briefing"
           fi
           if [ -f "$briefing" ]; then
             echo "plots_ok=true" >> "$GITHUB_OUTPUT"
+            echo "briefing=$briefing" >> "$GITHUB_OUTPUT"
           else
             echo "plots_ok=false" >> "$GITHUB_OUTPUT"
             echo "::warning::Missing weather briefing PowerPoint for Kenya on ${briefing_date} — skipping email."
@@ -880,20 +912,18 @@ jobs:
         if: steps.check_plots.outputs.plots_ok == 'true'
         run: curl https://rclone.org/install.sh | sudo bash
 
+      # Shared with the preview address only; the `email` job shares this same
+      # deck with the mailing list once approved.
       - name: Upload Kenya briefing to Drive and share
         if: steps.check_plots.outputs.plots_ok == 'true'
         id: drive
         continue-on-error: true
         run: |
-          briefing="s2s_briefing_${{ steps.date.outputs.date }}.pptx"
-          if [ ! -f "$briefing" ] && [ -f "main_repo/$briefing" ]; then
-            briefing="main_repo/$briefing"
-          fi
           python -u repo_scripts/publish_briefing_to_drive.py \
-            --file "$briefing" \
+            --file "${{ steps.check_plots.outputs.briefing }}" \
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
             --live \
-            --emails "${{ matrix.emails }}"
+            --emails "${{ inputs.preview_email }}"
 
       - name: Find latest manual analysis deck
         if: steps.check_plots.outputs.plots_ok == 'true'
@@ -902,8 +932,82 @@ jobs:
         run: |
           python -u repo_scripts/find_latest_manual_analysis.py             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"
 
-      - name: Email Kenya briefing
+      - name: Email Kenya briefing preview
         if: steps.check_plots.outputs.plots_ok == 'true'
+        uses: dawidd6/action-send-mail@v16
+        with:
+          server_address: smtp.resend.com
+          server_port: 587
+          username: resend
+          password: ${{ secrets.RESEND_API_KEY }}
+          subject: "[PREVIEW] Daily S2S Outlook"
+          to: ${{ inputs.preview_email }}
+          from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
+          body: |
+            PREVIEW - only sent to you. Approve the "email" job in
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            to send this to the Kenya mailing list.
+            ------------------------------------------------------------
+            Today's Kenya S2S briefing is a shared Google Slides deck:
+            ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            Please comment on that deck rather than a local copy.
+            Latest expert analysis deck:
+            ${{ steps.manual_deck.outputs.deck_url || '(none found)' }}
+            You can browse the full plot archive (except station data) at
+            https://console.cloud.google.com/storage/browser/africa-forecasting-data .
+          reply_to: genevieve@rhizaresearch.org
+          attachments: ${{ steps.attachments.outputs.list }}
+
+  # Waits for a required reviewer on the kenya-mailing-list environment, then
+  # sends exactly what the preview contained (same artifact, same deck).
+  email:
+    needs: [build-matrix, preview]
+    if: needs.preview.outputs.plots_ok == 'true'
+    environment: kenya-mailing-list
+    strategy:
+      matrix: ${{ fromJson(needs.build-matrix.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download files as artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: s2s_data_kenya
+
+      - name: Checkout publish script
+        uses: actions/checkout@v4
+        with:
+          path: repo_scripts
+
+      - name: Auth to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          create_credentials_file: true
+          token_format: "access_token"
+          access_token_scopes: "https://www.googleapis.com/auth/drive"
+          workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
+          service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
+          export_environment_variables: true
+
+      - name: Install rclone
+        if: needs.preview.outputs.drive_file_id == ''
+        run: curl https://rclone.org/install.sh | sudo bash
+
+      # Shares the deck the preview uploaded; uploads fresh only if that failed.
+      - name: Share Kenya briefing on Drive
+        id: drive
+        continue-on-error: true
+        run: |
+          file_id="${{ needs.preview.outputs.drive_file_id }}"
+          if [ -n "$file_id" ]; then
+            src=(--existing-id "$file_id")
+          else
+            src=(--file "${{ needs.preview.outputs.briefing }}" --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" --live)
+          fi
+          python -u repo_scripts/publish_briefing_to_drive.py \
+            "${src[@]}" \
+            --emails "${{ matrix.emails }}"
+
+      - name: Email Kenya briefing
         uses: dawidd6/action-send-mail@v16
         with:
           server_address: smtp.resend.com
@@ -915,11 +1019,11 @@ jobs:
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
             Today's Kenya S2S briefing is a shared Google Slides deck:
-            ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            ${{ needs.preview.outputs.drive_url || steps.drive.outputs.drive_url || '(upload failed)' }}
             Please comment on that deck rather than a local copy.
             Latest expert analysis deck:
-            ${{ steps.manual_deck.outputs.deck_url || '(none found)' }}
+            ${{ needs.preview.outputs.deck_url || '(none found)' }}
             You can browse the full plot archive (except station data) at
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
-          attachments: ${{ steps.attachments.outputs.list }}
+          attachments: ${{ needs.preview.outputs.attachments }}
