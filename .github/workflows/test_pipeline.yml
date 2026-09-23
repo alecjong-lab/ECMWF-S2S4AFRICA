@@ -10,9 +10,9 @@ name: Test Pipeline (manual)
 # stage (download, plot_s2s, Indian Ocean, climate indices, GEFS, downscale,
 # rainfall onset) in one go; those still restore from GCS. Fill ws_scripts
 # with comma-separated stems to rebuild only those briefing plots (blank
-# keeps the current "all except timeseries_verification" set). Tick
-# use_dev_template to point ai_weather_briefing.py at the dev Slides deck
-# instead of the live one. A skipped stage
+# keeps the current "all except timeseries_verification" set).
+# use_dev_template is ON by default here, so ai_weather_briefing.py builds from
+# the dev Slides deck; untick it to test against the live template. A skipped stage
 # pulls its known output for DATE_STR from the (read-only) production GCS
 # bucket instead of regenerating it, so downstream stages/the email still
 # have something to work with. One
@@ -42,35 +42,35 @@ on:
         required: false
         default: "genevieve@rhizaresearch.org"
       skills_only:
-        description: "Skip all non-weather-skills stages (download / plot_s2s / GEFS / downscale / onset / Indian Ocean / climate indices). Still runs ws_scripts + AI briefing; skipped stages restore from GCS."
+        description: "Skip all non-weather-skills stages (download / plot_s2s / GEFS / downscale / onset / Indian Ocean / climate indices). Overrides the per-stage boxes below — they stay ticked in this form but are not honoured. Still runs ws_scripts + AI briefing; skipped stages restore from GCS."
         type: boolean
         default: false
       run_download:
-        description: "Download ECMWF S2S + GEFS forecast data"
+        description: "Download ECMWF S2S + GEFS forecast data — ignored when skills_only is ticked (restored from GCS instead)"
         type: boolean
         default: true
       run_plot_s2s:
-        description: "Generate plot_s2s.py weekly/dekadal/monthly plots"
+        description: "Generate plot_s2s.py weekly/dekadal/monthly plots — ignored when skills_only is ticked (restored from GCS instead)"
         type: boolean
         default: true
       run_indian_ocean_state:
-        description: "Generate Indian Ocean state plot"
+        description: "Generate Indian Ocean state plot — ignored when skills_only is ticked (restored from GCS instead)"
         type: boolean
         default: true
       run_climate_indices:
-        description: "Generate climate indices timeseries"
+        description: "Generate climate indices timeseries — ignored when skills_only is ticked (restored from GCS instead)"
         type: boolean
         default: true
       run_plot_gefs:
-        description: "Generate GEFS plots"
+        description: "Generate GEFS plots — ignored when skills_only is ticked (restored from GCS instead)"
         type: boolean
         default: true
       run_downscale_dekade:
-        description: "Perform downscaling"
+        description: "Perform downscaling — ignored when skills_only is ticked (restored from GCS instead)"
         type: boolean
         default: true
       run_rainfall_onset:
-        description: "Run rainfall onset"
+        description: "Run rainfall onset — ignored when skills_only is ticked (restored from GCS instead)"
         type: boolean
         default: true
       run_briefing_slides:
@@ -86,9 +86,9 @@ on:
         type: boolean
         default: true
       use_dev_template:
-        description: "Build the briefing from the dev Slides template instead of the live one"
+        description: "Build the briefing from the dev Slides template (on by default here; untick to use the live template)"
         type: boolean
-        default: false
+        default: true
       dev_template_id:
         description: "Drive file id of the dev template (blank = the built-in dev deck)"
         required: false
@@ -117,6 +117,39 @@ jobs:
           date="${DATE_STR:-$(date -u +%Y-%m-%d)}"
           echo "DATE_STR=$date" >> "$GITHUB_ENV"
           echo "Using DATE_STR=$date  email=$TEST_EMAIL"
+
+      - name: Show effective stage plan
+        env:
+          SKILLS_ONLY: ${{ inputs.skills_only }}
+        run: |
+          # skills_only overrides every per-stage box below it. The GitHub
+          # workflow_dispatch form has no way to untick one input from another,
+          # so those boxes still read "true" in the UI — this table is what the
+          # run actually does.
+          stage() {
+            if [ "$SKILLS_ONLY" = "true" ]; then
+              echo "| $1 | \`$2\` | skipped (skills_only) → restore from GCS |"
+            elif [ "$2" = "true" ]; then
+              echo "| $1 | \`true\` | run |"
+            else
+              echo "| $1 | \`false\` | skipped → restore from GCS |"
+            fi
+          }
+          {
+            echo "### Effective stage plan (skills_only=$SKILLS_ONLY)"
+            echo
+            echo "| Stage | Box | Effect |"
+            echo "| --- | --- | --- |"
+            stage download            "${{ inputs.run_download }}"
+            stage plot_s2s            "${{ inputs.run_plot_s2s }}"
+            stage indian_ocean_state  "${{ inputs.run_indian_ocean_state }}"
+            stage climate_indices     "${{ inputs.run_climate_indices }}"
+            stage plot_gefs           "${{ inputs.run_plot_gefs }}"
+            stage downscale_dekade    "${{ inputs.run_downscale_dekade }}"
+            stage rainfall_onset      "${{ inputs.run_rainfall_onset }}"
+            echo
+            echo "briefing_slides=${{ inputs.run_briefing_slides }}, ai_briefing=${{ inputs.run_ai_briefing }} (both unaffected by skills_only)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -551,9 +584,9 @@ jobs:
           done
 
       # BRIEFING_TEMPLATE_ID picks which Google Slides deck
-      # ai_weather_briefing.py exports as its pptx template. Tick
-      # use_dev_template to build from the dev deck instead of the live one;
-      # dev_template_id overrides the dev deck for a one-off. Either deck must
+      # ai_weather_briefing.py exports as its pptx template. use_dev_template
+      # defaults ON in this sandbox, so runs use the dev deck unless you untick
+      # it; dev_template_id overrides the dev deck for a one-off. Either deck must
       # be link-viewable or shared with the workflow service account, or the
       # download falls back to the committed WeatherbriefingKenya_template3.pptx
       # (the echo below is how you tell which deck a run actually used).
