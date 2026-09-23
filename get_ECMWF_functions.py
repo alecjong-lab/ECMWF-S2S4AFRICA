@@ -26,7 +26,6 @@ import requests
 from cfgrib.xarray_to_grib import to_grib
 import matplotlib.colors as mcolors
 import xml.etree.ElementTree as ET
-import icechunk
 import operator
 
 colors = ["white","wheat","lightgreen", "green","lightblue", "blue","yellow","orange", "red","purple"]
@@ -2974,6 +2973,7 @@ def load_reforecast(forecast_day, var_group, var, grid='1p5latx1p5lon',
     time ranges, and all_years=True will all make downloads slower and
     use more memory. Start small, then expand once you know what you need.
     """
+    import icechunk
 
     # Pressure levels only make sense for pressure-level variables
     if var_group == 'single' and levels is not None:
