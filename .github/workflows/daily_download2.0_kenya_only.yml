@@ -19,7 +19,7 @@ jobs:
   download:
     runs-on: ubuntu-latest
     env:
-      DATA_BRANCH: main
+      DATA_BRANCH: ${{ github.ref_name }}
       WEBSITE_BRANCH: website
       DATA_DIR: website_data
       OUTPUT_DIR: data
@@ -39,7 +39,9 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          ref: main
+          # Use the branch selected in the Actions "Run workflow" dropdown
+          # (workflow_dispatch default) so this can be rerun from dev. Do not
+          # pin main - that ignored the selected ref and always ran main's code.
           path: main_repo
 
       - name: Check out website branch
@@ -333,7 +335,10 @@ jobs:
         continue-on-error: true
         working-directory: main_repo
         env:
-          DATE_STR: ${{ inputs.date_str }}
+          # ws_scripts/skills plots are keyed to the current date; every other
+          # tree is keyed to the -2 day forecast date. Same split the briefing
+          # step below is given.
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
           BRIEFING_DATE: ${{ steps.briefing_date.outputs.date }}
         run: |
           mkdir -p "plots/Great_Horn/${DATE_STR}" "plots/briefing/${BRIEFING_DATE}"
@@ -501,7 +506,7 @@ jobs:
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           DATE_STR: ${{ steps.briefing_date.outputs.date }}
-          ECMWF_DATE_STR: ${{ inputs.date_str }}
+          ECMWF_DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
 
@@ -624,8 +629,8 @@ jobs:
             --top-level-file ARTIFACTS.md \
             --top-level-max 30
 
-      # ── Commit only the generated index files to main ────────────
-      - name: Commit artifact index to main branch
+      # ── Commit only the generated index files to DATA_BRANCH ─────
+      - name: Commit artifact index
         continue-on-error: true
         run: |
           cd main_repo
@@ -635,9 +640,9 @@ jobs:
           git status
           git diff --cached --stat
           git diff --cached --quiet || git commit -m "Update artifact index [$(date -u +'%Y-%m-%d %H:%M UTC')]"
-          git push origin main
+          git push origin "HEAD:${DATA_BRANCH}"
 
-      - name: Commit model climatology to main branch
+      - name: Commit model climatology
         continue-on-error: true
         run: |
           cd main_repo
@@ -647,7 +652,7 @@ jobs:
           git status
           git diff --cached --stat
           git diff --cached --quiet || git commit -m "Update model climatology cache [$(date -u +'%Y-%m-%d %H:%M UTC')]"
-          git push origin main
+          git push origin "HEAD:${DATA_BRANCH}"
 
       # ── Commit website branch (ncdf data + catalog JSON) ─────────
       - name: Commit website data and catalog
