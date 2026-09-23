@@ -102,6 +102,11 @@ forecast_files = {
     (9, 21): ["ECMWF_tp_forecasts_09-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_27_Great_Horn.nc","September_Dekad3"],
     (10, 1): ["ECMWF_tp_forecasts_10-01-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_28_Great_Horn.nc","October_Dekad1"],
     (10, 11): ["ECMWF_tp_forecasts_10-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_29_Great_Horn.nc","October_Dekad2"],
+    (10, 21): ["ECMWF_tp_forecasts_10-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_30_Great_Horn.nc","October_Dekad3"],
+    (11, 1): ["ECMWF_tp_forecasts_11-01-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_31_Great_Horn.nc","November_Dekad1"],
+    # (11, 11) needs chirpsv3_dekads_2005_2025_32_Great_Horn.nc, which is not in
+    # downscale_data/ yet -- the reforecast half is already there. Adding the key
+    # before the climatology exists makes the (10,21)/(11,1) runs fail on open.
 
 }
 
@@ -186,13 +191,17 @@ if (int(month),int(day)) in forecast_files.keys():
                 rescaled_forecast["latitude"],
             )
 
-            records = np.zeros((districts.shape[0],4))
+            # Near the end of the forecast_files table there are fewer than 4
+            # dekads of climatology left, so rescaled_forecast is shorter than a
+            # full dekadal forecast -- size the record array from the data, not
+            # from a hardcoded 4.
+            dekade_names=[f'ire2026{dekad_index(i)}' for i in fclim_chirps[1]]
+
+            records = np.zeros((districts.shape[0],rescaled_forecast.sizes['step']))
             for i, row in districts.iterrows():
                 ds_masked = rescaled_forecast.where(mask == i)
                 ds_mean = ds_masked.mean({'longitude', 'latitude'}).drop_vars({'year','time','valid_time'})
                 records[i]=ds_mean.tp.values
-
-            dekade_names=[f'ire2026{dekad_index(i)}' for i in fclim_chirps[1]]
             districts_names=df.index
 
             dff=pd.DataFrame(data=records, index=districts_names, columns=dekade_names)
@@ -204,7 +213,9 @@ if (int(month),int(day)) in forecast_files.keys():
             #Generate geotiffs and other file formats
             dirname=f'data/{date_str}/geotifs_kenya/'
             os.makedirs(dirname,exist_ok=True)
-            for i,forecast_timestep in enumerate(data_dekade.step.values):
+            # ds_to_plot carries only the steps that had climatology, which can
+            # be fewer than data_dekade's -- iterate over it, not data_dekade.
+            for i,forecast_timestep in enumerate(ds_to_plot.step.values):
                 fname=f'downscaled_rainfall_forecast_init_{str(data_dekade.time.values)[0:10]}_{fclim_chirps[2][i]}.tif'
 
                 to_save=ds_to_plot.isel(step=i)
