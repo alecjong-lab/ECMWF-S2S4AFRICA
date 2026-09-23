@@ -1,5 +1,29 @@
 name: Kenya-only ECMWF Download
 
+# Kenya-scoped rerun of the daily pipeline for a date whose main run failed
+# part-way. Before any compute, "Detect completed stages" lists what the main run
+# already published to gs://africa-forecasting-data for date_str and turns off
+# every stage whose outputs are all there; "Restore completed stages from GCS"
+# then pulls those outputs back onto disk, because the staging / upload /
+# artifact / email steps at the end of this job read the working tree, not the
+# bucket. A stage whose file list is only partly present is re-run, not patched.
+# Tick force_all to ignore detection and rebuild everything.
+#
+# Two stages are deliberately always-on and not detected:
+#   - download_s2s.py already resumes by itself (ensure_group_zarr skips a store
+#     that is complete locally, else restores it from GCS, else rebuilds it), and
+#     later stages plus crop_kenya_zarr.py need the zarr stores on disk anyway.
+#   - ai_weather_briefing.py writes the .pptx the email attaches, and neither it
+#     nor prompts/digest_*.txt is uploaded to GCS, so there is nothing to detect
+#     or restore.
+#
+# One known gap, harmless (continue-on-error is set throughout, so nothing
+# blocks the run):
+#   - run_rainfall_onset.py's data/<date>/rainfall_onset_s2s_Kenya.nc is never
+#     uploaded either, so a skipped onset stage means ai_weather_briefing.py's
+#     add_onset_from_netcdf call fails and the onset write-up is missing from the
+#     digest. The .pptx and its restored onset plots are unaffected.
+
 permissions:
   contents: write
   id-token: write
@@ -10,12 +34,16 @@ on:
       date_str:
         description: "date_str"
         required: True
+      force_all:
+        description: "Rebuild every stage instead of skipping the ones already published for this date"
+        type: boolean
+        default: false
 
 jobs:
   download:
     runs-on: ubuntu-latest
     env:
-      DATA_BRANCH: main
+      DATA_BRANCH: ${{ github.ref_name }}
       WEBSITE_BRANCH: website
       DATA_DIR: website_data
       OUTPUT_DIR: data
@@ -31,7 +59,9 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          ref: main
+          # Use the branch selected in the Actions "Run workflow" dropdown
+          # (workflow_dispatch default) so this can be rerun from dev. Do not
+          # pin main - that ignored the selected ref and always ran main's code.
           path: main_repo
 
       - name: Check out website branch
@@ -50,6 +80,162 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      # ── Authenticate to Google Cloud (Workload Identity Federation) ──
+      # Done up front rather than next to the uploads: the detect/restore steps
+      # below need gcloud before any compute runs. The upload steps later in the
+      # job reuse this same session.
+      - name: Auth to Google Cloud
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
+          service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
+          export_environment_variables: true
+
+      - name: Setup gcloud
+        continue-on-error: true
+        uses: google-github-actions/setup-gcloud@v2
+
+      # ── Work out which stages the main run already finished ───
+      # Every run_* output is consumed as `!= 'false'`, so if this step itself
+      # fails (no auth, bucket unreachable) the outputs come back empty and the
+      # whole pipeline runs, i.e. exactly the old behaviour.
+      - name: Detect completed stages
+        id: detect
+        continue-on-error: true
+        env:
+          DATE_STR: ${{ inputs.date_str }}
+          FORCE_ALL: ${{ inputs.force_all }}
+        run: |
+          set -uo pipefail
+          manifest=/tmp/gcs_manifest.txt
+          : > "$manifest"
+          if [ "$FORCE_ALL" = "true" ]; then
+            echo "force_all set - rebuilding every stage."
+          else
+            for prefix in \
+              "plots/Kenya/${DATE_STR}" \
+              "plots/diagnostics/${DATE_STR}" \
+              "data/${DATE_STR}/gefs"
+            do
+              gcloud storage ls -r "gs://${BUCKET}/${prefix}/**" >> "$manifest" 2>/dev/null || true
+            done
+          fi
+          echo "Objects already published for ${DATE_STR}: $(wc -l < "$manifest")"
+
+          have()        { grep -qxF "gs://${BUCKET}/$1" "$manifest"; }
+          have_prefix() { grep -q  "^gs://${BUCKET}/$1" "$manifest"; }
+          # A stage counts as done only when every one of its files is in the
+          # bucket; one missing file means the stage is re-run in full.
+          complete() {
+            local f rc=0
+            for f in "$@"; do
+              have "$f" || { echo "    missing $f"; rc=1; }
+            done
+            return $rc
+          }
+
+          K="plots/Kenya/${DATE_STR}"
+          D="plots/diagnostics/${DATE_STR}"
+
+          gefs_ok=false;  have_prefix "data/${DATE_STR}/gefs/gefs_kenya.zarr/" && gefs_ok=true
+
+          echo "IndianOceanState.py:"
+          ios_ok=false
+          complete \
+            "${D}/monthly/ECMWF_s2s_10wind_sst_anomaly_${DATE_STR}.png" \
+            "${D}/weekly/ECMWF_s2s_10wind_sst_anomaly_${DATE_STR}.png" \
+            "${D}/weekly/ECMWF_s2s_tcw_anomaly_${DATE_STR}.png" \
+            "${D}/monthly/ECMWF_s2s_ivt_u_${DATE_STR}.png" \
+            "${D}/weekly/ECMWF_s2s_ivt_u_${DATE_STR}.png" && ios_ok=true
+
+          echo "plot_s2s.py:"
+          s2s_ok=false
+          complete \
+            "${K}/weekly/weekly_precip.png" \
+            "${K}/weekly/weekly_change_in_precip.png" \
+            "${K}/dekadal/dekadal_precip.png" \
+            "${K}/monthly/monthly_precip.png" && s2s_ok=true
+
+          echo "plot_gefs.py:"
+          gefsplot_ok=false
+          complete \
+            "${K}/weekly/gefs_weekly_precip.png" \
+            "${K}/dekadal/gefs_dekade_precip.png" \
+            "${K}/monthly/gefs_monthly_precip.png" && gefsplot_ok=true
+
+          echo "dowscale_dekade.py:"
+          dwn_ok=false
+          complete \
+            "${K}/weekly/weekly_precip_downscaled.png" \
+            "${K}/weekly/weekly_precip_downscaled_clipped.png" \
+            "${K}/dekadal/dekadal_precip_downscaled.png" \
+            "${K}/dekadal/dekadal_precip_downscaled_clipped.png" \
+            "${K}/monthly/monthly_precip_downscaled.png" && dwn_ok=true
+
+          echo "run_rainfall_onset.py:"
+          onset_ok=false
+          complete \
+            "${K}/monthly/onset_s2s.png" \
+            "${K}/monthly/onset_gefs.png" \
+            "${K}/monthly/onset_s2s_climatology.png" && onset_ok=true
+
+          {
+            echo "### Stages detected for ${DATE_STR}"
+            echo
+            echo "| stage | action |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          emit() {   # emit <output-name> <ok-flag> <label>
+            local run="true" action="run"
+            if [ "$2" = true ]; then run="false"; action="skip (restore from GCS)"; fi
+            echo "$1=$run" >> "$GITHUB_OUTPUT"
+            echo "| $3 | $action |" >> "$GITHUB_STEP_SUMMARY"
+            echo "$3: $action"
+          }
+          emit run_gefs_fetch     "$gefs_ok"      "fetch_dynamical.py (GEFS)"
+          emit run_indian_ocean   "$ios_ok"       "IndianOceanState.py"
+          emit run_plot_s2s       "$s2s_ok"       "plot_s2s.py"
+          emit run_plot_gefs      "$gefsplot_ok"  "plot_gefs.py"
+          emit run_downscale      "$dwn_ok"       "dowscale_dekade.py"
+          emit run_rainfall_onset "$onset_ok"     "run_rainfall_onset.py"
+
+      # ── Put the skipped stages' outputs back on disk ──────────────
+      # Restores the whole published plot tree, not just the detected stages, so
+      # products this workflow does not regenerate (EFI/SoT, meteograms, t2m, ...)
+      # also survive into the staging/upload/email steps. Stages that do re-run
+      # overwrite their own files afterwards.
+      - name: Restore completed stages from GCS
+        if: ${{ !inputs.force_all }}
+        continue-on-error: true
+        working-directory: main_repo
+        env:
+          DATE_STR: ${{ inputs.date_str }}
+        run: |
+          mkdir -p "plots/Kenya/${DATE_STR}" "plots/diagnostics/${DATE_STR}" "data/${DATE_STR}"
+          gcloud storage rsync -r "gs://${BUCKET}/plots/Kenya/${DATE_STR}" "plots/Kenya/${DATE_STR}" || true
+          gcloud storage rsync -r "gs://${BUCKET}/plots/diagnostics/${DATE_STR}" "plots/diagnostics/${DATE_STR}" || true
+
+          if [ "${{ steps.detect.outputs.run_gefs_fetch }}" = "false" ]; then
+            mkdir -p "data/${DATE_STR}/gefs"
+            gcloud storage rsync -r "gs://${BUCKET}/data/${DATE_STR}/gefs" "data/${DATE_STR}/gefs" || true
+          fi
+
+          # The downscaled .nc/.tif handoffs are excluded from the main bucket but
+          # do land in the Kenya bucket, so pull them from there instead - that way
+          # "Stage Kenya bucket contents" still re-uploads a complete set when
+          # downscaling was skipped.
+          if [ "${{ steps.detect.outputs.run_downscale }}" = "false" ]; then
+            mkdir -p "data/${DATE_STR}/geotifs_kenya"
+            gcloud storage cp "gs://${KENYA_BUCKET}/${DATE_STR}/data/*Kenya*downscaled*.nc" "data/${DATE_STR}/" || true
+            gcloud storage cp "gs://${KENYA_BUCKET}/${DATE_STR}/data/daily_downscaled_kenya.tif" "data/${DATE_STR}/" || true
+            gcloud storage rsync -r "gs://${KENYA_BUCKET}/${DATE_STR}/data/geotifs_kenya" "data/${DATE_STR}/geotifs_kenya" || true
+          fi
+
+      # download_s2s.py is always run: it resumes per-store from GCS by itself,
+      # and every later stage needs the zarr data on disk regardless.
       - name: Run download script
         uses: nick-fields/retry@v3
         continue-on-error: true
@@ -63,6 +249,7 @@ jobs:
             python download_s2s.py
 
       - name: Fetch forecast
+        if: ${{ steps.detect.outputs.run_gefs_fetch != 'false' }}
         working-directory: main_repo
         run: |
           uv run fetch_dynamical.py \
@@ -73,6 +260,7 @@ jobs:
             --output ./data/${{ inputs.date_str }}/gefs/
         
       - name: Generate Indian Ocean state plot
+        if: ${{ steps.detect.outputs.run_indian_ocean != 'false' }}
         continue-on-error: true
         working-directory: main_repo
         run: |
@@ -81,6 +269,7 @@ jobs:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
 
       - name: Generate plots
+        if: ${{ steps.detect.outputs.run_plot_s2s != 'false' }}
         continue-on-error: true
         working-directory: main_repo
         run: |
@@ -93,6 +282,7 @@ jobs:
           DATE_STR: "${{ inputs.date_str }}"
 
       - name: Generate GEFS plots
+        if: ${{ steps.detect.outputs.run_plot_gefs != 'false' }}
         continue-on-error: true
         working-directory: main_repo
         run: |
@@ -103,6 +293,7 @@ jobs:
           DATE_STR: "${{ inputs.date_str }}"
 
       - name: Perform downscaling
+        if: ${{ steps.detect.outputs.run_downscale != 'false' }}
         continue-on-error: true
         working-directory: main_repo
         run: |
@@ -124,6 +315,7 @@ jobs:
           echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
           
       - name: Run rainfall onset
+        if: ${{ steps.detect.outputs.run_rainfall_onset != 'false' }}
         continue-on-error: true
         working-directory: main_repo
         run: python run_rainfall_onset.py
@@ -162,20 +354,6 @@ jobs:
             --variables   "${{ env.VARIABLES }}" \
             --n-weeks     "${{ env.N_WEEKS }}" \
             --keep        "${{ env.KEEP_FORECASTS }}"
-
-      # ── Authenticate to Google Cloud (Workload Identity Federation) ──
-      - name: Auth to Google Cloud
-        continue-on-error: true
-        uses: google-github-actions/auth@v2
-        with:
-          token_format: 'access_token'
-          workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
-          service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
-          export_environment_variables: true
-
-      - name: Setup gcloud
-        continue-on-error: true
-        uses: google-github-actions/setup-gcloud@v2
 
       # ── Upload public plots to the bucket ─────────────────────────
       - name: Upload plots to GCS
@@ -267,8 +445,11 @@ jobs:
             --top-level-file ARTIFACTS.md \
             --top-level-max 30
 
-      # ── Commit only the generated index files to main ────────────
-      - name: Commit artifact index to main branch
+      # ── Commit only the generated index files, back to the branch this
+      # run was dispatched from ─ a rerun from dev updates dev's index, not
+      # main's. Pushing to a hardcoded main would fail anyway, since checkout
+      # leaves no local main ref when another branch was selected. ────────
+      - name: Commit artifact index
         continue-on-error: true
         run: |
           cd main_repo
@@ -278,7 +459,7 @@ jobs:
           git status
           git diff --cached --stat
           git diff --cached --quiet || git commit -m "Update artifact index [$(date -u +'%Y-%m-%d %H:%M UTC')]"
-          git push origin main
+          git push origin "HEAD:${DATA_BRANCH}"
 
       # ── Commit website branch (ncdf data + catalog JSON) ─────────
       - name: Commit website data and catalog

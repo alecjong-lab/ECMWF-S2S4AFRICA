@@ -21,20 +21,31 @@ prefix=os.environ["MAIN_PATH"]
 
 data_path=f'{prefix}/data/{date_str}'
 
-# data_dekade.nc / data_weekly.nc are written by plot_s2s.py and handed over on
-# local disk -- they are never uploaded to GCS, so a run with plot_s2s skipped
-# (e.g. test_pipeline.yml) can't restore them. Nothing here works without them,
-# so say so and no-op instead of dying on a FileNotFoundError deep in xarray.
-missing=[f for f in (f'data/{date_str}/data_dekade.nc', f'data/{date_str}/data_weekly.nc')
-         if not os.path.isfile(f)]
-if missing:
-    print(f"Skipping downscaling: plot_s2s.py handoff file(s) not found: {', '.join(missing)}. "
-          f"Run plot_s2s.py for {date_str} first.")
+# Everything below is derived from the ECMWF precip zarr, so that store is the
+# only hard requirement. If the download stage didn't produce it there is nothing
+# to downscale, so say so and no-op instead of dying deep inside xarray.
+precip_zarr=f'{data_path}/ECMWF_s2s_precip_{date_str}.zarr'
+if not os.path.isdir(precip_zarr):
+    print(f"Skipping downscaling: {precip_zarr} not found. "
+          f"Run download_s2s.py for {date_str} first.")
     sys.exit(0)
 
-data=xr.open_zarr(f'{data_path}/ECMWF_s2s_precip_{date_str}.zarr',consolidated=True).compute()
+data=xr.open_zarr(precip_zarr,consolidated=True).compute()
 
-data_dekade=xr.open_dataset(f'data/{date_str}/data_dekade.nc')
+# Weekly and dekadal aggregates, derived here rather than read back from the
+# data_weekly.nc / data_dekade.nc that plot_s2s.py writes: those files are never
+# uploaded to GCS, so reading them tied this script to plot_s2s.py having run in
+# the same job. This must stay in step with plot_s2s.py's own derivation of the
+# same two datasets -- if the step selection or accumulation handling changes
+# there, change it here too.
+steps=data.step.values*1e-9/3600
+steps=steps.astype('int')
+dekade = [data.step.values[i] for i in np.where(steps%240==0)[0]]
+weekly=[data.step.values[i] for i in np.where(steps%168==0)[0]]
+
+data_weekly=gef.acum_to_instant(data.sel(step=weekly))
+data_dekade=gef.acum_to_instant(data.sel(step=dekade))
+
 month=int(data_dekade.time.dt.month.values)
 day=int(data_dekade.time.dt.day.values)
 
@@ -263,8 +274,6 @@ for country in countries_to_downscale:
         while day <= last_day:
             all_dates.append(day)
             day += timedelta(days=2)
-
-    data_weekly=xr.open_dataset(f'data/{date_str}/data_weekly.nc')
 
     dates=[pd.to_datetime(str(date)[:10])- timedelta(days=7) for date in data_weekly.valid_time.values]
 
