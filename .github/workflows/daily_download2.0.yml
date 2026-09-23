@@ -5,8 +5,11 @@ permissions:
   id-token: write
 
 on:
-  schedule:
-   - cron: "33 02 * * *" # every day at 02:33 UTC
+  # Scheduling moved off GitHub: an external cron POSTs to the REST
+  # workflow_dispatch endpoint for this file instead. Re-enable this block
+  # only if that external trigger goes away, or the pipeline will run twice.
+  # schedule:
+  #  - cron: "33 02 * * *" # every day at 02:33 UTC
   workflow_dispatch:
 
 jobs:
