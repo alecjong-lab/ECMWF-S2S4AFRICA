@@ -2973,6 +2973,7 @@ def load_reforecast(forecast_day, var_group, var, grid='1p5latx1p5lon',
     time ranges, and all_years=True will all make downloads slower and
     use more memory. Start small, then expand once you know what you need.
     """
+    import icechunk
 
     import icechunk
 
