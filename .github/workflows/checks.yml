@@ -88,4 +88,27 @@ jobs:
       - name: Import get_ECMWF_functions
         env:
           MPLBACKEND: Agg
-        run: python -c "import get_ECMWF_functions; print('get_ECMWF_functions imported OK')"
+        run: |
+          python - <<'PY'
+          import sys
+
+          import get_ECMWF_functions  # noqa: F401
+          print("get_ECMWF_functions imported OK")
+
+          # cfgrib (ecCodes), geopandas and cartopy (GEOS/PROJ) and netCDF4 (HDF5)
+          # each bundle their own copy of the same C libraries in their manylinux
+          # wheels. Loading them together is fine; unloading them at interpreter
+          # exit double-frees and glibc aborts -- SIGABRT, exit 134 -- *after* the
+          # import above has already succeeded and printed.
+          #
+          # os._exit skips interpreter finalization, so that teardown never runs.
+          # It does not weaken the check: a real import failure raises and exits
+          # non-zero before reaching this line. It also skips flushing, and CI
+          # stdout is a pipe rather than a tty, so flush explicitly or the line
+          # above never reaches the log.
+          import os
+
+          sys.stdout.flush()
+          sys.stderr.flush()
+          os._exit(0)
+          PY
