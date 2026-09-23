@@ -6,9 +6,12 @@
 #   kenya_daily_downscaled_precip[_anomaly]  — KMSA daily downscale
 #   kenya_aifs_daily_precip[_anomaly]        — dynamical.org AIFS-ENS
 #   kenya_gefs_daily_precip[_anomaly]        — dynamical.org GEFS 35-day
+#   kenya_aifs_prob_above                    — AIFS-ENS P(above climatology)
+#   kenya_gefs_prob_above                    — GEFS P(above climatology)
 #
 # Output stems must stay as above so the briefing template pictures
-# (and ai_weather_briefing.py) still match these slides.
+# (and ai_weather_briefing.py) still match these slides. KMSA has no
+# ensemble members in precip_downscaled_daily, so it has no prob panel.
 set -eo pipefail
 
 # shellcheck source=./_portable_date.sh
@@ -148,16 +151,26 @@ write_patch() {
 
 plot_sond() {
   local input="$1" output="$2" title="$3" cbar="$4" patch="$5" cmap="$6"
-  local titles=() i
+  local vmin="$7" vmax="$8" var="$9"
+  local titles=() i bounds=() src=()
   for i in "${!MONDAYS[@]}"; do
     titles+=(--subplot-title "$(week_label $((i + 1)) "${MONDAYS[$i]}")")
   done
-  $S plot -i "$input" -o "$output" \
+  [[ -n "$vmin" ]] && bounds+=(--vmin "$vmin")
+  [[ -n "$vmax" ]] && bounds+=(--vmax "$vmax")
+
+  if [[ -n "$var" ]]; then
+    src=(--layer "heatmap:${input}::variable=${var}")
+  else
+    src=(-i "$input")
+  fi
+  $S plot "${src[@]}" -o "$output" \
     --rows 4 --columns 4 --fontsize 20 \
     --colormap "$cmap" \
     --title "$title" \
     --cbar-label "$cbar" \
     "${titles[@]}" \
+    "${bounds[@]}" \
     --patch "$patch"
 }
 
@@ -228,12 +241,17 @@ build_hybrid() {
       ;;
   esac
 
-  local days=()
+  local days=() n_days=0
   d="$fcst_start"
   while [[ "$d" < "$sun" || "$d" == "$sun" ]]; do
     days+=(--value "$d")
+    n_days=$((n_days + 1))
     d=$(pydate "${d} +1 days" %Y-%m-%d)
   done
+
+  if (( n_days == 1 )); then
+    days+=(--value "$d")
+  fi
   $S select --dim time "${days[@]}" \
       -i "$IR/${src}_hyb_named.zarr" -o "$IR/${src}_hyb_fcst.zarr"
   $S concat --dim time \
@@ -332,6 +350,79 @@ prep_dynamical_daily() {
   $S rename -v precipitation_surface --to-name precip \
       -i "$IR/${stem}_time.zarr" -o "$IR/${stem}_named.zarr"
   $S unit-convert --to-standard -i "$IR/${stem}_named.zarr" -o "$IR/${stem}_daily.zarr"
+
+  # Same daily aggregate, but keep `number` (per-member) for probability panels.
+  $S step-to-time -i "$IR/${stem}_1d.zarr" -o "$IR/${stem}_mem_time.zarr"
+  $S rename -v precipitation_surface --to-name precip \
+      -i "$IR/${stem}_mem_time.zarr" -o "$IR/${stem}_mem_named.zarr"
+  $S unit-convert --to-standard \
+      -i "$IR/${stem}_mem_named.zarr" -o "$IR/${stem}_mem_daily.zarr"
+}
+
+# Probability of above-normal rainfall per SOND week, ensemble members only.
+# Reuses the KINDS/MONDAYS classification already set by compose_sond for the
+# same stem, and the same clim_daily.zarr used by make_anomaly, so the dates
+# and grid logic match the precip/anomaly panels exactly. Forecast weeks get
+# a real probability (fraction of members with a positive weekly anomaly);
+# every other week (obs, hybrid, na) is the same all-NaN template used
+# elsewhere, so only forecast panels ever render.
+compute_prob_above() {
+  local stem="$1" dest="$2"
+  local stem_short="${dest%.zarr}"
+  local pieces=()
+
+  # Climatology regridded onto the forecast's native grid ONCE, across the
+  # whole date range (not per week).
+  $S rename -v precip_avg --to-name precip \
+      -i "$IR/clim_daily.zarr" -o "${stem_short}_clim_named.zarr"
+  align_to_chirps "${stem_short}_clim_named.zarr" \
+      "${stem_short}_clim_native.zarr" \
+      "$IR/${stem}_mem_daily.zarr"
+  $S difference -v precip \
+      -i "$IR/${stem}_mem_daily.zarr" -i "${stem_short}_clim_native.zarr" \
+      -o "${stem_short}_anom.zarr"
+
+  $S indicator -v precip --rule "precip sum 7d > 0" --probability \
+      -i "${stem_short}_anom.zarr" -o "${stem_short}_prob_daily.zarr"
+
+  local fcst_vals=() mon
+  for mon in $(kind_mondays forecast); do
+    fcst_vals+=(--value "$mon")
+  done
+  if (( ${#fcst_vals[@]} == 1 )); then
+    # A single-value select drops the `time` dim entirely; pad with the
+    # next day (only the real Monday values ever survive the
+    # final select-by-ORDER below).
+    fcst_vals+=(--value "$(pydate "${mon} +1 days" %Y-%m-%d)")
+  fi
+  if (( ${#fcst_vals[@]} > 0 )); then
+    $S select --dim time "${fcst_vals[@]}" \
+        -i "${stem_short}_prob_daily.zarr" -o "${stem_short}_prob_native.zarr"
+    align_to_chirps "${stem_short}_prob_native.zarr" \
+        "${stem_short}_prob.zarr" \
+        "$IR/chirps_wk_rate.zarr"
+    pieces+=(-i "${stem_short}_prob.zarr")
+  fi
+
+  local na_vals=() na
+  for na in $(kind_mondays obs) $(kind_mondays hybrid) $(kind_mondays na); do
+    na_vals+=(--value "$na")
+  done
+  if (( ${#na_vals[@]} > 0 )); then
+    $S select --dim time "${na_vals[@]}" \
+        -i "$IR/nan_wk.zarr" -o "${stem_short}_nan_gaps.zarr"
+    pieces+=(-i "${stem_short}_nan_gaps.zarr")
+  fi
+
+  if (( ${#pieces[@]} == 0 )); then
+    echo "ERROR: $stem produced no forecast weeks for probability panel" >&2
+    exit 1
+  elif (( ${#pieces[@]} == 1 )); then
+    $S select --dim time "${ORDER[@]}" "${pieces[@]}" -o "$dest"
+  else
+    $S concat --dim time "${pieces[@]}" -o "${stem_short}_unsorted.zarr"
+    $S select --dim time "${ORDER[@]}" -i "${stem_short}_unsorted.zarr" -o "$dest"
+  fi
 }
 
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
@@ -414,6 +505,15 @@ plot_sond \
     "$IR/kenya_aifs_wk.patch.json" \
     ppt_anom_week
 
+compute_prob_above kenya_aifs "$IR/kenya_aifs_prob.zarr"
+plot_sond \
+    "$IR/kenya_aifs_prob.zarr" \
+    kenya_aifs_prob_above.png \
+    'Probability of Above-Normal Rainfall - AIFS-ENS Forecast' \
+    'P(above climatology)' \
+    "$IR/kenya_aifs_wk.patch.json" \
+    "brown,wheat,white,lightgreen,green" 0 1 probability
+
 prep_dynamical_daily noaa-gefs-forecast-35-day kenya_gefs
 compose_sond gefs "$IR/kenya_gefs_daily.zarr" precip "$IR/kenya_gefs_wk.zarr"
 plot_sond \
@@ -431,3 +531,12 @@ plot_sond \
     'Weekly rainfall anomaly (mm)' \
     "$IR/kenya_gefs_wk.patch.json" \
     ppt_anom_week
+
+compute_prob_above kenya_gefs "$IR/kenya_gefs_prob.zarr"
+plot_sond \
+    "$IR/kenya_gefs_prob.zarr" \
+    kenya_gefs_prob_above.png \
+    'Probability of Above-Normal Rainfall - GEFS Forecast' \
+    'P(above climatology)' \
+    "$IR/kenya_gefs_wk.patch.json" \
+    "brown,wheat,white,lightgreen,green" 0 1 probability
