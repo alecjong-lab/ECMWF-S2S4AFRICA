@@ -21,6 +21,10 @@ on:
 jobs:
   download:
     runs-on: ubuntu-latest
+    # The preview job reuses this instead of re-reading the clock, so a run that
+    # crosses midnight UTC still looks for the briefing/ws plots it just built.
+    outputs:
+      briefing_date: ${{ steps.briefing_date.outputs.date }}
     env:
       DATA_BRANCH: ${{ github.ref_name }}
       WEBSITE_BRANCH: website
@@ -226,6 +230,9 @@ jobs:
         continue-on-error: true
         env:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
+          # Without this download_s2s.py falls back to today-2, which differs
+          # from the plotting stages' date whenever date_str isn't today-2.
+          DATE_STR: ${{ inputs.date_str }}
         with:
           timeout_minutes: 45
           max_attempts: 3
@@ -827,9 +834,9 @@ jobs:
       drive_url: ${{ steps.drive.outputs.drive_url }}
       deck_url: ${{ steps.manual_deck.outputs.deck_url }}
     steps:
-      - name: Get current date
+      - name: Get briefing date
         id: date
-        run: echo "date=$(date -u +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        run: echo "date=${{ needs.download.outputs.briefing_date }}" >> $GITHUB_OUTPUT
 
       - name: Get ECMWF lagged date
         id: ecmwf_date
