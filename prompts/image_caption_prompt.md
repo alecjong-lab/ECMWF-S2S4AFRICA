@@ -100,10 +100,12 @@ trailing ~30-day daily station observations, one line per named city (Nairobi, M
 Kisumu, Nakuru, Eldoret). Describe relative levels/trends between cities, not a spatial
 pattern — there is no map here.
 
-**L. Model-vs-CHIRPS skill verification grids** (`kenya_{ecmwf,kmsa,aifs,gefs}_chirps_verify_5mm`,
+**L. Model-vs-CHIRPS skill verification grids** (`kenya_{ecmwf,kmsa,aifs,gefs,cumulus}_chirps_verify_5mm`,
 plus matching `_bias` / `_mae` for each model): a multi-column
 grid, observation then one column per forecast lead week (1-4; AIFS may have
-fewer because it is ~15-day), each column labeled with its own init date, all
+fewer because it is ~15-day, and Cumulus AI may have fewer still because its
+published init history only goes back a few weeks), each column labeled with
+its own init date, all
 verified against the same observed week (CHIRPS, given in the title). The
 `_verify_5mm` files are hits/exceedance at a 5 mm weekly threshold;
 `_bias` is forecast minus observed; `_mae` is mean absolute error. Identify the model
@@ -111,8 +113,9 @@ and metric from the title and describe how that metric changes across lead
 weeks (i.e. across columns), which is the actual skill-degradation story here.
 `kenya_week1_mae_vs_chirps_4wk` is a grouped-bar timeseries (not a map grid) of
 week-1 MAE versus CHIRPS over Kenya for AIFS-ENS, ECMWF ENS (IFS 15-day), ECMWF ER (S2S),
-KMSA downscaled, and GEFS — one bar group per Monday week for the last four
-complete verifying weeks. Compare models and how error changes across those
+KMSA downscaled, GEFS, and Cumulus AI — one bar group per Monday week for the last four
+complete verifying weeks (Cumulus AI's bar may be missing for older weeks it hasn't
+published yet). Compare models and how error changes across those
 weeks, not across lead weeks.
 
 **M. MJO RMM phase diagrams** (`mjo_rmm_gefs`, `mjo_rmm_ecmwf`): a phase-space diagram
