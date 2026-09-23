@@ -8,8 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       date_str:
-        description: "date_str"
-        required: True
+        description: "Run date YYYY-MM-DD. Blank uses today UTC. The ECMWF model date is two days earlier."
+        required: false
+        default: ""
       force_all:
         description: "Rebuild every stage instead of skipping the ones already published for this date"
         type: boolean
@@ -25,6 +26,7 @@ jobs:
     # crosses midnight UTC still looks for the briefing/ws plots it just built.
     outputs:
       briefing_date: ${{ steps.briefing_date.outputs.date }}
+      ecmwf_date: ${{ steps.ecmwf_date.outputs.date }}
     env:
       DATA_BRANCH: ${{ github.ref_name }}
       WEBSITE_BRANCH: website
@@ -84,6 +86,34 @@ jobs:
         continue-on-error: true
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Resolve run and ECMWF dates
+        id: dates
+        env:
+          RUN_DATE_IN: ${{ inputs.date_str }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+          from datetime import datetime, timedelta, timezone
+
+          raw = os.environ.get("RUN_DATE_IN", "").strip()
+          if raw:
+              try:
+                  run = datetime.strptime(raw, "%Y-%m-%d").date()
+              except ValueError:
+                  print(f"::error::Run date must be a real YYYY-MM-DD date (got: {raw})")
+                  sys.exit(1)
+          else:
+              run = datetime.now(timezone.utc).date()
+          # Model init lags the run: products for a briefing dated `run`
+          # are the ECMWF forecast from two days earlier.
+          ecmwf = run - timedelta(days=2)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"run_date={run.isoformat()}\n")
+              fh.write(f"ecmwf_date={ecmwf.isoformat()}\n")
+          print(f"Run date {run.isoformat()}; ECMWF model date {ecmwf.isoformat()}")
+          PY
+
       # ── Work out which stages the main run already finished ───
       # Every run_* output is consumed as `!= 'false'`, so if this step itself
       # fails (no auth, bucket unreachable) the outputs come back empty and the
@@ -92,7 +122,7 @@ jobs:
         id: detect
         continue-on-error: true
         env:
-          DATE_STR: ${{ inputs.date_str }}
+          DATE_STR: ${{ steps.dates.outputs.ecmwf_date }}
           FORCE_ALL: ${{ inputs.force_all }}
         run: |
           set -uo pipefail
@@ -199,7 +229,7 @@ jobs:
         continue-on-error: true
         working-directory: main_repo
         env:
-          DATE_STR: ${{ inputs.date_str }}
+          DATE_STR: ${{ steps.dates.outputs.ecmwf_date }}
         run: |
           mkdir -p "plots/Kenya/${DATE_STR}" "plots/diagnostics/${DATE_STR}" "data/${DATE_STR}"
           gcloud storage rsync -r "gs://${BUCKET}/plots/Kenya/${DATE_STR}" "plots/Kenya/${DATE_STR}" || true
@@ -230,9 +260,9 @@ jobs:
         continue-on-error: true
         env:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
-          # Without this download_s2s.py falls back to today-2, which differs
-          # from the plotting stages' date whenever date_str isn't today-2.
-          DATE_STR: ${{ inputs.date_str }}
+          # Model date, not the run date. Without this, download_s2s.py
+          # falls back to today-2 and can miss the resolved ECMWF date.
+          DATE_STR: ${{ steps.dates.outputs.ecmwf_date }}
         with:
           timeout_minutes: 45
           max_attempts: 3
@@ -242,11 +272,11 @@ jobs:
 
       - name: Get briefing date
         id: briefing_date
-        run: echo "date=$(date -u +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        run: echo "date=${{ steps.dates.outputs.run_date }}" >> $GITHUB_OUTPUT
 
       - name: Get ECMWF lagged date
         id: ecmwf_date
-        run: echo "date=${{ inputs.date_str }}" >> $GITHUB_OUTPUT
+        run: echo "date=${{ steps.dates.outputs.ecmwf_date }}" >> $GITHUB_OUTPUT
 
       - name: Fetch forecast
         if: ${{ steps.detect.outputs.run_gefs_fetch != 'false' }}
@@ -586,33 +616,33 @@ jobs:
         continue-on-error: true
         working-directory: main_repo
         run: |
-          STAGE_DIR="kenya_bucket_staging/${{ inputs.date_str }}"
+          STAGE_DIR="kenya_bucket_staging/${{ steps.ecmwf_date.outputs.date }}"
           mkdir -p "$STAGE_DIR"
           for sub in weekly dekadal monthly; do
-            src="plots/Kenya/${{ inputs.date_str }}/$sub"
+            src="plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/$sub"
             if [ -d "$src" ]; then
               mkdir -p "$STAGE_DIR/$sub"
               cp -r "$src"/. "$STAGE_DIR/$sub/"
             fi
           done
           mkdir -p "$STAGE_DIR/data"
-          if [ -d "$OUTPUT_DIR/${{ inputs.date_str }}/gefs" ]; then
+          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/gefs" ]; then
             mkdir -p "$STAGE_DIR/data/gefs"
-            cp -r "$OUTPUT_DIR/${{ inputs.date_str }}/gefs/gefs_kenya.zarr" "$STAGE_DIR/data/gefs/" 2>/dev/null || true
+            cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/gefs/gefs_kenya.zarr" "$STAGE_DIR/data/gefs/" 2>/dev/null || true
           fi
-          if [ -d "$OUTPUT_DIR/${{ inputs.date_str }}/geotifs_kenya" ]; then
-            cp -r "$OUTPUT_DIR/${{ inputs.date_str }}/geotifs_kenya" "$STAGE_DIR/data/"
+          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" ]; then
+            cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" "$STAGE_DIR/data/"
           fi
-          if [ -d "$OUTPUT_DIR/${{ inputs.date_str }}" ]; then
-            find "$OUTPUT_DIR/${{ inputs.date_str }}" -maxdepth 1 \
+          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" ]; then
+            find "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" -maxdepth 1 \
               -type f -iname '*Kenya*downscaled*.nc' \
               -exec cp -v {} "$STAGE_DIR/data/" \;
-            find "$OUTPUT_DIR/${{ inputs.date_str }}" -maxdepth 1 \
+            find "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" -maxdepth 1 \
               -type f -iname 'daily_downscaled_kenya.tif' \
               -exec cp -v {} "$STAGE_DIR/data/" \;
           fi
           python crop_kenya_zarr.py \
-            --data-dir "$OUTPUT_DIR/${{ inputs.date_str }}" \
+            --data-dir "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" \
             --output "$STAGE_DIR/data"
 
       # ── Upload Kenya-only bucket contents ─────────────────────────
@@ -620,9 +650,9 @@ jobs:
         continue-on-error: true
         working-directory: main_repo
         run: |
-          STAGE_DIR="kenya_bucket_staging/${{ inputs.date_str }}"
+          STAGE_DIR="kenya_bucket_staging/${{ steps.ecmwf_date.outputs.date }}"
           if [ -d "$STAGE_DIR" ]; then
-            gcloud storage rsync -r "$STAGE_DIR" "gs://${KENYA_BUCKET}/${{ inputs.date_str }}" --exclude='.*index\.md$'
+            gcloud storage rsync -r "$STAGE_DIR" "gs://${KENYA_BUCKET}/${{ steps.ecmwf_date.outputs.date }}" --exclude='.*index\.md$'
           else
             echo "No Kenya staging directory found, skipping."
           fi
@@ -840,7 +870,7 @@ jobs:
 
       - name: Get ECMWF lagged date
         id: ecmwf_date
-        run: echo "date=${{ inputs.date_str }}" >> $GITHUB_OUTPUT
+        run: echo "date=${{ needs.download.outputs.ecmwf_date }}" >> $GITHUB_OUTPUT
 
       - name: Download files as artifact
         uses: actions/download-artifact@v4
