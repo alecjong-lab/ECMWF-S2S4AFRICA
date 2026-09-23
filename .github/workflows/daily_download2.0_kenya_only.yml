@@ -62,23 +62,18 @@ jobs:
             cd main_repo
             python download_s2s.py
 
+      - name: Get briefing date
+        id: briefing_date
+        run: echo "date=$(date -u +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Get ECMWF lagged date
+        id: ecmwf_date
+        run: echo "date=${{ inputs.date_str }}" >> $GITHUB_OUTPUT
+
       - name: Fetch forecast
         working-directory: main_repo
         run: |
-          uv run fetch_dynamical.py \
-            --dataset noaa-gefs-forecast-35-day\
-            --date ${{ inputs.date_str }} \
-            --countries "Kenya"\
-            --variable precipitation_surface \
-            --output ./data/${{ inputs.date_str }}/gefs/
-        
-      - name: Generate Indian Ocean state plot
-        continue-on-error: true
-        working-directory: main_repo
-        run: |
-          python IndianOceanState.py
-        env:
-          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          uv run fetch_dynamical.py             --dataset noaa-gefs-forecast-35-day            --date ${{ steps.ecmwf_date.outputs.date }}             --countries "Kenya"            --variable precipitation_surface             --output ./data/${{ steps.ecmwf_date.outputs.date }}/gefs/
 
       - name: Generate plots
         continue-on-error: true
@@ -90,7 +85,25 @@ jobs:
           WEBSITE_PATH: ${{ github.workspace }}/website_branch/
           COUNTRIES: "Kenya"
           AI_ACTIVE: 'True'
-          DATE_STR: "${{ inputs.date_str }}"
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
+      - name: Generate Indian Ocean state plot
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python IndianOceanState.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
+      - name: Generate climate indices timeseries
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python climate_indices_timeseries.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
 
       - name: Generate GEFS plots
         continue-on-error: true
@@ -100,7 +113,7 @@ jobs:
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           COUNTRIES: "Kenya"
-          DATE_STR: "${{ inputs.date_str }}"
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
 
       - name: Perform downscaling
         continue-on-error: true
@@ -111,7 +124,111 @@ jobs:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           DEKADE_COUNTRIES: "Kenya"
           WEEK_COUNTRIES: "Kenya"
-          DATE_STR: "${{ inputs.date_str }}"
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
+      - name: Run rainfall onset
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          IFS=',' read -ra countries <<< "$COUNTRIES"
+          for country in "${countries[@]}"; do
+            echo "Rainfall onset: $country"
+            COUNTRY="$country" python run_rainfall_onset.py || true
+          done
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          COUNTRIES: "Kenya"
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
+      - name: Replot precip with shared color scale
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python replot_precip_shared_colorscale.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
+      # ── Weather-skills briefing plots (ws_scripts/*.sh) ──────
+      - name: Install uv for ws_scripts
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.20"
+
+      - name: Run recent_rainfall_observations_kenya.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash recent_rainfall_observations_kenya.sh
+
+      - name: Run recent_rainfall_observations_eastern_africa.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash recent_rainfall_observations_eastern_africa.sh
+
+      - name: Run recent_observations_station_data.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash recent_observations_station_data.sh
+
+      - name: Run seasonal_progression.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash seasonal_progression.sh
+
+      - name: Run seasonal_progression_vs_analog_years.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        env:
+          ECMWF_DATASTORES_URL: "https://ecds.ecmwf.int/api"
+          ECMWF_DATASTORES_KEY: ${{ secrets.CDSAPI_KEY }}
+        run: bash seasonal_progression_vs_analog_years.sh
+
+      - name: Run equatorial_waves_mjo.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash equatorial_waves_mjo.sh
+
+      - name: Run equatorial_waves_iod_enso.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash equatorial_waves_iod_enso.sh
+
+      - name: Run itcz_state.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash itcz_state.sh
+
+      - name: Run equatorial_waves_analyses_and_forecasts.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash equatorial_waves_analyses_and_forecasts.sh
+
+      - name: Run current_sst_conditions.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash current_sst_conditions.sh
+
+      - name: Run last_weeks_forecast_verification.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash last_weeks_forecast_verification.sh
+
+      - name: Run week1_mae_vs_chirps.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash week1_mae_vs_chirps.sh
+
+      - name: Run kenya_daily_downscaled_precip.sh
+        continue-on-error: true
+        working-directory: main_repo/ws_scripts
+        run: bash kenya_daily_downscaled_precip.sh
+
+      - name: Collect briefing plots
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          mkdir -p "plots/briefing/${{ steps.briefing_date.outputs.date }}"
+          mv ws_scripts/*.png "plots/briefing/${{ steps.briefing_date.outputs.date }}/" 2>/dev/null || true
 
       - name: Install rclone
         continue-on-error: true
@@ -122,15 +239,6 @@ jobs:
         run: |
           mkdir -p ~/.config/rclone
           echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
-          
-      - name: Run rainfall onset
-        continue-on-error: true
-        working-directory: main_repo
-        run: python run_rainfall_onset.py
-        env:
-          MAIN_PATH: ${{ github.workspace }}/main_repo/
-          DATE_STR: "${{ inputs.date_str }}"
-          COUNTRY: Kenya
 
       - name: Generate AI weather briefing
         continue-on-error: true
@@ -139,8 +247,9 @@ jobs:
           python ai_weather_briefing.py
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: ${{ steps.briefing_date.outputs.date }}
+          ECMWF_DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          DATE_STR: "${{ inputs.date_str }}"
           BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
 
       # ── Convert NetCDF → JSON and update catalog ─────────────────
@@ -191,7 +300,7 @@ jobs:
           fi
 
       # ── Upload only .zarr stores to the data/ folder ──────────────
-      - name: Upload zarr data to GCS
+      - name: Upload zarr and other data files to GCS
         continue-on-error: true
         working-directory: main_repo
         run: |
@@ -203,6 +312,15 @@ jobs:
               gcloud storage cp -r "$zarr_path" "gs://${BUCKET}/data/${rel_path}"
               # Record ONE line for the whole store, not each internal chunk file —
               # generate_artifact_index.py collapses on ".zarr" to a single folder link.
+              echo "data/${rel_path}" >> ../uploaded_data.txt
+            done
+
+            # Any other file (e.g. .tif geotiffs) outside the .zarr stores, skipping
+            # NetCDF, GRIB, and markdown.
+            find "$OUTPUT_DIR" -type d -iname "*.zarr" -prune -o -type f               ! -iname "*.nc" ! -iname "*.grib" ! -iname "*.idx" ! -iname "*.md"               -print | while read -r file_path; do
+              rel_path="${file_path#"$OUTPUT_DIR"/}"
+              echo "Uploading $file_path -> gs://${BUCKET}/data/${rel_path}"
+              gcloud storage cp "$file_path" "gs://${BUCKET}/data/${rel_path}"
               echo "data/${rel_path}" >> ../uploaded_data.txt
             done
           else
@@ -280,6 +398,18 @@ jobs:
           git diff --cached --quiet || git commit -m "Update artifact index [$(date -u +'%Y-%m-%d %H:%M UTC')]"
           git push origin main
 
+      - name: Commit model climatology to main branch
+        continue-on-error: true
+        run: |
+          cd main_repo
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- m-climate
+          git status
+          git diff --cached --stat
+          git diff --cached --quiet || git commit -m "Update model climatology cache [$(date -u +'%Y-%m-%d %H:%M UTC')]"
+          git push origin main
+
       # ── Commit website branch (ncdf data + catalog JSON) ─────────
       - name: Commit website data and catalog
         continue-on-error: true
@@ -352,19 +482,6 @@ jobs:
         run: |
           yes | python plot_sat_vs_stations.py --country Kenya
 
-      - name: Collect analog-years briefing plot
-        continue-on-error: true
-        working-directory: main_repo
-        run: |
-          date="${{ inputs.date_str }}"
-          mkdir -p "plots/briefing/${date}"
-          mv ws_scripts/kenya_weekly_rainfall_analog_years.png "plots/briefing/${date}/" 2>/dev/null || true
-          if [ ! -f "plots/briefing/${date}/kenya_weekly_rainfall_analog_years.png" ]; then
-            gcloud storage cp \
-              "gs://${BUCKET}/plots/briefing/${date}/kenya_weekly_rainfall_analog_years.png" \
-              "plots/briefing/${date}/kenya_weekly_rainfall_analog_years.png" || true
-          fi
-
       - name: Upload files as artifact
         uses: actions/upload-artifact@v4
         with:
@@ -374,7 +491,7 @@ jobs:
             main_repo/plots/Kenya/*/weekly/weekly_precip.png
             main_repo/plots/Kenya/*/weekly/weekly_precip_downscaled_clipped.png
             main_repo/plots/Kenya/*/weekly/weekly_medium_range_precip.png
-            main_repo/plots/briefing/*/kenya_weekly_rainfall_analog_years.png
+            main_repo/plots/briefing/**/*.png
             main_repo/private_plots/**/*.png
             main_repo/private_data/**/*.csv
             main_repo/prompts/*.txt
@@ -437,7 +554,11 @@ jobs:
     steps:
       - name: Get current date
         id: date
-        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        run: echo "date=$(date -u +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Get ECMWF lagged date
+        id: ecmwf_date
+        run: echo "date=${{ inputs.date_str }}" >> $GITHUB_OUTPUT
 
       - name: Download files as artifact
         uses: actions/download-artifact@v4
@@ -447,9 +568,9 @@ jobs:
       - name: Check required attachments exist
         id: check_plots
         run: |
-          date="${{ inputs.date_str }}"
+          briefing_date="${{ steps.date.outputs.date }}"
 
-          briefing="s2s_briefing_${date}.pptx"
+          briefing="s2s_briefing_${briefing_date}.pptx"
           if [ ! -f "$briefing" ] && [ -f "main_repo/$briefing" ]; then
             cp "main_repo/$briefing" "$briefing"
           fi
@@ -457,20 +578,31 @@ jobs:
             echo "plots_ok=true" >> "$GITHUB_OUTPUT"
           else
             echo "plots_ok=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Missing weather briefing PowerPoint for Kenya on ${date} — skipping email."
+            echo "::warning::Missing weather briefing PowerPoint for Kenya on ${briefing_date} — skipping email."
           fi
 
       - name: Build attachment list for Kenya
         id: attachments
         run: |
-          ecmwf_date="${{ inputs.date_str }}"
+          ecmwf_date="${{ steps.ecmwf_date.outputs.date }}"
           today_date="${{ steps.date.outputs.date }}"
 
-          analog="plots/briefing/${ecmwf_date}/kenya_weekly_rainfall_analog_years.png"
-          if [ ! -f "$analog" ] && [ -f "main_repo/$analog" ]; then
-            analog="main_repo/$analog"
-          fi
-          list="$analog"
+          analog="plots/briefing/${today_date}/kenya_weekly_rainfall_analog_years.png"
+          [ ! -f "$analog" ] && [ -f "main_repo/$analog" ] && analog="main_repo/$analog"
+
+          sst="plots/briefing/${today_date}/sst_global_oisst_nino_iod.png"
+          [ ! -f "$sst" ] && [ -f "main_repo/$sst" ] && sst="main_repo/$sst"
+
+          iod="plots/briefing/${today_date}/iod_forecast.png"
+          [ ! -f "$iod" ] && [ -f "main_repo/$iod" ] && iod="main_repo/$iod"
+
+          ecmwf_dwn="plots/Kenya/${ecmwf_date}/weekly/weekly_precip_downscaled.png"
+          [ ! -f "$ecmwf_dwn" ] && [ -f "main_repo/$ecmwf_dwn" ] && ecmwf_dwn="main_repo/$ecmwf_dwn"
+
+          ecmwf_tercile="plots/Kenya/${ecmwf_date}/weekly/chance_of_above_or_below.png"
+          [ ! -f "$ecmwf_tercile" ] && [ -f "main_repo/$ecmwf_tercile" ] && ecmwf_tercile="main_repo/$ecmwf_tercile"
+
+          list="$analog,$sst,$iod,$ecmwf_dwn,$ecmwf_tercile"
 
           csv="private_data/station_data/Kenya/${today_date}/*.csv"
           if ! compgen -G "$csv" > /dev/null; then
@@ -509,7 +641,7 @@ jobs:
         id: drive
         continue-on-error: true
         run: |
-          briefing="s2s_briefing_${{ inputs.date_str }}.pptx"
+          briefing="s2s_briefing_${{ steps.date.outputs.date }}.pptx"
           if [ ! -f "$briefing" ] && [ -f "main_repo/$briefing" ]; then
             briefing="main_repo/$briefing"
           fi
@@ -519,7 +651,14 @@ jobs:
             --live \
             --emails "${{ matrix.emails }}"
 
-      - name: Email out generated plots for Kenya
+      - name: Find latest manual analysis deck
+        if: steps.check_plots.outputs.plots_ok == 'true'
+        id: manual_deck
+        continue-on-error: true
+        run: |
+          python -u repo_scripts/find_latest_manual_analysis.py             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"
+
+      - name: Email Kenya briefing
         if: steps.check_plots.outputs.plots_ok == 'true'
         uses: dawidd6/action-send-mail@v16
         with:
@@ -534,6 +673,8 @@ jobs:
             Today's Kenya S2S briefing is a shared Google Slides deck:
             ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
             Please comment on that deck rather than a local copy.
+            Latest expert analysis deck:
+            ${{ steps.manual_deck.outputs.deck_url || '(none found)' }}
             You can browse the full plot archive (except station data) at
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
