@@ -334,9 +334,21 @@ def main():
             "test workflows must use --subfolder TEST"
         )
     if subfolder:
-        token = drive_token()
-        folder_id = find_or_create_subfolder(folder_id, subfolder, token)
-        print(f"uploading into subfolder {subfolder} id={folder_id}", file=sys.stderr)
+        try:
+            token = drive_token()
+            folder_id = find_or_create_subfolder(folder_id, subfolder, token)
+            print(f"uploading into subfolder {subfolder} id={folder_id}", file=sys.stderr)
+        except Exception as exc:
+            # Matches the WARNING-and-continue pattern used for metadata
+            # lookup and sharing below: an optional enrichment step (here,
+            # organizing into a named subfolder) should never crash a run
+            # that would otherwise succeed. Falls back to uploading directly
+            # into folder_id (the root), same as --live would.
+            print(
+                f"WARNING: subfolder {subfolder!r} lookup/create failed ({exc}); "
+                "uploading into the folder root instead",
+                file=sys.stderr,
+            )
 
     file_id, drive_url = upload_pptx(local, folder_id)
     # Write the Slides URL before share/metadata so a later API error
