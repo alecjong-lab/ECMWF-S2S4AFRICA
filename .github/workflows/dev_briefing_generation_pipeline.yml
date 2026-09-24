@@ -780,6 +780,10 @@ jobs:
 
       # TEST-TEMPLATE subfolder, never --live: this must never become the
       # deck the real mailing list would see.
+      # Dev/test Drive root — deliberately NOT the live Kenya briefing folder
+      # (1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho, used by the production workflows
+      # and by find_latest_manual_analysis.py below), so this dev run never
+      # creates or touches anything inside the real folder.
       - name: Upload Kenya briefing to Drive and share (TEST-TEMPLATE subfolder)
         if: steps.check_plots.outputs.plots_ok == 'true'
         id: drive
@@ -787,7 +791,7 @@ jobs:
         run: |
           python -u repo_scripts/publish_briefing_to_drive.py \
             --file "${{ steps.check_plots.outputs.briefing }}" \
-            --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
+            --folder-id "1AFfO8YV5i4HRqJvLkU4lwgGWM1fwHu3L" \
             --subfolder TEST-TEMPLATE \
             --emails "${{ steps.recipients.outputs.test_recipients }}"
 
