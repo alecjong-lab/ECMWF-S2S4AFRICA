@@ -19,7 +19,7 @@
 # job pins `ref: dev` so the actual pipeline code that runs is dev's. A
 # manual `workflow_dispatch` run also always uses `ref: dev`, regardless of
 # which branch you pick in the Actions "Run workflow" dropdown.
-name: "Dev: Kenya briefing (full run, test template)"
+name: "Dev Briefing Generation Pipeline"
 
 permissions:
   contents: read
