@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       date_str:
-        description: "Run date YYYY-MM-DD. Blank uses today UTC. The ECMWF model date is two days earlier."
+        description: "Run date YYYY-MM-DD. Blank uses today UTC. The ECMWF model date is two days earlier; if the dynamical.org catalog doesn't have that init yet, this falls back to the CDS/ECDS API for the same date."
         required: false
         default: ""
       force_all:
@@ -253,9 +253,8 @@ jobs:
 
       # download_s2s.py is always run: it resumes per-store from GCS by itself,
       # and every later stage needs the zarr data on disk regardless.
-      # download_s2s.py is always run: it resumes per-store from GCS by itself,
-      # and every later stage needs the zarr data on disk regardless.
-      - name: Run download script
+      - name: Run download script (dynamical.org)
+        id: download_primary
         uses: nick-fields/retry@v3
         continue-on-error: true
         env:
@@ -269,6 +268,27 @@ jobs:
           command: |
             cd main_repo
             python download_s2s.py
+
+      # dynamical.org's catalog occasionally lags the CDS/ECDS store it's
+      # built from. Same model date, same zarr store names/layout (the
+      # dynamical rewrite matched this script's output on purpose), just a
+      # different source — so downstream steps don't need to know which one
+      # ran. `outcome` (not `conclusion`) reflects the real result even
+      # though the step above has continue-on-error: true.
+      - name: Run download script (CDS/ECDS fallback)
+        id: download_fallback
+        if: steps.download_primary.outcome == 'failure'
+        uses: nick-fields/retry@v3
+        continue-on-error: true
+        env:
+          BOUNDING_BOX: "22.5,-21,-34.5,55.5"
+          DATE_STR: ${{ steps.dates.outputs.ecmwf_date }}
+        with:
+          timeout_minutes: 45
+          max_attempts: 3
+          command: |
+            cd main_repo
+            python download_s2s_legacy.py
 
       - name: Get briefing date
         id: briefing_date
