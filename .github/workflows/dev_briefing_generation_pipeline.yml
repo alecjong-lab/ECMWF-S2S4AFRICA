@@ -27,13 +27,11 @@ permissions:
 
 on:
   schedule:
-    # 2 hours after daily_download2.0.yml's intended schedule (that file's
+    # Same time as daily_download2.0.yml's intended schedule (that file's
     # native cron is disabled in favor of an external trigger — see the
-    # comment there; that external trigger's time needs updating to match,
-    # separately, wherever it's configured). This workflow uses a native
-    # GitHub Actions schedule instead since it only needs to be registered
-    # from `main`.
-    - cron: "33 04 * * *" # every day at 04:33 UTC
+    # comment there). This workflow uses a native GitHub Actions schedule
+    # instead since it only needs to be registered from `main`.
+    - cron: "33 02 * * *" # every day at 02:33 UTC
   workflow_dispatch:
     inputs:
       date_str:
