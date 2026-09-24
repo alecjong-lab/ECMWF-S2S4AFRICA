@@ -55,11 +55,57 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Run download script
+      - name: Resolve run and ECMWF dates
+        id: dates
+        run: |
+          python3 - <<'PY'
+          import os
+          from datetime import datetime, timedelta, timezone
+
+          run = datetime.now(timezone.utc).date()
+          # Model init lags the run: products for a briefing dated `run` are
+          # normally the ECMWF forecast from two days earlier. That init is
+          # occasionally not published yet, so the download step falls back
+          # to three days earlier — see "Run download script" below.
+          ecmwf = run - timedelta(days=2)
+          ecmwf_fallback = run - timedelta(days=3)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"run_date={run.isoformat()}\n")
+              fh.write(f"ecmwf_date={ecmwf.isoformat()}\n")
+              fh.write(f"ecmwf_date_fallback={ecmwf_fallback.isoformat()}\n")
+          print(
+              f"Run date {run.isoformat()}; ECMWF model date {ecmwf.isoformat()} "
+              f"(fallback {ecmwf_fallback.isoformat()})"
+          )
+          PY
+
+      - name: Run download script (2-day lag)
+        id: download_primary
         uses: nick-fields/retry@v3
         continue-on-error: true
         env:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
+          DATE_STR: ${{ steps.dates.outputs.ecmwf_date }}
+        with:
+          timeout_minutes: 100
+          max_attempts: 3
+          command: |
+            cd main_repo
+            python download_s2s.py
+
+      # The 2-day init is occasionally not published yet (embargo/ingest lag),
+      # which download_s2s.py reports as a non-zero exit. `outcome` (not
+      # `conclusion`) reflects that real result even though the step above has
+      # continue-on-error: true. Only runs when the primary attempt actually
+      # failed, not when it was skipped for some other reason.
+      - name: Run download script (3-day lag fallback)
+        id: download_fallback
+        if: steps.download_primary.outcome == 'failure'
+        uses: nick-fields/retry@v3
+        continue-on-error: true
+        env:
+          BOUNDING_BOX: "22.5,-21,-34.5,55.5"
+          DATE_STR: ${{ steps.dates.outputs.ecmwf_date_fallback }}
         with:
           timeout_minutes: 100
           max_attempts: 3
@@ -69,11 +115,20 @@ jobs:
 
       - name: Get briefing date
         id: briefing_date
-        run: echo "date=$(date -u +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        run: echo "date=${{ steps.dates.outputs.run_date }}" >> $GITHUB_OUTPUT
 
+      # Every later stage keys off this step's output, not steps.dates directly,
+      # so a successful 3-day fallback carries through to plotting, staging,
+      # and upload consistently instead of leaving them on the failed 2-day date.
       - name: Get ECMWF lagged date
         id: ecmwf_date
-        run: echo "date=$(date -d '2 days ago' +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        run: |
+          if [[ "${{ steps.download_primary.outcome }}" == "failure" ]]; then
+            echo "::warning::ECMWF 2-day lag (${{ steps.dates.outputs.ecmwf_date }}) failed; using 3-day lag (${{ steps.dates.outputs.ecmwf_date_fallback }}) for the rest of this run."
+            echo "date=${{ steps.dates.outputs.ecmwf_date_fallback }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "date=${{ steps.dates.outputs.ecmwf_date }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Fetch forecast
         working-directory: main_repo
