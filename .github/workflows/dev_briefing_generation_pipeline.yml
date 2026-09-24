@@ -45,7 +45,7 @@ on:
       test_recipients:
         description: "Comma-separated test recipients for this dev run (never the real mailing list)"
         required: false
-        default: "genevieve@rhizaresearch.org,mohini@berkeley.edu,alec.jong@gmail.com"
+        default: "genevieve@rhizaresearch.org,mohini@rhizaresearch.org,alec.jong@gmail.com"
 
 jobs:
   download:
@@ -94,10 +94,10 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             force_all="${IN_FORCE_ALL:-true}"
-            recipients="${IN_TEST_RECIPIENTS:-genevieve@rhizaresearch.org,mohini@berkeley.edu,alec.jong@gmail.com}"
+            recipients="${IN_TEST_RECIPIENTS:-genevieve@rhizaresearch.org,mohini@rhizaresearch.org,alec.jong@gmail.com}"
           else
             force_all="true"
-            recipients="genevieve@rhizaresearch.org,mohini@berkeley.edu,alec.jong@gmail.com"
+            recipients="genevieve@rhizaresearch.org,mohini@rhizaresearch.org,alec.jong@gmail.com"
           fi
           echo "force_all=$force_all" >> "$GITHUB_OUTPUT"
           echo "test_recipients=$recipients" >> "$GITHUB_OUTPUT"
