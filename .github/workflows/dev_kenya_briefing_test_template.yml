@@ -104,7 +104,7 @@ jobs:
           echo "Resolved for ${EVENT_NAME}: force_all=$force_all, test_recipients=$recipients"
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -298,11 +298,11 @@ jobs:
 
       - name: Get briefing date
         id: briefing_date
-        run: echo "date=${{ steps.dates.outputs.run_date }}" >> $GITHUB_OUTPUT
+        run: echo "date=${{ steps.dates.outputs.run_date }}" >> "$GITHUB_OUTPUT"
 
       - name: Get ECMWF lagged date
         id: ecmwf_date
-        run: echo "date=${{ steps.dates.outputs.ecmwf_date }}" >> $GITHUB_OUTPUT
+        run: echo "date=${{ steps.dates.outputs.ecmwf_date }}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch forecast
         if: ${{ steps.detect.outputs.run_gefs_fetch != 'false' }}
@@ -667,11 +667,11 @@ jobs:
     steps:
       - name: Get briefing date
         id: date
-        run: echo "date=${{ needs.download.outputs.briefing_date }}" >> $GITHUB_OUTPUT
+        run: echo "date=${{ needs.download.outputs.briefing_date }}" >> "$GITHUB_OUTPUT"
 
       - name: Get ECMWF lagged date
         id: ecmwf_date
-        run: echo "date=${{ needs.download.outputs.ecmwf_date }}" >> $GITHUB_OUTPUT
+        run: echo "date=${{ needs.download.outputs.ecmwf_date }}" >> "$GITHUB_OUTPUT"
 
       - name: Download files as artifact
         uses: actions/download-artifact@v4
