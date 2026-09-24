@@ -10,16 +10,14 @@ name: Test Pipeline (manual)
 # stage (download, plot_s2s, Indian Ocean, climate indices, GEFS, downscale,
 # rainfall onset) in one go; those still restore from GCS. Fill ws_scripts
 # with comma-separated stems to rebuild only those briefing plots (blank
-# keeps the current "all except timeseries_verification" set). A skipped stage
+# keeps the current "all except timeseries_verification" set).
+# use_dev_template is ON by default here, so ai_weather_briefing.py builds from
+# the dev Slides deck; untick it to test against the live template. A skipped stage
 # pulls its known output for DATE_STR from the (read-only) production GCS
 # bucket instead of regenerating it, so downstream stages/the email still
-# have something to work with. Two
-# known gaps, both harmless (continue-on-error is set throughout so nothing
+# have something to work with. One
+# known gap, harmless (continue-on-error is set throughout so nothing
 # blocks the run):
-#   - dowscale_dekade.py reads data/<date>/data_{dekade,weekly}.nc, written
-#     fresh by plot_s2s.py and never uploaded to GCS. Skip plot_s2s while
-#     leaving downscale_dekade on and downscaling no-ops; its plots are then
-#     restored from the bucket instead, same as if you'd turned it off.
 #   - run_rainfall_onset.py's data/<date>/rainfall_onset_s2s_Kenya.nc is never
 #     uploaded to GCS either. Skip rainfall_onset and ai_briefing's Kenya
 #     onset write-up will just be missing from the digest.
@@ -44,7 +42,7 @@ on:
         required: false
         default: "genevieve@rhizaresearch.org"
       skills_only:
-        description: "Skip all non-weather-skills stages (download / plot_s2s / GEFS / downscale / onset / Indian Ocean / climate indices). Still runs ws_scripts + AI briefing; skipped stages restore from GCS."
+        description: "Skip all non-weather-skills stages (download / plot_s2s / GEFS / downscale / onset / Indian Ocean / climate indices). Overrides the per-stage boxes below — they stay ticked in this form but are not honoured. Still runs ws_scripts + AI briefing; skipped stages restore from GCS."
         type: boolean
         default: false
       run_download:
@@ -87,6 +85,14 @@ on:
         description: "Generate AI weather briefing (Kenya/Great_Horn-only, ignores countries input)"
         type: boolean
         default: true
+      use_dev_template:
+        description: "Build the briefing from the dev Slides template (on by default here; untick to use the live template)"
+        type: boolean
+        default: true
+      dev_template_id:
+        description: "Drive file id of the dev template (blank = the built-in dev deck)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -112,6 +118,39 @@ jobs:
           echo "DATE_STR=$date" >> "$GITHUB_ENV"
           echo "Using DATE_STR=$date  email=$TEST_EMAIL"
 
+      - name: Show effective stage plan
+        env:
+          SKILLS_ONLY: ${{ inputs.skills_only }}
+        run: |
+          # skills_only overrides every per-stage box below it. The GitHub
+          # workflow_dispatch form has no way to untick one input from another,
+          # so those boxes still read "true" in the UI — this table is what the
+          # run actually does.
+          stage() {
+            if [ "$SKILLS_ONLY" = "true" ]; then
+              echo "| $1 | \`$2\` | skipped (skills_only) → restore from GCS |"
+            elif [ "$2" = "true" ]; then
+              echo "| $1 | \`true\` | run |"
+            else
+              echo "| $1 | \`false\` | skipped → restore from GCS |"
+            fi
+          }
+          {
+            echo "### Effective stage plan (skills_only=$SKILLS_ONLY)"
+            echo
+            echo "| Stage | Box | Effect |"
+            echo "| --- | --- | --- |"
+            stage download            "${{ inputs.run_download }}"
+            stage plot_s2s            "${{ inputs.run_plot_s2s }}"
+            stage indian_ocean_state  "${{ inputs.run_indian_ocean_state }}"
+            stage climate_indices     "${{ inputs.run_climate_indices }}"
+            stage plot_gefs           "${{ inputs.run_plot_gefs }}"
+            stage downscale_dekade    "${{ inputs.run_downscale_dekade }}"
+            stage rainfall_onset      "${{ inputs.run_rainfall_onset }}"
+            echo
+            echo "briefing_slides=${{ inputs.run_briefing_slides }}, ai_briefing=${{ inputs.run_ai_briefing }} (both unaffected by skills_only)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
@@ -127,7 +166,7 @@ jobs:
           path: website_branch
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -272,10 +311,8 @@ jobs:
           done
 
       # ── Stage: downscale_dekade ─────────────────────────────────────
-      # Needs data/<date>/data_{dekade,weekly}.nc, written fresh by plot_s2s
-      # above and never uploaded to GCS — if plot_s2s was skipped this stage
-      # no-ops, and the restore step below pulls the last published downscaled
-      # plots instead so ai_briefing still has its ECMWF_dwn picture.
+      # Derives its own weekly/dekadal aggregates from the precip zarr, so it
+      # runs whether or not plot_s2s ran in this job.
       - name: Perform downscaling
         if: ${{ inputs.run_downscale_dekade && !inputs.skills_only }}
         continue-on-error: true
@@ -287,10 +324,8 @@ jobs:
           DEKADE_COUNTRIES: ${{ inputs.countries }}
           WEEK_COUNTRIES: ${{ inputs.countries }}
 
-      # Also runs when downscaling was left on but plot_s2s was turned off: the
-      # .nc handoff it needs can't be restored, so it can't have produced anything.
       - name: Restore downscaled plots from GCS
-        if: ${{ !inputs.run_downscale_dekade || !inputs.run_plot_s2s || inputs.skills_only }}
+        if: ${{ !inputs.run_downscale_dekade || inputs.skills_only }}
         continue-on-error: true
         working-directory: main_repo
         run: |
@@ -548,16 +583,24 @@ jobs:
             gcloud storage rsync -r "gs://${BUCKET}/${rel}" "$rel" || true
           done
 
+      # BRIEFING_TEMPLATE_ID picks which Google Slides deck
+      # ai_weather_briefing.py exports as its pptx template. use_dev_template
+      # defaults ON in this sandbox, so runs use the dev deck unless you untick
+      # it; dev_template_id overrides the dev deck for a one-off. Either deck must
+      # be link-viewable or shared with the workflow service account, or the
+      # download falls back to the committed WeatherbriefingKenya_template3.pptx
+      # (the echo below is how you tell which deck a run actually used).
       - name: Generate AI weather briefing
         if: ${{ inputs.run_ai_briefing }}
         continue-on-error: true
         working-directory: main_repo
         run: |
+          echo "briefing template id=$BRIEFING_TEMPLATE_ID (dev=${{ inputs.use_dev_template }})"
           python ai_weather_briefing.py
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
+          BRIEFING_TEMPLATE_ID: ${{ inputs.use_dev_template && (inputs.dev_template_id || '1McY75NyFK8DsSrJGXfFHLN7EMcQPuTX0') || '1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5' }}
           BRIEFING_ALLOW_MISSING_PICTURES: "1"
 
       # Fresh Drive-scoped token immediately before upload. The job-start

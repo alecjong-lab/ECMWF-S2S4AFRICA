@@ -269,7 +269,13 @@ def write_outputs(file_id, drive_url):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--file", required=True, help="Local pptx path")
+    parser.add_argument("--file", help="Local pptx path (required unless --existing-id)")
+    parser.add_argument(
+        "--existing-id",
+        default="",
+        help="Skip the upload and only share this already-uploaded Drive file "
+        "(e.g. the deck a preview run uploaded) with --emails/--editors.",
+    )
     parser.add_argument(
         "--folder-id",
         default=DEFAULT_FOLDER_ID,
@@ -302,8 +308,14 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.existing_id:
+        file_id = args.existing_id
+        write_outputs(file_id, slides_url(file_id))
+        share(file_id, args.editors, args.emails)
+        return
+
     local = args.file
-    if not os.path.isfile(local):
+    if not local or not os.path.isfile(local):
         raise SystemExit(f"briefing file not found: {local}")
 
     folder_id = args.folder_id
@@ -330,9 +342,13 @@ def main():
     # Write the Slides URL before share/metadata so a later API error
     # cannot blank the email.
     write_outputs(file_id, drive_url)
+    share(file_id, args.editors, args.emails)
 
-    editors = _split_emails(args.editors)
-    emails = _split_emails(args.emails)
+
+def share(file_id, editors_raw, emails_raw):
+    drive_url = slides_url(file_id)
+    editors = _split_emails(editors_raw)
+    emails = _split_emails(emails_raw)
     editor_set = {e.lower() for e in editors}
     commenters = [e for e in emails if e.lower() not in editor_set]
     try:

@@ -1,10 +1,37 @@
-name: Kenya-only ECMWF Download
+# Full dev/test run of the Kenya nightly pipeline (mirrors
+# daily_download2.0_kenya_only.yml's `download` + `preview` jobs almost
+# verbatim, including running the real download/plot/briefing code) but:
+#   - defaults to force_all so it actually runs the pipeline instead of
+#     restoring today's outputs from the production GCS bucket
+#   - builds the briefing from the dev/test Google Slides template instead
+#     of the live weather_briefing_kenya_template
+#   - sends the resulting email only to `test_recipients`, never the real
+#     s2s-emails.xlsx mailing list (build-matrix / email / kenya-mailing-list
+#     approval gate are intentionally not part of this workflow)
+#   - never writes to the production GCS buckets or commits to
+#     main/website (those steps are dropped); the Drive deck goes to a
+#     TEST-TEMPLATE subfolder, never the live deck root (--live is never
+#     passed to publish_briefing_to_drive.py)
+#
+# Scheduling: GitHub only reads `schedule:` cron triggers from workflow
+# files on the repo's default branch, so THIS FILE must live on `main` for
+# the cron below to fire at all — even though every checkout step in the
+# job pins `ref: dev` so the actual pipeline code that runs is dev's. A
+# manual `workflow_dispatch` run also always uses `ref: dev`, regardless of
+# which branch you pick in the Actions "Run workflow" dropdown.
+name: "Dev Briefing Generation Pipeline"
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
 
 on:
+  schedule:
+    # Same time as daily_download2.0.yml's intended schedule (that file's
+    # native cron is disabled in favor of an external trigger — see the
+    # comment there). This workflow uses a native GitHub Actions schedule
+    # instead since it only needs to be registered from `main`.
+    - cron: "33 02 * * *" # every day at 02:33 UTC
   workflow_dispatch:
     inputs:
       date_str:
@@ -12,25 +39,22 @@ on:
         required: false
         default: ""
       force_all:
-        description: "Rebuild every stage instead of skipping the ones already published for this date"
+        description: "Rebuild every stage instead of restoring today's outputs from the production GCS bucket. Dev runs default to true so the code actually executes."
         type: boolean
-        default: false
-      preview_email:
-        description: "Send a preview here first; the mailing-list email then waits for approval (kenya-mailing-list environment)"
-        required: true
+        default: true
+      test_recipients:
+        description: "Comma-separated test recipients for this dev run (never the real mailing list)"
+        required: false
+        default: "genevieve@rhizaresearch.org,mohini@berkeley.edu,alec.jong@gmail.com"
 
 jobs:
   download:
     runs-on: ubuntu-latest
-    # The preview job reuses this instead of re-reading the clock, so a run that
-    # crosses midnight UTC still looks for the briefing/ws plots it just built.
     outputs:
       briefing_date: ${{ steps.briefing_date.outputs.date }}
       ecmwf_date: ${{ steps.ecmwf_date.outputs.date }}
+      test_recipients: ${{ steps.run_inputs.outputs.test_recipients }}
     env:
-      DATA_BRANCH: ${{ github.ref_name }}
-      WEBSITE_BRANCH: website
-      DATA_DIR: website_data
       OUTPUT_DIR: data
       BUCKET: africa-forecasting-data
       KENYA_BUCKET: kenya-forecasting-data
@@ -39,6 +63,8 @@ jobs:
       TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
       EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
       EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+      # Dev/test briefing template — NOT the live weather_briefing_kenya_template.
+      DEV_BRIEFING_TEMPLATE_ID: "1McY75NyFK8DsSrJGXfFHLN7EMcQPuTX0"
       # uvx unpacks forecasting-skills into UV_CACHE_DIR; uv 0.11 then
       # refuses `uv run --script` on those bundled skill scripts unless
       # project discovery is off.
@@ -48,16 +74,34 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          # Use the branch selected in the Actions "Run workflow" dropdown
-          # (workflow_dispatch default) so this can be rerun from dev. Do not
-          # pin main - that ignored the selected ref and always ran main's code.
+          # Pinned so both the nightly schedule (which always resolves
+          # github.ref to the default branch) and a manual dispatch always
+          # run dev's code, regardless of this file's own branch.
+          ref: dev
           path: main_repo
 
-      - name: Check out website branch
-        uses: actions/checkout@v4
-        with:
-          ref: website
-          path: website_branch
+      - name: Resolve run inputs
+        # workflow_dispatch input defaults (force_all: true, test_recipients)
+        # only apply when this is dispatched manually; a schedule-triggered
+        # run has no `inputs` context at all, so it needs its own defaults
+        # here to keep the same "always force a full run, always test
+        # recipients only" behavior on the nightly cron.
+        id: run_inputs
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          IN_FORCE_ALL: ${{ inputs.force_all }}
+          IN_TEST_RECIPIENTS: ${{ inputs.test_recipients }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            force_all="${IN_FORCE_ALL:-true}"
+            recipients="${IN_TEST_RECIPIENTS:-genevieve@rhizaresearch.org,mohini@berkeley.edu,alec.jong@gmail.com}"
+          else
+            force_all="true"
+            recipients="genevieve@rhizaresearch.org,mohini@berkeley.edu,alec.jong@gmail.com"
+          fi
+          echo "force_all=$force_all" >> "$GITHUB_OUTPUT"
+          echo "test_recipients=$recipients" >> "$GITHUB_OUTPUT"
+          echo "Resolved for ${EVENT_NAME}: force_all=$force_all, test_recipients=$recipients"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -70,9 +114,6 @@ jobs:
           pip install -r requirements.txt
 
       # ── Authenticate to Google Cloud (Workload Identity Federation) ──
-      # Done up front rather than next to the uploads: the detect/restore steps
-      # below need gcloud before any compute runs. The upload steps later in the
-      # job reuse this same session.
       - name: Auth to Google Cloud
         continue-on-error: true
         uses: google-github-actions/auth@v2
@@ -114,16 +155,16 @@ jobs:
           print(f"Run date {run.isoformat()}; ECMWF model date {ecmwf.isoformat()}")
           PY
 
-      # ── Work out which stages the main run already finished ───
-      # Every run_* output is consumed as `!= 'false'`, so if this step itself
-      # fails (no auth, bucket unreachable) the outputs come back empty and the
-      # whole pipeline runs, i.e. exactly the old behaviour.
+      # ── Work out which stages already have outputs on disk from a
+      # previous step in *this* run. force_all defaults to true for this
+      # dev workflow, so by default every stage below actually runs instead
+      # of being restored from the production bucket.
       - name: Detect completed stages
         id: detect
         continue-on-error: true
         env:
           DATE_STR: ${{ steps.dates.outputs.ecmwf_date }}
-          FORCE_ALL: ${{ inputs.force_all }}
+          FORCE_ALL: ${{ steps.run_inputs.outputs.force_all }}
         run: |
           set -uo pipefail
           manifest=/tmp/gcs_manifest.txt
@@ -143,8 +184,6 @@ jobs:
 
           have()        { grep -qxF "gs://${BUCKET}/$1" "$manifest"; }
           have_prefix() { grep -q  "^gs://${BUCKET}/$1" "$manifest"; }
-          # A stage counts as done only when every one of its files is in the
-          # bucket; one missing file means the stage is re-run in full.
           complete() {
             local f rc=0
             for f in "$@"; do
@@ -219,13 +258,8 @@ jobs:
           emit run_downscale      "$dwn_ok"       "dowscale_dekade.py"
           emit run_rainfall_onset "$onset_ok"     "run_rainfall_onset.py"
 
-      # ── Put the skipped stages' outputs back on disk ──────────────
-      # Restores the whole published plot tree, not just the detected stages, so
-      # products this workflow does not regenerate (EFI/SoT, meteograms, t2m, ...)
-      # also survive into the staging/upload/email steps. Stages that do re-run
-      # overwrite their own files afterwards.
       - name: Restore completed stages from GCS
-        if: ${{ !inputs.force_all }}
+        if: ${{ steps.run_inputs.outputs.force_all != 'true' }}
         continue-on-error: true
         working-directory: main_repo
         env:
@@ -240,10 +274,6 @@ jobs:
             gcloud storage rsync -r "gs://${BUCKET}/data/${DATE_STR}/gefs" "data/${DATE_STR}/gefs" || true
           fi
 
-          # The downscaled .nc/.tif handoffs are excluded from the main bucket but
-          # do land in the Kenya bucket, so pull them from there instead - that way
-          # "Stage Kenya bucket contents" still re-uploads a complete set when
-          # downscaling was skipped.
           if [ "${{ steps.detect.outputs.run_downscale }}" = "false" ]; then
             mkdir -p "data/${DATE_STR}/geotifs_kenya"
             gcloud storage cp "gs://${KENYA_BUCKET}/${DATE_STR}/data/*Kenya*downscaled*.nc" "data/${DATE_STR}/" || true
@@ -251,17 +281,13 @@ jobs:
             gcloud storage rsync -r "gs://${KENYA_BUCKET}/${DATE_STR}/data/geotifs_kenya" "data/${DATE_STR}/geotifs_kenya" || true
           fi
 
-      # download_s2s.py is always run: it resumes per-store from GCS by itself,
-      # and every later stage needs the zarr data on disk regardless.
-      # download_s2s.py is always run: it resumes per-store from GCS by itself,
-      # and every later stage needs the zarr data on disk regardless.
+      # download_s2s.py is always run: it resumes per-store from GCS by
+      # itself, and every later stage needs the zarr data on disk regardless.
       - name: Run download script
         uses: nick-fields/retry@v3
         continue-on-error: true
         env:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
-          # Model date, not the run date. Without this, download_s2s.py
-          # falls back to today-2 and can miss the resolved ECMWF date.
           DATE_STR: ${{ steps.dates.outputs.ecmwf_date }}
         with:
           timeout_minutes: 45
@@ -272,17 +298,22 @@ jobs:
 
       - name: Get briefing date
         id: briefing_date
-        run: echo "date=${{ steps.dates.outputs.run_date }}" >> $GITHUB_OUTPUT
+        run: echo "date=${{ steps.dates.outputs.run_date }}" >> "$GITHUB_OUTPUT"
 
       - name: Get ECMWF lagged date
         id: ecmwf_date
-        run: echo "date=${{ steps.dates.outputs.ecmwf_date }}" >> $GITHUB_OUTPUT
+        run: echo "date=${{ steps.dates.outputs.ecmwf_date }}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch forecast
         if: ${{ steps.detect.outputs.run_gefs_fetch != 'false' }}
         working-directory: main_repo
         run: |
-          uv run fetch_dynamical.py             --dataset noaa-gefs-forecast-35-day            --date ${{ steps.ecmwf_date.outputs.date }}             --countries "Kenya"            --variable precipitation_surface             --output ./data/${{ steps.ecmwf_date.outputs.date }}/gefs/
+          uv run fetch_dynamical.py \
+            --dataset noaa-gefs-forecast-35-day \
+            --date ${{ steps.ecmwf_date.outputs.date }} \
+            --countries "Kenya" \
+            --variable precipitation_surface \
+            --output ./data/${{ steps.ecmwf_date.outputs.date }}/gefs/
 
       - name: Generate plots
         if: ${{ steps.detect.outputs.run_plot_s2s != 'false' }}
@@ -292,7 +323,6 @@ jobs:
           python plot_s2s.py
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
-          WEBSITE_PATH: ${{ github.workspace }}/website_branch/
           COUNTRIES: "Kenya"
           AI_ACTIVE: 'True'
           DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
@@ -363,21 +393,14 @@ jobs:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
 
-      # Great_Horn is fetched because ai_weather_briefing.py is
-      # Kenya/Great_Horn-hardcoded while this workflow runs COUNTRIES=Kenya, so
-      # plots/Great_Horn/.../chance_of_above_or_below.png can never exist
-      # locally -- and it is a *required* picture, so without it the script
-      # exits 1 before prs.save() and writes no .pptx at all (the step is
-      # continue-on-error, so that failure is silent and the email goes out with
-      # no deck). Not gated on force_all: force_all means "regenerate what this
-      # workflow can build", and it cannot build this.
+      # ai_weather_briefing.py is Kenya/Great_Horn-hardcoded while this
+      # workflow runs COUNTRIES=Kenya, so Great_Horn's required picture can
+      # never be produced locally; top it up from GCS (read-only) like the
+      # production workflow does.
       - name: Top up briefing prerequisites from GCS
         continue-on-error: true
         working-directory: main_repo
         env:
-          # ws_scripts/skills plots are keyed to the current date; every other
-          # tree is keyed to the -2 day forecast date. Same split the briefing
-          # step below is given.
           DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
           BRIEFING_DATE: ${{ steps.briefing_date.outputs.date }}
         run: |
@@ -391,21 +414,12 @@ jobs:
         with:
           version: "0.11.20"
 
-      # Same skip-if-already-published idea as "Detect completed stages" above,
-      # but per ws_script rather than per pipeline stage, and against the plots
-      # the rsync just restored. A script re-runs if *any* figure it writes is
-      # missing: they are cheap to redo relative to a blank slide, and several
-      # scripts emit a whole family from one pipeline (last_weeks_forecast_
-      # verification writes 12, one per model x metric). Only figures the deck
-      # actually places are gated on -- a script's other outputs (e.g.
-      # kenya_{aifs,gefs}_prob_above.png) are not in briefing_plot_names and are
-      # not published, so gating on them would re-run the script every time.
       - name: Detect existing briefing plots
         id: ws
         working-directory: main_repo
         env:
           BRIEFING_DATE: ${{ steps.briefing_date.outputs.date }}
-          FORCE_ALL: ${{ inputs.force_all }}
+          FORCE_ALL: ${{ steps.run_inputs.outputs.force_all }}
         run: |
           dir="plots/briefing/${BRIEFING_DATE}"
           check() {
@@ -440,6 +454,7 @@ jobs:
           check last_weeks_forecast_verification kenya_gefs_chirps_verify_5mm.png kenya_gefs_chirps_bias.png kenya_gefs_chirps_mae.png kenya_aifs_chirps_verify_5mm.png kenya_aifs_chirps_bias.png kenya_aifs_chirps_mae.png kenya_ecmwf_chirps_verify_5mm.png kenya_ecmwf_chirps_bias.png kenya_ecmwf_chirps_mae.png kenya_kmsa_chirps_verify_5mm.png kenya_kmsa_chirps_bias.png kenya_kmsa_chirps_mae.png
           check week1_mae_vs_chirps kenya_week1_mae_vs_chirps_4wk.png
           check kenya_daily_downscaled_precip kenya_daily_downscaled_precip.png kenya_daily_downscaled_precip_anomaly.png kenya_aifs_daily_precip.png kenya_aifs_daily_precip_anomaly.png kenya_gefs_daily_precip.png kenya_gefs_daily_precip_anomaly.png
+
       - name: Run recent_rainfall_observations_kenya.sh
         if: ${{ steps.ws.outputs.recent_rainfall_observations_kenya == 'true' }}
         continue-on-error: true
@@ -538,7 +553,7 @@ jobs:
           mkdir -p ~/.config/rclone
           echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
 
-      - name: Generate AI weather briefing
+      - name: Generate AI weather briefing (dev/test template)
         continue-on-error: true
         working-directory: main_repo
         run: |
@@ -548,169 +563,14 @@ jobs:
           DATE_STR: ${{ steps.briefing_date.outputs.date }}
           ECMWF_DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          BRIEFING_TEMPLATE_ID: "1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5"
+          BRIEFING_TEMPLATE_ID: ${{ env.DEV_BRIEFING_TEMPLATE_ID }}
+          BRIEFING_ALLOW_MISSING_PICTURES: "1"
 
-      # ── Convert NetCDF → JSON and update catalog ─────────────────
-      - name: Convert NetCDF and update catalog
-        working-directory: website_branch
-        continue-on-error: true
-        env:
-          NCDF_DIR:       ncdf_data
-          OUTPUT_DIR:     data/weekly
-          CATALOG_PATH:   data/weekly/catalog.json
-          VARIABLES:      "temp,precip,u10,v10,w500,u700,v700,tcw,cape,d2m,mn2t6,mx2t6"
-          N_WEEKS:        "6"
-          KEEP_FORECASTS: "5"
-        run: |
-          python scripts/nc_to_json_and_catalog.py \
-            --ncdf-dir    "${{ env.NCDF_DIR }}" \
-            --output-dir  "${{ env.OUTPUT_DIR }}" \
-            --catalog     "${{ env.CATALOG_PATH }}" \
-            --variables   "${{ env.VARIABLES }}" \
-            --n-weeks     "${{ env.N_WEEKS }}" \
-            --keep        "${{ env.KEEP_FORECASTS }}"
-
-      # ── Upload public plots to the bucket ─────────────────────────
-      - name: Upload plots to GCS
-        continue-on-error: true
-        working-directory: main_repo
-        run: |
-          if [ -d plots ]; then
-            gcloud storage rsync -r plots "gs://${BUCKET}/plots" --exclude='.*index\.md$'
-            find plots -type f ! -name "index.md" > ../uploaded_plots.txt
-          else
-            echo "No plots directory found, skipping."
-            > ../uploaded_plots.txt
-          fi
-
-      # ── Upload only .zarr stores to the data/ folder ──────────────
-      - name: Upload zarr and other data files to GCS
-        continue-on-error: true
-        working-directory: main_repo
-        run: |
-          > ../uploaded_data.txt
-          if [ -d "$OUTPUT_DIR" ]; then
-            find "$OUTPUT_DIR" -type d -iname "*.zarr" | while read -r zarr_path; do
-              rel_path="${zarr_path#"$OUTPUT_DIR"/}"
-              echo "Uploading $zarr_path -> gs://${BUCKET}/data/${rel_path}"
-              gcloud storage cp -r "$zarr_path" "gs://${BUCKET}/data/${rel_path}"
-              # Record ONE line for the whole store, not each internal chunk file —
-              # generate_artifact_index.py collapses on ".zarr" to a single folder link.
-              echo "data/${rel_path}" >> ../uploaded_data.txt
-            done
-
-            # Any other file (e.g. .tif geotiffs) outside the .zarr stores, skipping
-            # NetCDF, GRIB, and markdown.
-            find "$OUTPUT_DIR" -type d -iname "*.zarr" -prune -o -type f               ! -iname "*.nc" ! -iname "*.grib" ! -iname "*.idx" ! -iname "*.md"               -print | while read -r file_path; do
-              rel_path="${file_path#"$OUTPUT_DIR"/}"
-              echo "Uploading $file_path -> gs://${BUCKET}/data/${rel_path}"
-              gcloud storage cp "$file_path" "gs://${BUCKET}/data/${rel_path}"
-              echo "data/${rel_path}" >> ../uploaded_data.txt
-            done
-          else
-            echo "No $OUTPUT_DIR directory found, skipping."
-          fi
-
-      # ── Stage Kenya-only plots, downscaled NetCDF, and cropped zarr data ──
-      - name: Stage Kenya bucket contents
-        continue-on-error: true
-        working-directory: main_repo
-        run: |
-          STAGE_DIR="kenya_bucket_staging/${{ steps.ecmwf_date.outputs.date }}"
-          mkdir -p "$STAGE_DIR"
-          for sub in weekly dekadal monthly; do
-            src="plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/$sub"
-            if [ -d "$src" ]; then
-              mkdir -p "$STAGE_DIR/$sub"
-              cp -r "$src"/. "$STAGE_DIR/$sub/"
-            fi
-          done
-          mkdir -p "$STAGE_DIR/data"
-          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/gefs" ]; then
-            mkdir -p "$STAGE_DIR/data/gefs"
-            cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/gefs/gefs_kenya.zarr" "$STAGE_DIR/data/gefs/" 2>/dev/null || true
-          fi
-          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" ]; then
-            cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" "$STAGE_DIR/data/"
-          fi
-          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" ]; then
-            find "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" -maxdepth 1 \
-              -type f -iname '*Kenya*downscaled*.nc' \
-              -exec cp -v {} "$STAGE_DIR/data/" \;
-            find "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" -maxdepth 1 \
-              -type f -iname 'daily_downscaled_kenya.tif' \
-              -exec cp -v {} "$STAGE_DIR/data/" \;
-          fi
-          python crop_kenya_zarr.py \
-            --data-dir "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" \
-            --output "$STAGE_DIR/data"
-
-      # ── Upload Kenya-only bucket contents ─────────────────────────
-      - name: Upload to Kenya bucket
-        continue-on-error: true
-        working-directory: main_repo
-        run: |
-          STAGE_DIR="kenya_bucket_staging/${{ steps.ecmwf_date.outputs.date }}"
-          if [ -d "$STAGE_DIR" ]; then
-            gcloud storage rsync -r "$STAGE_DIR" "gs://${KENYA_BUCKET}/${{ steps.ecmwf_date.outputs.date }}" --exclude='.*index\.md$'
-          else
-            echo "No Kenya staging directory found, skipping."
-          fi
-
-      # ── Generate markdown index for everything just uploaded ─────
-      - name: Generate markdown index
-        continue-on-error: true
-        run: |
-          cat uploaded_plots.txt uploaded_data.txt > uploaded_files.txt
-          python main_repo/generate_artifact_index.py \
-            --bucket "${BUCKET}" \
-            --repo-root main_repo \
-            --uploaded-list uploaded_files.txt \
-            --top-level-file ARTIFACTS.md \
-            --top-level-max 30
-
-      # ── Commit only the generated index files to DATA_BRANCH ─────
-      - name: Commit artifact index
-        continue-on-error: true
-        run: |
-          cd main_repo
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f -A -- '**/index.md' ARTIFACTS.md
-          git status
-          git diff --cached --stat
-          git diff --cached --quiet || git commit -m "Update artifact index [$(date -u +'%Y-%m-%d %H:%M UTC')]"
-          git push origin "HEAD:${DATA_BRANCH}"
-
-      - name: Commit model climatology
-        continue-on-error: true
-        run: |
-          cd main_repo
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A -- m-climate
-          git status
-          git diff --cached --stat
-          git diff --cached --quiet || git commit -m "Update model climatology cache [$(date -u +'%Y-%m-%d %H:%M UTC')]"
-          git push origin "HEAD:${DATA_BRANCH}"
-
-      # ── Commit website branch (ncdf data + catalog JSON) ─────────
-      - name: Commit website data and catalog
-        continue-on-error: true
-        run: |
-          cd website_branch
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          if git diff --cached --quiet; then
-            echo "No changes to commit on website branch."
-          else
-            git commit -m "chore: update ncdf data and catalog [$(date -u +'%Y-%m-%d %H:%M UTC')]"
-            git push origin website
-          fi
-
-      - name: Remove website worktree
-        run: rm -rf website_branch
+      # NOTE: unlike daily_download2.0_kenya_only.yml, this dev workflow does
+      # NOT upload plots/zarr data to the production GCS buckets, does NOT
+      # stage/upload the Kenya bucket, and does NOT commit the artifact
+      # index, model climatology, or website/catalog data. Those all write
+      # to shared production state and aren't needed to test a template.
 
       # ── Sheerwater / TAHMO / satellite data ──────────────────────
       - name: Install sheerwater dependencies
@@ -724,12 +584,9 @@ jobs:
           path: main_repo/.nuthatch/caches
           key: nuthatch-
 
-      # Reuse today's Kenya TAHMO CSV if the daily run (on main) or an earlier
-      # run on this branch already downloaded it. get_tahmo_data.py's window
-      # ends on the run day, so only a same-day entry is valid (exact key).
       - name: Restore Kenya TAHMO data
         id: tahmo_cache
-        if: ${{ !inputs.force_all }}
+        if: ${{ steps.run_inputs.outputs.force_all != 'true' }}
         uses: actions/cache/restore@v4
         with:
           path: main_repo/private_data/station_data/Kenya/${{ steps.briefing_date.outputs.date }}
@@ -789,7 +646,7 @@ jobs:
       - name: Upload files as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: s2s_data_kenya
+          name: dev_s2s_data_kenya
           path: |
             main_repo/plots/Kenya/*/dekadal/dekadal_precip.png
             main_repo/plots/Kenya/*/weekly/weekly_precip.png
@@ -801,81 +658,25 @@ jobs:
             main_repo/prompts/*.txt
             main_repo/s2s_briefing_*.pptx
 
-  build-matrix:
+  # Builds the Kenya email from this run's own output and sends it only to
+  # test_recipients. No real mailing list, no approval gate, no --live
+  # Drive write — this never touches what the real nightly run would send.
+  send-test-briefing:
     needs: download
     runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.sheet.outputs.matrix }}
-    steps:
-      - name: Install rclone
-        run: curl https://rclone.org/install.sh | sudo bash
-
-      - name: Configure rclone
-        run: |
-          mkdir -p ~/.config/rclone
-          echo "${{ secrets.RCLONE_CONFIG }}" | base64 -d > ~/.config/rclone/rclone.conf
-
-      - name: Fetch subscriber sheet via rclone
-        id: sheet
-        run: |
-          pip install openpyxl -q
-          rclone copy "gdrive:s2s-emails.xlsx" .
-          python3 - <<'EOF'
-          import json, os, collections
-          import openpyxl
-
-          wb = openpyxl.load_workbook("s2s-emails.xlsx")
-          ws = wb.active
-          rows = list(ws.iter_rows(values_only=True))
-          header, *data = rows
-
-          country_emails = collections.defaultdict(set)
-          for row in data:
-              if not row[1]:
-                  continue
-              email = str(row[1]).strip()
-              for country in str(row[2]).split(","):
-                  country = country.strip()
-                  if country and email:
-                      country_emails[country].add(email)
-
-          KNOWN_COUNTRIES = ["Kenya"]
-          matrix = [
-              {"country": c, "emails": ",".join(sorted(country_emails[c]))}
-              for c in KNOWN_COUNTRIES
-              if country_emails[c]
-          ]
-
-          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"matrix={json.dumps({'include': matrix})}\n")
-          EOF
-
-  # Builds the Kenya email once and sends it only to inputs.preview_email. The
-  # Drive deck it uploads is the one the mailing list later gets shared, and its
-  # attachment list / deck links are handed to the `email` job below.
-  preview:
-    needs: download
-    runs-on: ubuntu-latest
-    outputs:
-      plots_ok: ${{ steps.check_plots.outputs.plots_ok }}
-      briefing: ${{ steps.check_plots.outputs.briefing }}
-      attachments: ${{ steps.attachments.outputs.list }}
-      drive_file_id: ${{ steps.drive.outputs.drive_file_id }}
-      drive_url: ${{ steps.drive.outputs.drive_url }}
-      deck_url: ${{ steps.manual_deck.outputs.deck_url }}
     steps:
       - name: Get briefing date
         id: date
-        run: echo "date=${{ needs.download.outputs.briefing_date }}" >> $GITHUB_OUTPUT
+        run: echo "date=${{ needs.download.outputs.briefing_date }}" >> "$GITHUB_OUTPUT"
 
       - name: Get ECMWF lagged date
         id: ecmwf_date
-        run: echo "date=${{ needs.download.outputs.ecmwf_date }}" >> $GITHUB_OUTPUT
+        run: echo "date=${{ needs.download.outputs.ecmwf_date }}" >> "$GITHUB_OUTPUT"
 
       - name: Download files as artifact
         uses: actions/download-artifact@v4
         with:
-          name: s2s_data_kenya
+          name: dev_s2s_data_kenya
 
       - name: Check required attachments exist
         id: check_plots
@@ -932,6 +733,7 @@ jobs:
         if: steps.check_plots.outputs.plots_ok == 'true'
         uses: actions/checkout@v4
         with:
+          ref: dev
           path: repo_scripts
 
       - name: Auth to Google Cloud
@@ -949,9 +751,9 @@ jobs:
         if: steps.check_plots.outputs.plots_ok == 'true'
         run: curl https://rclone.org/install.sh | sudo bash
 
-      # Shared with the preview address only; the `email` job shares this same
-      # deck with the mailing list once approved.
-      - name: Upload Kenya briefing to Drive and share
+      # TEST-TEMPLATE subfolder, never --live: this must never become the
+      # deck the real mailing list would see.
+      - name: Upload Kenya briefing to Drive and share (TEST-TEMPLATE subfolder)
         if: steps.check_plots.outputs.plots_ok == 'true'
         id: drive
         continue-on-error: true
@@ -959,17 +761,18 @@ jobs:
           python -u repo_scripts/publish_briefing_to_drive.py \
             --file "${{ steps.check_plots.outputs.briefing }}" \
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
-            --live \
-            --emails "${{ inputs.preview_email }}"
+            --subfolder TEST-TEMPLATE \
+            --emails "${{ needs.download.outputs.test_recipients }}"
 
       - name: Find latest manual analysis deck
         if: steps.check_plots.outputs.plots_ok == 'true'
         id: manual_deck
         continue-on-error: true
         run: |
-          python -u repo_scripts/find_latest_manual_analysis.py             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"
+          python -u repo_scripts/find_latest_manual_analysis.py \
+            --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"
 
-      - name: Email Kenya briefing preview
+      - name: Email dev test-template briefing
         if: steps.check_plots.outputs.plots_ok == 'true'
         uses: dawidd6/action-send-mail@v16
         with:
@@ -977,90 +780,22 @@ jobs:
           server_port: 587
           username: resend
           password: ${{ secrets.RESEND_API_KEY }}
-          subject: "[PREVIEW] Daily S2S Outlook"
-          to: ${{ inputs.preview_email }}
+          subject: "[DEV/TEST TEMPLATE] Daily S2S Outlook ${{ steps.date.outputs.date }}"
+          to: ${{ needs.download.outputs.test_recipients }}
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            PREVIEW - only sent to you. Approve the "email" job in
-            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            to send this to the Kenya mailing list.
-            ------------------------------------------------------------
-            Today's Kenya S2S briefing is a shared Google Slides deck:
+            This is a full DEV run of the Kenya nightly pipeline, built from
+            the test Slides template
+            (https://docs.google.com/presentation/d/1McY75NyFK8DsSrJGXfFHLN7EMcQPuTX0/edit),
+            not the live weather_briefing_kenya_template. Only sent to test
+            recipients — the real mailing list was never touched.
+
+            Shared Google Slides deck for this run:
             ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
-            Please comment on that deck rather than a local copy.
             Latest expert analysis deck:
             ${{ steps.manual_deck.outputs.deck_url || '(none found)' }}
+            ${{ steps.attachments.outputs.note || '' }}
             You can browse the full plot archive (except station data) at
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
           attachments: ${{ steps.attachments.outputs.list }}
-
-  # Waits for a required reviewer on the kenya-mailing-list environment, then
-  # sends exactly what the preview contained (same artifact, same deck).
-  email:
-    needs: [build-matrix, preview]
-    if: needs.preview.outputs.plots_ok == 'true'
-    environment: kenya-mailing-list
-    strategy:
-      matrix: ${{ fromJson(needs.build-matrix.outputs.matrix) }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download files as artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: s2s_data_kenya
-
-      - name: Checkout publish script
-        uses: actions/checkout@v4
-        with:
-          path: repo_scripts
-
-      - name: Auth to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          create_credentials_file: true
-          token_format: "access_token"
-          access_token_scopes: "https://www.googleapis.com/auth/drive"
-          workload_identity_provider: "projects/730596460290/locations/global/workloadIdentityPools/alec-rhiza-github/providers/rhiza-github"
-          service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
-          export_environment_variables: true
-
-      - name: Install rclone
-        if: needs.preview.outputs.drive_file_id == ''
-        run: curl https://rclone.org/install.sh | sudo bash
-
-      # Shares the deck the preview uploaded; uploads fresh only if that failed.
-      - name: Share Kenya briefing on Drive
-        id: drive
-        continue-on-error: true
-        run: |
-          file_id="${{ needs.preview.outputs.drive_file_id }}"
-          if [ -n "$file_id" ]; then
-            src=(--existing-id "$file_id")
-          else
-            src=(--file "${{ needs.preview.outputs.briefing }}" --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" --live)
-          fi
-          python -u repo_scripts/publish_briefing_to_drive.py \
-            "${src[@]}" \
-            --emails "${{ matrix.emails }}"
-
-      - name: Email Kenya briefing
-        uses: dawidd6/action-send-mail@v16
-        with:
-          server_address: smtp.resend.com
-          server_port: 587
-          username: resend
-          password: ${{ secrets.RESEND_API_KEY }}
-          subject: Daily S2S Outlook
-          to: ${{ matrix.emails }}
-          from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
-          body: |
-            Today's Kenya S2S briefing is a shared Google Slides deck:
-            ${{ needs.preview.outputs.drive_url || steps.drive.outputs.drive_url || '(upload failed)' }}
-            Please comment on that deck rather than a local copy.
-            Latest expert analysis deck:
-            ${{ needs.preview.outputs.deck_url || '(none found)' }}
-            You can browse the full plot archive (except station data) at
-            https://console.cloud.google.com/storage/browser/africa-forecasting-data .
-          reply_to: genevieve@rhizaresearch.org
-          attachments: ${{ needs.preview.outputs.attachments }}

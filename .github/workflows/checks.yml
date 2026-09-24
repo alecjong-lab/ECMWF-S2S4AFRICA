@@ -55,15 +55,10 @@ jobs:
           # workflows; turning them on would make this check red on arrival. Worth
           # enabling once those are cleaned up.
           #
-          # The two -ignore patterns are known, accepted findings:
-          #   1. setup-python@v4 is flagged as too old to run on GitHub Actions.
-          #      This is real and worth fixing (bump to v5 in all five workflows),
-          #      but it is not this PR's job. Delete the ignore once bumped.
-          #   2. actionlint enforces a 10-input cap on workflow_dispatch;
-          #      test_pipeline.yml has 14 and test_ws_slides.yml has 16, and both
-          #      dispatch fine in practice.
+          # The -ignore pattern is a known, accepted finding: actionlint enforces a
+          # 10-input cap on workflow_dispatch, but test_pipeline.yml has 14 and
+          # test_ws_slides.yml has 16, and both dispatch fine in practice.
           ./actionlint -color -shellcheck= -pyflakes= \
-            -ignore 'the runner of "actions/setup-python@v4" action is too old' \
             -ignore 'maximum number of inputs for "workflow_dispatch" event'
 
   imports:

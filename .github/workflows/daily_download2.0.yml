@@ -5,6 +5,9 @@ permissions:
   id-token: write
 
 on:
+  # Scheduling moved off GitHub: an external cron POSTs to the REST
+  # workflow_dispatch endpoint for this file instead. Re-enable this block
+  # only if that external trigger goes away, or the pipeline will run twice.
   # schedule:
   #  - cron: "33 02 * * *" # every day at 02:33 UTC
   workflow_dispatch:
@@ -43,7 +46,7 @@ jobs:
           path: website_branch
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -453,6 +456,10 @@ jobs:
           path: main_repo/.nuthatch/caches
           key: nuthatch-
 
+      - name: Get TAHMO date
+        id: tahmo_date
+        run: echo "date=$(date -u +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
       - name: Download TAHMO data
         uses: nick-fields/retry@v3
         continue-on-error: true
@@ -461,7 +468,17 @@ jobs:
           max_attempts: 2
           command: |
             cd main_repo
-            yes | python get_tahmo_data.py --country Kenya,Ghana,Senegal,Ethiopia
+            yes | python get_tahmo_data.py --country Kenya,Ghana,Senegal,Ethiopia --time ${{ steps.tahmo_date.outputs.date }}
+
+      # Lets a same-day Kenya-only run (daily_download2.0_kenya_only.yml) restore
+      # this CSV instead of re-downloading every station from the TAHMO API.
+      - name: Cache Kenya TAHMO data
+        if: hashFiles(format('main_repo/private_data/station_data/Kenya/{0}/*.csv', steps.tahmo_date.outputs.date)) != ''
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: main_repo/private_data/station_data/Kenya/${{ steps.tahmo_date.outputs.date }}
+          key: tahmo-Kenya-${{ steps.tahmo_date.outputs.date }}
 
       - name: Download IMERG satellite data
         uses: nick-fields/retry@v3
@@ -723,13 +740,14 @@ jobs:
           to: ${{ matrix.emails }}
           from: "${{ matrix.country }} Data Share <info@dashboards.rhizaresearch.org>"
           body: |
-            Today's Kenya S2S briefing is a shared Google Slides deck:
+            Your Kenya S2S briefing for ${{ steps.ecmwf_date.outputs.date }} is available here:
             ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
-            Please comment on that deck rather than a local copy.
-            Latest expert analysis deck:
+            The latest expert analysis deck is available here:
             ${{ steps.manual_deck.outputs.deck_url || '(none found)' }}
+            These are shared Google Slide Decks; you are welcome to leave comments.
             You can browse the full plot archive (except station data) at
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
+            Deck highlights are also included as direct attachments: ${{ steps.attachments.outputs.list }}
           reply_to: genevieve@rhizaresearch.org
           attachments: ${{ steps.attachments.outputs.list }}
 

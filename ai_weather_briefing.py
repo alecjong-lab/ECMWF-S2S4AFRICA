@@ -99,43 +99,44 @@ try:
 except Exception as exc:
     print(f"add_onset_from_netcdf failed: {exc}")
 
-promt_unformat= promt_unformat1 | promt_unformat2 | promt_unformat3
-_ecmwf_lag_note = ""
-if ecmwf_date_str != date_str:
-    _ecmwf_lag_note = (
-        f"ECMWF / GEFS products are from init {ecmwf_date_str} "
-        f"({ECMWF_LAG_DAYS}-day publication lag).\n"
-    )
-user_prompt = f"""
-Forecast date: {date_str}
-{_ecmwf_lag_note}Country: Kenya
-Month: {date_str[5:7]}
-Zone statistics (6-week forecast).
-Onset dates come from the rainfall-onset action (first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days), median over ensemble members and grid cells in each region. Use them in one sentence of the Overall Summary for **OND Short Rains** onset (typical mid-October). Never describe MAM Long Rains onset. Do not infer onset from weekly totals. Each forecast slide (2–10) should be 2–3 sentences only.
-{gef.format_prompt_data(promt_unformat)}
-"""
+# promt_unformat= promt_unformat1 | promt_unformat2 | promt_unformat3
+# _ecmwf_lag_note = ""
+# if ecmwf_date_str != date_str:
+#     _ecmwf_lag_note = (
+#         f"ECMWF / GEFS products are from init {ecmwf_date_str} "
+#         f"({ECMWF_LAG_DAYS}-day publication lag).\n"
+#     )
+# user_prompt = f"""
+# Forecast date: {date_str}
+# {_ecmwf_lag_note}Country: Kenya
+# Month: {date_str[5:7]}
+# Zone statistics (6-week forecast).
+# Onset dates come from the rainfall-onset action (first 3-day spell of at least 20 mm with no 7 consecutive days below 1 mm in the next 21 days), median over ensemble members and grid cells in each region. Use them in one sentence of the Overall Summary for **OND Short Rains** onset (typical mid-October). Never describe MAM Long Rains onset. Do not infer onset from weekly totals. Each forecast slide (2–10) should be 2–3 sentences only.
+# {gef.format_prompt_data(promt_unformat)}
+# """
 
-if os.environ.get("GOOGLE_API_KEY"):
-    client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+# if os.environ.get("GOOGLE_API_KEY"):
+#     client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
-    response = client.models.generate_content(
-        model="gemini-3.1-flash-lite",
-        contents=user_prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            max_output_tokens=2500,
-        )
-    )
-    summary = response.text
-else:
-    # if google api key is missing, skip AI synthesis and use placeholder text
-    print(
-        "WARNING: GOOGLE_API_KEY not set; skipping AI synthesis and using "
-        "placeholder slide text",
-        file=sys.stderr,
-    )
-    placeholder = "[AI summary skipped]"
-    summary = "---SLIDE---".join([date_str] + [placeholder] * 9)
+#     response = client.models.generate_content(
+#         model="gemini-3.1-flash-lite",
+#         contents=user_prompt,
+#         config=types.GenerateContentConfig(
+#             system_instruction=system_prompt,
+#             max_output_tokens=2500,
+#         )
+#     )
+#     summary = response.text
+# else:
+#     # if google api key is missing, skip AI synthesis and use placeholder text
+#     print(
+#         "WARNING: GOOGLE_API_KEY not set; skipping AI synthesis and using "
+#         "placeholder slide text",
+#         file=sys.stderr,
+#     )
+
+placeholder = "[AI summary skipped]"
+summary = "---SLIDE---".join([date_str] + [placeholder] * 9)
 
 # var_ex='''\n \nLegend:\np33= Percentage of ensemble members below normal of model climate
 # p66= Percentage of ensemble members above normal of model climate
