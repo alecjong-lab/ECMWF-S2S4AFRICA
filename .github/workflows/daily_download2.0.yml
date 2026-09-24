@@ -55,7 +55,13 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Run download script
+      # Swapped straight to the CDS/ECDS fallback for tonight: the
+      # dynamical.org catalog's latest init is still 2026-09-21 (confirmed
+      # via dynamical-fetch --probe-latest), so the primary path is known to
+      # fail for the init this run needs. Revert to download_s2s.py (or
+      # build the two-tier primary/fallback like the Kenya-only workflow)
+      # once dynamical.org catches up.
+      - name: Run download script (CDS/ECDS)
         uses: nick-fields/retry@v3
         continue-on-error: true
         env:
@@ -65,7 +71,7 @@ jobs:
           max_attempts: 3
           command: |
             cd main_repo
-            python download_s2s.py
+            python download_s2s_legacy.py
 
       - name: Get briefing date
         id: briefing_date
