@@ -87,7 +87,7 @@ jobs:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
           DATE_STR: ${{ steps.dates.outputs.ecmwf_date }}
         with:
-          timeout_minutes: 100
+          timeout_minutes: 5
           max_attempts: 3
           command: |
             cd main_repo
@@ -107,7 +107,7 @@ jobs:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
           DATE_STR: ${{ steps.dates.outputs.ecmwf_date_fallback }}
         with:
-          timeout_minutes: 100
+          timeout_minutes: 5
           max_attempts: 3
           command: |
             cd main_repo
