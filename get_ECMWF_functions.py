@@ -2975,8 +2975,6 @@ def load_reforecast(forecast_day, var_group, var, grid='1p5latx1p5lon',
     """
     import icechunk
 
-    import icechunk
-
     # Pressure levels only make sense for pressure-level variables
     if var_group == 'single' and levels is not None:
         raise ValueError("Cannot choose pressure levels on single level variables")
