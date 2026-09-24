@@ -53,7 +53,12 @@ jobs:
     outputs:
       briefing_date: ${{ steps.briefing_date.outputs.date }}
       ecmwf_date: ${{ steps.ecmwf_date.outputs.date }}
-      test_recipients: ${{ steps.run_inputs.outputs.test_recipients }}
+      # test_recipients is deliberately NOT exposed here: its default value
+      # contains genevieve@rhizaresearch.org, which matches the
+      # ECMWF_API_EMAIL secret, and GitHub Actions blanks an entire job
+      # output that contains a secret substring once it crosses a job
+      # boundary via needs.<job>.outputs. send-test-briefing resolves its
+      # own copy locally instead — see the "Resolve test recipients" step there.
     env:
       OUTPUT_DIR: data
       BUCKET: africa-forecasting-data
@@ -665,6 +670,28 @@ jobs:
     needs: download
     runs-on: ubuntu-latest
     steps:
+      # Resolved locally rather than read from needs.download.outputs: the
+      # default list includes genevieve@rhizaresearch.org, which matches the
+      # ECMWF_API_EMAIL secret's value. GitHub Actions silently blanks an
+      # entire job output (not just the matching substring) when it crosses
+      # a job boundary via `needs.<job>.outputs` and contains a secret — that
+      # was why `to:` on the email step below kept ending up empty even
+      # though the download job's own logs showed the resolved value fine.
+      # inputs.* is available in every job of the same workflow_dispatch run,
+      # so recomputing here avoids the job-output hop entirely.
+      - name: Resolve test recipients
+        id: recipients
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          IN_TEST_RECIPIENTS: ${{ inputs.test_recipients }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            recipients="${IN_TEST_RECIPIENTS:-genevieve@rhizaresearch.org,mohini@rhizaresearch.org,alec.jong@gmail.com}"
+          else
+            recipients="genevieve@rhizaresearch.org,mohini@rhizaresearch.org,alec.jong@gmail.com"
+          fi
+          echo "test_recipients=$recipients" >> "$GITHUB_OUTPUT"
+
       - name: Get briefing date
         id: date
         run: echo "date=${{ needs.download.outputs.briefing_date }}" >> "$GITHUB_OUTPUT"
@@ -762,7 +789,7 @@ jobs:
             --file "${{ steps.check_plots.outputs.briefing }}" \
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
             --subfolder TEST-TEMPLATE \
-            --emails "${{ needs.download.outputs.test_recipients }}"
+            --emails "${{ steps.recipients.outputs.test_recipients }}"
 
       - name: Find latest manual analysis deck
         if: steps.check_plots.outputs.plots_ok == 'true'
@@ -781,7 +808,7 @@ jobs:
           username: resend
           password: ${{ secrets.RESEND_API_KEY }}
           subject: "[DEV/TEST TEMPLATE] Daily S2S Outlook ${{ steps.date.outputs.date }}"
-          to: ${{ needs.download.outputs.test_recipients }}
+          to: ${{ steps.recipients.outputs.test_recipients }}
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
             This is a full DEV run of the Kenya nightly pipeline, built from
