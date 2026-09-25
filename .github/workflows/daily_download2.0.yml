@@ -50,7 +50,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+       - name: Install dependencies
         working-directory: main_repo
         run: |
           pip install -r requirements.txt
@@ -111,7 +111,7 @@ jobs:
           max_attempts: 3
           command: |
             cd main_repo
-            python download_s2s.py
+            python download_s2s_legacy.py
 
       - name: Get briefing date
         id: briefing_date
