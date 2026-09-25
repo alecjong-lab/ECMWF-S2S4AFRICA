@@ -27,7 +27,13 @@ else
   ASOF="$CHIRPS_LATEST"
 fi
 
-LAST_ISO=$($WS resolve-time last-week --as-of "$ASOF" --emit iso)
+# `last-week --as-of X` always excludes the Mon–Sun week that CONTAINS X,
+# even when X is that week's own Sunday (i.e. the week is already fully
+# complete) — verified: --as-of on a week's Sunday still returns the week
+# before it, one week short of what's actually available. Nudge the as-of
+# date forward by a day so a fully-elapsed week (ASOF landing exactly on
+# its Sunday) is recognized as complete instead of skipped.
+LAST_ISO=$($WS resolve-time last-week --as-of "$(pydate "${ASOF} +1 days" %Y-%m-%d)" --emit iso)
 LAST_SUN="${LAST_ISO##*/}"
 LAST_MON="${LAST_ISO%%/*}"
 

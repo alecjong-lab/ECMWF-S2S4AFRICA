@@ -124,8 +124,12 @@ kind_mondays() {
 
 # Shared panel styling. Overlay fontsize is pinned at 10 so it does NOT scale
 # with --fontsize. Annotation x/y are DATA coords (lon/lat), not axes fractions.
+# force_na=1 labels every week "not available" regardless of KINDS — for a
+# panel (e.g. a probability panel) whose own real-data pieces all came back
+# empty even though KINDS (built from a *different* panel's data, e.g. the
+# precip series) predicted some of those weeks would have forecast data.
 write_patch() {
-  local dest="$1" i comma="" text color
+  local dest="$1" force_na="$2" i comma="" text color kind
   {
     echo '{'
     echo '  "theme": {"rc": {"axes.facecolor": "#9e9e9e", "axes.titlesize": 20, "figure.titlesize": 24,'
@@ -133,7 +137,9 @@ write_patch() {
     echo '  "layout": {"colorbar": {"labelsize": 22, "ticksize": 17, "labelpad": 16}},'
     echo '  "annotations": ['
     for i in "${!KINDS[@]}"; do
-      case "${KINDS[$i]}" in
+      kind="${KINDS[$i]}"
+      [[ "$force_na" == "1" ]] && kind="na"
+      case "$kind" in
         obs) text=obs; color="#c8e6c9" ;;
         hybrid) text="obs+forecast"; color="#ffe0b2" ;;
         forecast) text=forecast; color="#bbdefb" ;;
@@ -504,6 +510,15 @@ compute_prob_above() {
   # forecast week whose probability came back short) is blank by design —
   # only forecast panels ever render a probability.
   assemble_sond_weeks "$stem" "$dest" raw probability "${piece_paths[@]}"
+
+  # KINDS reflects the *precip* panel this reuses classify_weeks from, so a
+  # week it calls "forecast" can still be entirely blank here if this
+  # panel's own probability build failed for every one of those weeks. Only
+  # force every label to "not available" when that happened for all of
+  # them — a genuinely mixed panel keeps the normal per-week KINDS labels.
+  local force_na=""
+  (( ${#piece_paths[@]} == 0 )) && force_na=1
+  write_patch "${stem_short}.patch.json" "$force_na"
 }
 
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
@@ -592,7 +607,7 @@ plot_sond \
     kenya_aifs_prob_above.png \
     'Probability of Above-Normal Rainfall - AIFS-ENS Forecast' \
     'P(above climatology)' \
-    "$IR/kenya_aifs_wk.patch.json" \
+    "$IR/kenya_aifs_prob.patch.json" \
     "brown,wheat,white,lightgreen,green" 0 1 probability
 
 prep_dynamical_daily noaa-gefs-forecast-35-day kenya_gefs
@@ -619,5 +634,5 @@ plot_sond \
     kenya_gefs_prob_above.png \
     'Probability of Above-Normal Rainfall - GEFS Forecast' \
     'P(above climatology)' \
-    "$IR/kenya_gefs_wk.patch.json" \
+    "$IR/kenya_gefs_prob.patch.json" \
     "brown,wheat,white,lightgreen,green" 0 1 probability
