@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Kenya week-1 rainfall forecast MAE vs CHIRPS (GFS, AIFS-ENS, IFS-ENS).
+# Kenya week-1 rainfall forecast MAE vs CHIRPS (GFS, AIFS-ENS, IFS-ENS, Cumulus AI).
+# Cumulus AI's published history is short (a few weeks as of writing), so most
+# of this series' weeks will show "WARNING: skip cumulus week ..." until more
+# inits accumulate — that is expected, not a bug.
 set -eo pipefail
 
 SKILLS="git+https://github.com/rhiza-research/forecasting-skills@dev"
@@ -70,12 +73,16 @@ week_mae() {  # $1=model_key  $2=verify_start
   local clip="mae_${key}_${start}_clip.zarr"
   local out="mae_${key}_${start}_mean.zarr"
 
-  run dynamical-fetch \
-    --dataset "${DATASET[$key]}" \
-    --date "$start" \
-    --variable precipitation_surface \
-    --bbox "$BBOX" \
-    --output "$raw"
+  if [[ "$key" == "cumulus" ]]; then
+    run cumulus-fetch --date "$start" -v tp --bbox "$BBOX" --output "$raw"
+  else
+    run dynamical-fetch \
+      --dataset "${DATASET[$key]}" \
+      --date "$start" \
+      --variable precipitation_surface \
+      --bbox "$BBOX" \
+      --output "$raw"
+  fi
 
   run aggregate-temporal \
     --period weekly --method mean --align left \
@@ -92,7 +99,9 @@ week_mae() {  # $1=model_key  $2=verify_start
   run step-to-time --input "$mean" --output "$timed"
   run select --dim time --value "$start" --input "$timed" --output "$sel"
   run convert-to-totals --min-coverage 1.0 --input "$sel" --output "$mm"
-  run rename --variable precipitation_surface --to-name precip \
+  local src_var=precipitation_surface
+  [[ "$key" == "cumulus" ]] && src_var=tp
+  run rename --variable "$src_var" --to-name precip \
     --input "$mm" --output "$plot"
 
   run select --dim time --value "$start" \
@@ -108,7 +117,7 @@ week_mae() {  # $1=model_key  $2=verify_start
     --input "$clip" --output "$out"
 }
 
-for key in gfs aifs ifs; do
+for key in gfs aifs ifs cumulus; do
   ok=()
   for start in "${WEEKS[@]}"; do
     set +e
@@ -144,12 +153,14 @@ run plot-timeseries \
   --input intermediate_results/mae_gfs_series.zarr \
   --input intermediate_results/mae_aifs_series.zarr \
   --input intermediate_results/mae_ifs_series.zarr \
+  --input intermediate_results/mae_cumulus_series.zarr \
   --variable mae \
   --mark line \
-  --label GFS --label AIFS-ENS --label IFS-ENS \
+  --label GFS --label AIFS-ENS --label IFS-ENS --label "Cumulus AI" \
   --trace 1:color='#1f77b4',marker=o \
   --trace 2:color='#ff7f0e',marker=o \
   --trace 3:color='#2ca02c',marker=o \
+  --trace 4:color='#9467bd',marker=o \
   --title "Kenya week-1 rainfall forecast MAE vs CHIRPS (${START_LABEL} - ${END_LABEL})" \
   --ylabel "Mean absolute error" \
   --fontsize 16 \
