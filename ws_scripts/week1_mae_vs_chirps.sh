@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Kenya week-1 rainfall MAE vs CHIRPS over the last 4 complete weeks.
-# Models: AIFS-ENS, ECMWF ENS (IFS 15-day), ECMWF ER (S2S), KMSA downscaled, GEFS.
+# Kenya week-1 rainfall MAE vs CHIRPS over the last 4 weeks from today.
+# Models: AIFS-ENS, ECMWF ENS (IFS 15-day), ECMWF ER (S2S), KMSA downscaled, GEFS, Cumulus AI.
 # Writes kenya_week1_mae_vs_chirps_4wk.png (briefing template picture name).
 set -eo pipefail
 
@@ -121,6 +121,17 @@ week_mae() {  # $1=key $2=week
           --input "${p}_time.zarr" --output "${p}_mm.zarr" || return 1
       fi
       ;;
+    cumulus)
+      $WS cumulus-fetch --date "$w" -v tp \
+        --bbox "$BBOX" --output "${p}_raw.zarr" || return 1
+      $WS aggregate-temporal --period weekly --method mean --align left \
+        --input "${p}_raw.zarr" --output "${p}_wk.zarr" || return 1
+      $WS summarize-dim --dim number --method mean \
+        --input "${p}_wk.zarr" --output "${p}_mean.zarr" || return 1
+      $WS step-to-time --input "${p}_mean.zarr" --output "${p}_time.zarr" || return 1
+      $WS convert-to-totals --min-coverage 1.0 \
+        --input "${p}_time.zarr" --output "${p}_mm.zarr" || return 1
+      ;;
     *)
       echo "ERROR: unknown model $key" >&2
       return 1
@@ -144,7 +155,7 @@ week_mae() {  # $1=key $2=week
     --input "mae_${p}_clip.zarr" --output "mae_${p}_mean.zarr" || return 1
 }
 
-for key in aifs ifs er kmsa gefs; do
+for key in aifs ifs er kmsa gefs cumulus; do
   ok=()
   for w in "${WEEKS[@]}"; do
     if week_mae "$key" "$w"; then
@@ -199,10 +210,11 @@ $WS plot-timeseries \
   --input intermediate_results/mae_er_series.zarr \
   --input intermediate_results/mae_kmsa_series.zarr \
   --input intermediate_results/mae_gefs_series.zarr \
+  --input intermediate_results/mae_cumulus_series.zarr \
   --variable mae \
   --mark bar --bar-mode grouped \
   --label AIFS --label "ECMWF ENS" --label "ECMWF ER" \
-  --label "KMSA downscaled" --label GEFS \
+  --label "KMSA downscaled" --label GEFS --label "Cumulus AI" \
   --title "Kenya week-1 rainfall forecast MAE vs CHIRPS · ${WEEKS[0]} – ${LAST_SUN}" \
   --ylabel "MAE (mm / week)" \
   --fontsize 16 --figsize 13,6.5 \

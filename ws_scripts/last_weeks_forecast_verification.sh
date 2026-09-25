@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# GEFS / AIFS-ENS / ECMWF S2S / KMSA vs CHIRPS weekly precip verification over Kenya.
+# GEFS / AIFS-ENS / ECMWF S2S / KMSA / Cumulus AI vs CHIRPS weekly precip verification over Kenya.
 # One verifying Monday week, then week-1…week-4 leads (AIFS may have fewer; ~15-day).
-# Writes kenya_{gefs,aifs,ecmwf,kmsa}_chirps_{verify_5mm,bias,mae}.png
+# Writes kenya_{gefs,aifs,ecmwf,kmsa,cumulus}_chirps_{verify_5mm,bias,mae}.png
+# Cumulus AI needs GOOGLE_APPLICATION_CREDENTIALS (gs://sheerwater-datalake is private).
 set -eo pipefail
 
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
@@ -133,6 +134,21 @@ prepare_forecast() {
       run rename --variable tp --to-name precip \
         --input "${p}_mm.zarr" --output "${p}_plot.zarr"
       ;;
+    cumulus)
+      run cumulus-fetch --date "$init" -v tp \
+        --bbox "$BBOX" --output "${p}_raw.zarr"
+      run aggregate-temporal --period weekly --method mean --align left \
+        --input "${p}_raw.zarr" --output "${p}_wk.zarr"
+      run summarize-dim --dim number --method mean \
+        --input "${p}_wk.zarr" --output "${p}_mean.zarr"
+      run step-to-time --input "${p}_mean.zarr" --output "${p}_time.zarr"
+      run select --dim time --value "$VERIFY_START" \
+        --input "${p}_time.zarr" --output "${p}_sel.zarr"
+      run convert-to-totals --min-coverage 1.0 \
+        --input "${p}_sel.zarr" --output "${p}_mm.zarr"
+      run rename --variable tp --to-name precip \
+        --input "${p}_mm.zarr" --output "${p}_plot.zarr"
+      ;;
     *)
       echo "ERROR: unknown model $key" >&2
       return 1
@@ -231,7 +247,8 @@ run_model() {
   plot_model "$key" "$pretty" "$title_name" "${ok[@]}"
 }
 
-run_model gefs  "GEFS ens. mean"       "GEFS" || echo "WARNING: GEFS figures failed" >&2
-run_model aifs  "AIFS-ENS mean"        "AIFS-ENS" || echo "WARNING: AIFS figures failed" >&2
-run_model ecmwf "ECMWF S2S ens. mean"  "ECMWF S2S" || echo "WARNING: ECMWF S2S figures failed" >&2
-run_model kmsa  "KMSA downscaled"      "KMSA downscaled" || echo "WARNING: KMSA figures failed" >&2
+run_model gefs    "GEFS ens. mean"       "GEFS" || echo "WARNING: GEFS figures failed" >&2
+run_model aifs    "AIFS-ENS mean"        "AIFS-ENS" || echo "WARNING: AIFS figures failed" >&2
+run_model ecmwf   "ECMWF S2S ens. mean"  "ECMWF S2S" || echo "WARNING: ECMWF S2S figures failed" >&2
+run_model kmsa    "KMSA downscaled"      "KMSA downscaled" || echo "WARNING: KMSA figures failed" >&2
+run_model cumulus "Cumulus AI ens. mean" "Cumulus AI" || echo "WARNING: Cumulus AI figures failed" >&2
