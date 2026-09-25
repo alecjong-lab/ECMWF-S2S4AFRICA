@@ -12,7 +12,14 @@ name: Test Pipeline (manual)
 # with comma-separated stems to rebuild only those briefing plots (blank
 # keeps the current "all except timeseries_verification" set).
 # use_dev_template is ON by default here, so ai_weather_briefing.py builds from
-# the dev Slides deck; untick it to test against the live template. A skipped stage
+# the dev Slides deck; untick it to test against the live template.
+#
+# Dates work like daily_download2.0_kenya_only.yml: date_str is the run/briefing
+# date (BRIEFING_DATE), and the ECMWF/GEFS model date (DATE_STR) is two days
+# earlier. Forecast data and plots/<country>/ use DATE_STR; plots/briefing/,
+# the pptx and the digest use BRIEFING_DATE.
+#
+# A skipped stage
 # pulls its known output for DATE_STR from the (read-only) production GCS
 # bucket instead of regenerating it, so downstream stages/the email still
 # have something to work with. One
@@ -30,7 +37,7 @@ on:
   workflow_dispatch:
     inputs:
       date_str:
-        description: "Forecast date YYYY-MM-DD (blank = today UTC)"
+        description: "Run date YYYY-MM-DD (blank = today UTC). The ECMWF model date is two days earlier."
         required: false
         default: ""
       countries:
@@ -104,7 +111,7 @@ jobs:
     env:
       OUTPUT_DIR: data
       BUCKET: africa-forecasting-data
-      DATE_STR: ${{ inputs.date_str }}
+      RUN_DATE_IN: ${{ inputs.date_str }}
       TEST_EMAIL: ${{ inputs.email || 'genevieve@rhizaresearch.org' }}
       COUNTRIES: ${{ inputs.countries }}
       CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
@@ -112,11 +119,20 @@ jobs:
       TAHMO_API_PASSWORD: ${{ secrets.TAHMO_API_PASSWORD }}
 
     steps:
-      - name: Resolve DATE_STR
+      # Same split as daily_download2.0_kenya_only.yml: the input is the
+      # run/briefing date, the ECMWF model init is two days earlier.
+      - name: Resolve run and ECMWF dates
         run: |
-          date="${DATE_STR:-$(date -u +%Y-%m-%d)}"
-          echo "DATE_STR=$date" >> "$GITHUB_ENV"
-          echo "Using DATE_STR=$date  email=$TEST_EMAIL"
+          run="${RUN_DATE_IN// /}"
+          run="${run:-$(date -u +%Y-%m-%d)}"
+          if ! [[ "$run" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || ! date -u -d "$run" >/dev/null 2>&1; then
+            echo "::error::Run date must be a real YYYY-MM-DD date (got: $run)"
+            exit 1
+          fi
+          ecmwf=$(date -u -d "$run - 2 days" +%Y-%m-%d)
+          echo "BRIEFING_DATE=$run" >> "$GITHUB_ENV"
+          echo "DATE_STR=$ecmwf" >> "$GITHUB_ENV"
+          echo "Run date $run; ECMWF model date $ecmwf  email=$TEST_EMAIL"
 
       - name: Show effective stage plan
         env:
@@ -553,16 +569,16 @@ jobs:
         continue-on-error: true
         working-directory: main_repo
         run: |
-          mkdir -p "plots/briefing/${DATE_STR}"
-          gcloud storage rsync -r "gs://${BUCKET}/plots/briefing/${DATE_STR}" "plots/briefing/${DATE_STR}" || true
+          mkdir -p "plots/briefing/${BRIEFING_DATE}"
+          gcloud storage rsync -r "gs://${BUCKET}/plots/briefing/${BRIEFING_DATE}" "plots/briefing/${BRIEFING_DATE}" || true
 
       - name: Collect briefing plots
         if: ${{ steps.ws.outputs.any == 'true' }}
         continue-on-error: true
         working-directory: main_repo
         run: |
-          mkdir -p "plots/briefing/${{ env.DATE_STR }}"
-          mv ws_scripts/*.png "plots/briefing/${{ env.DATE_STR }}/" 2>/dev/null || true
+          mkdir -p "plots/briefing/${{ env.BRIEFING_DATE }}"
+          mv ws_scripts/*.png "plots/briefing/${{ env.BRIEFING_DATE }}/" 2>/dev/null || true
 
       # ── Stage: ai_briefing (Kenya/Great_Horn-hardcoded, ignores
       # countries input — top up its fixed prerequisites from GCS so
@@ -599,6 +615,8 @@ jobs:
           python ai_weather_briefing.py
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: ${{ env.BRIEFING_DATE }}
+          ECMWF_DATE_STR: ${{ env.DATE_STR }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           BRIEFING_TEMPLATE_ID: ${{ inputs.use_dev_template && (inputs.dev_template_id || '1McY75NyFK8DsSrJGXfFHLN7EMcQPuTX0') || '1zSp3C35PqDfMKbT8WtEcxoG2EoyIAJA5' }}
           BRIEFING_ALLOW_MISSING_PICTURES: "1"
@@ -627,7 +645,7 @@ jobs:
           GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.drive_auth.outputs.access_token }}
         run: |
           python -u publish_briefing_to_drive.py \
-            --file "s2s_briefing_${{ env.DATE_STR }}.pptx" \
+            --file "s2s_briefing_${{ env.BRIEFING_DATE }}.pptx" \
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho" \
             --subfolder TEST \
             --emails "${{ env.TEST_EMAIL }}"
@@ -661,12 +679,13 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: test-pipeline-${{ env.DATE_STR }}
+          name: test-pipeline-${{ env.BRIEFING_DATE }}
           if-no-files-found: warn
           path: |
             main_repo/plots/**/${{ env.DATE_STR }}/**
-            main_repo/prompts/digest_${{ env.DATE_STR }}.txt
-            main_repo/s2s_briefing_${{ env.DATE_STR }}.pptx
+            main_repo/plots/briefing/${{ env.BRIEFING_DATE }}/**
+            main_repo/prompts/digest_${{ env.BRIEFING_DATE }}.txt
+            main_repo/s2s_briefing_${{ env.BRIEFING_DATE }}.pptx
 
       - name: Build attachment list
         id: attachments
@@ -733,11 +752,11 @@ jobs:
           server_port: 587
           username: resend
           password: ${{ secrets.RESEND_API_KEY }}
-          subject: "[TEST] S2S Pipeline Run — ${{ env.DATE_STR }} (${{ inputs.countries }})"
+          subject: "[TEST] S2S Pipeline Run — ${{ env.BRIEFING_DATE }} (${{ inputs.countries }})"
           to: ${{ env.TEST_EMAIL }}
           from: "S2S Test Pipeline <info@dashboards.rhizaresearch.org>"
           body: |
-            Test pipeline run for date ${{ env.DATE_STR }}, countries: ${{ inputs.countries }}.
+            Test pipeline run for date ${{ env.BRIEFING_DATE }} (ECMWF model date ${{ env.DATE_STR }}), countries: ${{ inputs.countries }}.
             Shared test deck (Drive TEST folder, not the live briefing folder):
             ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
             ${{ steps.attachments.outputs.note || '' }}
@@ -755,11 +774,11 @@ jobs:
           server_port: 587
           username: resend
           password: ${{ secrets.RESEND_API_KEY }}
-          subject: "[TEST] S2S Pipeline Run — ${{ env.DATE_STR }} (${{ inputs.countries }})"
+          subject: "[TEST] S2S Pipeline Run — ${{ env.BRIEFING_DATE }} (${{ inputs.countries }})"
           to: ${{ env.TEST_EMAIL }}
           from: "S2S Test Pipeline <info@dashboards.rhizaresearch.org>"
           body: |
-            Test pipeline run for date ${{ env.DATE_STR }}, countries: ${{ inputs.countries }}.
+            Test pipeline run for date ${{ env.BRIEFING_DATE }} (ECMWF model date ${{ env.DATE_STR }}), countries: ${{ inputs.countries }}.
             ${{ steps.attachments.outputs.note || '' }}
             Full output: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             Nothing from this run was uploaded to GCS or committed to main/website — this is
