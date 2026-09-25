@@ -265,9 +265,13 @@ jobs:
         with:
           timeout_minutes: 45
           max_attempts: 3
+          # `|| exit 1` stops bash from exec'ing python directly: a signal
+          # death (OOM kill, native crash) then becomes exit 1 instead of a
+          # null code, which nick-fields/retry reports as success and which
+          # would skip the CDS/ECDS fallback below.
           command: |
             cd main_repo
-            python download_s2s.py
+            python download_s2s.py || exit 1
 
       # dynamical.org's catalog occasionally lags the CDS/ECDS store it's
       # built from. Same model date, same zarr store names/layout (the

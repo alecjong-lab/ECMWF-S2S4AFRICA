@@ -44,6 +44,7 @@ Differences from the CDS path worth knowing about:
 """
 
 import os
+import sys
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -558,6 +559,15 @@ for zarr_name, build_fn, group_bbox in groups:
         failures.append(zarr_name)
 
 if failures:
-    raise SystemExit(f"{len(failures)} group(s) failed: {', '.join(failures)}")
+    print(f"{len(failures)} group(s) failed: {', '.join(failures)}", file=sys.stderr)
+else:
+    print("All groups complete.")
 
-print("All groups complete.")
+# Exit without interpreter teardown: something in the native stack can abort
+# on shutdown ("double free or corruption"), and a signal death reports no
+# exit code, which nick-fields/retry treats as success — so the workflow's
+# CDS/ECDS fallback never ran. Every store is already written and marked
+# complete synchronously above, so there's nothing left for teardown to do.
+sys.stdout.flush()
+sys.stderr.flush()
+os._exit(1 if failures else 0)
