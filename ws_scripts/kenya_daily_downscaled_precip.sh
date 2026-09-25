@@ -6,12 +6,16 @@
 #   kenya_daily_downscaled_precip[_anomaly]  — KMSA daily downscale
 #   kenya_aifs_daily_precip[_anomaly]        — dynamical.org AIFS-ENS
 #   kenya_gefs_daily_precip[_anomaly]        — dynamical.org GEFS 35-day
+#   kenya_kmsa_prob_above                    — KMSA weekly-ensemble P(above climatology)
 #   kenya_aifs_prob_above                    — AIFS-ENS P(above climatology)
 #   kenya_gefs_prob_above                    — GEFS P(above climatology)
 #
 # Output stems must stay as above so the briefing template pictures
-# (and ai_weather_briefing.py) still match these slides. KMSA has no
-# ensemble members in precip_downscaled_daily, so it has no prob panel.
+# (and ai_weather_briefing.py) still match these slides. KMSA's daily
+# downscale (precip_downscaled_daily) has no ensemble members, but its
+# WEEKLY downscale (precip_downscaled) does -- kenya_kmsa_prob_above uses
+# that instead; see compute_prob_above_kmsa for the native-week-to-Monday
+# mapping this requires.
 set -eo pipefail
 
 # shellcheck source=./_portable_date.sh
@@ -59,6 +63,15 @@ for ((i = 0; i < SOND_WEEKS; i++)); do
   ORDER+=(--value "$d")
 done
 
+# Monday of the calendar week containing DATE, via the same skill GRID_START
+# itself uses -- not "DATE - 1 day", which only happens to work when DATE is
+# always a Tuesday (true for some inits, not others).
+week_monday() {
+  local wk
+  wk=$($S resolve-time this-week --as-of "$1" --emit iso | tail -n1)
+  echo "${wk%%/*}"
+}
+
 month_abb() {
   case "${1:5:2}" in
     01) echo Jan ;; 02) echo Feb ;; 03) echo Mar ;; 04) echo Apr ;;
@@ -103,7 +116,7 @@ classify_weeks() {
     sun=$(pydate "${mon} +6 days" %Y-%m-%d)
     if [[ "$sun" < "$CHIRPS_END" || "$sun" == "$CHIRPS_END" ]]; then
       KINDS+=("obs")
-    elif [[ "$mon" < "$CHIRPS_END" || "$mon" == "$CHIRPS_END" ]]; then
+    elif [[ "$mon" < "$INIT" ]]; then
       KINDS+=("hybrid")
     elif [[ -n "$fcst_last" && ( "$sun" < "$fcst_last" || "$sun" == "$fcst_last" ) ]]; then
       KINDS+=("forecast")
@@ -199,19 +212,30 @@ align_to_chirps() {
 # would otherwise silently suspend -e for its entire body.
 build_hybrid() {
   local src="$1" var="$2" dest="$3"
-  local mon sun obs_end fcst_start d
+  local mon sun fcst_start d has_obs grid_ref
   mon=$(kind_mondays hybrid | head -n1)
   [[ -n "$mon" ]] || return 0
   sun=$(pydate "${mon} +6 days" %Y-%m-%d)
-  obs_end="$CHIRPS_END"
-  fcst_start=$(pydate "${obs_end} +1 days" %Y-%m-%d)
 
-  $S chirps-fetch --bbox $BBOX --start-time "$mon" --end-time "$obs_end" \
-      --workers 8 -o "$IR/${src}_hyb_obs_raw.zarr" || return 1
-  # Daily agg stamps aggregation_coverage so concat with the forecast days
-  # does not fail (AIFS/GEFS already carry that coord).
-  $S aggregate-temporal --period daily --method mean \
-      -i "$IR/${src}_hyb_obs_raw.zarr" -o "$IR/${src}_hyb_obs.zarr" || return 1
+  # fcst_start is the later of "day after CHIRPS's own coverage" and the
+  # forecast's own INIT date.
+  fcst_start=$(pydate "${CHIRPS_END} +1 days" %Y-%m-%d)
+  if [[ "$INIT" > "$fcst_start" ]]; then
+    fcst_start="$INIT"
+  fi
+
+  has_obs=0
+  if [[ "$mon" < "$CHIRPS_END" || "$mon" == "$CHIRPS_END" ]]; then
+    has_obs=1
+    $S chirps-fetch --bbox $BBOX --start-time "$mon" --end-time "$CHIRPS_END" \
+        --workers 8 -o "$IR/${src}_hyb_obs_raw.zarr" || return 1
+    # Daily agg stamps aggregation_coverage so concat with the forecast days
+    # does not fail (AIFS/GEFS already carry that coord).
+    $S aggregate-temporal --period daily --method mean \
+        -i "$IR/${src}_hyb_obs_raw.zarr" -o "$IR/${src}_hyb_obs.zarr" || return 1
+  fi
+  grid_ref="$IR/${src}_hyb_obs.zarr"
+  (( has_obs )) || grid_ref="$IR/chirps_wk_rate.zarr"
 
   case "$src" in
     kmsa)
@@ -223,7 +247,7 @@ build_hybrid() {
       $S step-to-time -i "$IR/${src}_hyb_raw.zarr" -o "$IR/${src}_hyb_time.zarr" || return 1
       $S clip-region --bbox $BBOX -i "$IR/${src}_hyb_time.zarr" -o "$IR/${src}_hyb_ken.zarr" || return 1
       align_to_chirps "$IR/${src}_hyb_ken.zarr" "$IR/${src}_hyb_grid.zarr" \
-          "$IR/${src}_hyb_obs.zarr" || return 1
+          "$grid_ref" || return 1
       $S rename -v tp --to-name precip \
           -i "$IR/${src}_hyb_grid.zarr" -o "$IR/${src}_hyb_ren.zarr" || return 1
       $S aggregate-temporal --period daily --method mean \
@@ -247,7 +271,7 @@ build_hybrid() {
       $S unit-convert --to-standard \
           -i "$IR/${src}_hyb_ren.zarr" -o "$IR/${src}_hyb_std.zarr" || return 1
       align_to_chirps "$IR/${src}_hyb_std.zarr" "$IR/${src}_hyb_named.zarr" \
-          "$IR/${src}_hyb_obs.zarr" || return 1
+          "$grid_ref" || return 1
       ;;
   esac
 
@@ -264,13 +288,21 @@ build_hybrid() {
   fi
   $S select --dim time "${days[@]}" \
       -i "$IR/${src}_hyb_named.zarr" -o "$IR/${src}_hyb_fcst.zarr" || return 1
-  $S concat --dim time \
-      -i "$IR/${src}_hyb_obs.zarr" -i "$IR/${src}_hyb_fcst.zarr" \
-      -o "$IR/${src}_hyb_daily.zarr" || return 1
+  if (( has_obs )); then
+    $S concat --dim time \
+        -i "$IR/${src}_hyb_obs.zarr" -i "$IR/${src}_hyb_fcst.zarr" \
+        -o "$IR/${src}_hyb_daily.zarr" || return 1
+  else
+    rm -rf "$IR/${src}_hyb_daily.zarr"
+    cp -R "$IR/${src}_hyb_fcst.zarr" "$IR/${src}_hyb_daily.zarr" || return 1
+  fi
   $S aggregate-temporal --period weekly --method mean --align left \
       --start-time "$mon" --end-time "$(pydate "${mon} +7 days" %Y-%m-%d)" \
       -i "$IR/${src}_hyb_daily.zarr" -o "$IR/${src}_hyb_wk_rate.zarr" || return 1
-  $S convert-to-totals -i "$IR/${src}_hyb_wk_rate.zarr" -o "$dest" || return 1
+  # 0.0: never reject a hybrid week outright -- it's already a best-effort
+  # splice, and a real gap day (has_obs=0 above) makes <1.0 coverage
+  # unavoidable, not a sign of something to fabricate around.
+  $S convert-to-totals --min-coverage 0.0 -i "$IR/${src}_hyb_wk_rate.zarr" -o "$dest" || return 1
 }
 
 # Complete forecast weeks, aligned onto the CHIRPS grid and converted to mm
@@ -306,6 +338,9 @@ build_forecast_piece() {
 # is always "precip") to match the real pieces' variable — required when a
 # panel ends up 100% blank, since then nothing else renames it and the
 # downstream plot_sond --layer variable=... lookup would find nothing.
+# Only then, though: alongside a real piece the blank one keeps "precip"
+# (and its mm/day units), since renaming it would make concat try to join
+# a mm/day field with the dimensionless probability and fail.
 assemble_sond_weeks() {
   local src="$1" dest="$2" mode="$3" target_var="$4"
   shift 4
@@ -360,7 +395,7 @@ assemble_sond_weeks() {
       rm -rf "${stem}_nan_gaps.zarr"
       cp -R "${stem}_nan_gaps_rate.zarr" "${stem}_nan_gaps.zarr"
     fi
-    if [[ -n "$target_var" ]]; then
+    if [[ -n "$target_var" && -z "$data_zarr" ]]; then
       $S rename -v precip --to-name "$target_var" \
           -i "${stem}_nan_gaps.zarr" -o "${stem}_nan_gaps_named.zarr"
       final_paths+=("${stem}_nan_gaps_named.zarr")
@@ -458,13 +493,7 @@ prep_dynamical_daily() {
       -i "$IR/${stem}_mem_named.zarr" -o "$IR/${stem}_mem_daily.zarr"
 }
 
-# Probability of above-normal rainfall per SOND week, ensemble members only.
-# Reuses the KINDS/MONDAYS classification already set by compose_sond for the
-# same stem, and the same clim_daily.zarr used by make_anomaly, so the dates
-# and grid logic match the precip/anomaly panels exactly. Forecast weeks get
-# a real probability (fraction of members with a positive weekly anomaly);
-# every other week (obs, hybrid, na) is the same all-NaN template used
-# elsewhere, so only forecast panels ever render.
+
 compute_prob_above() {
   local stem="$1" dest="$2"
   local stem_short="${dest%.zarr}"
@@ -488,10 +517,11 @@ compute_prob_above() {
   for mon in $(kind_mondays forecast); do
     fcst_vals+=(--value "$mon")
   done
-  if (( ${#fcst_vals[@]} == 1 )); then
+  if (( ${#fcst_vals[@]} == 2 )); then
     # A single-value select drops the `time` dim entirely; pad with the
     # next day (only the real Monday values ever survive the
-    # final select-by-ORDER below).
+    # final select-by-ORDER below). fcst_vals holds --value/date pairs, so
+    # exactly one real match is length 2, not 1.
     fcst_vals+=(--value "$(pydate "${mon} +1 days" %Y-%m-%d)")
   fi
   if (( ${#fcst_vals[@]} > 0 )); then
@@ -519,6 +549,134 @@ compute_prob_above() {
   local force_na=""
   (( ${#piece_paths[@]} == 0 )) && force_na=1
   write_patch "${stem_short}.patch.json" "$force_na"
+}
+
+# kmsa weekly has ens members
+compute_prob_above_kmsa() {
+  local dest="$1"
+  local stem_short="${dest%.zarr}"
+
+  $S kenya-forecast-fetch --dataset precip_downscaled --date "$INIT" \
+      -v tp --bbox $BBOX -o "${stem_short}_raw.zarr"
+  $S step-to-time -i "${stem_short}_raw.zarr" -o "${stem_short}_time.zarr"
+  $S rename -v tp --to-name precip \
+      -i "${stem_short}_time.zarr" -o "${stem_short}_named.zarr"
+  align_to_chirps "${stem_short}_named.zarr" "${stem_short}_aligned.zarr" \
+      "$IR/chirps_wk_rate.zarr"
+
+  local native_dates=()
+  while IFS= read -r d; do
+    [[ -n "$d" ]] && native_dates+=("$d")
+  done < <(zarr_dates "${stem_short}_aligned.zarr")
+
+  local real_dates=() nd mon_mapped kind i
+  for nd in "${native_dates[@]}"; do
+    mon_mapped=$(week_monday "$nd")
+    kind=""
+    for i in "${!MONDAYS[@]}"; do
+      [[ "${MONDAYS[$i]}" == "$mon_mapped" ]] && kind="${KINDS[$i]}"
+    done
+    [[ "$kind" == "forecast" ]] || continue
+    real_dates+=("$nd")
+  done
+
+
+  local kmsa_order=() mon_i nd_match
+  for mon_i in "${MONDAYS[@]}"; do
+    nd_match=""
+    for nd in "${real_dates[@]}"; do
+      if [[ "$(week_monday "$nd")" == "$mon_i" ]]; then
+        nd_match="$nd"
+        break
+      fi
+    done
+    if [[ -n "$nd_match" ]]; then
+      kmsa_order+=(--value "$nd_match")
+    else
+      kmsa_order+=(--value "$mon_i")
+    fi
+  done
+
+  local clim_paths=()
+  local pieces=()
+  if (( ${#real_dates[@]} > 0 )); then
+
+    local fc_vals=() nd
+    for nd in "${real_dates[@]}"; do
+      fc_vals+=(--value "$nd")
+    done
+    if (( ${#real_dates[@]} == 1 )); then
+      for nd in "${native_dates[@]}"; do
+        if [[ "$nd" != "${real_dates[0]}" ]]; then
+          fc_vals+=(--value "$nd")
+          break
+        fi
+      done
+    fi
+    $S select --dim time "${fc_vals[@]}" \
+        -i "${stem_short}_aligned.zarr" -o "${stem_short}_fc.zarr"
+
+    for nd in $(zarr_dates "${stem_short}_fc.zarr"); do
+      $S aggregate-temporal --period weekly --method mean --align left -v precip_avg \
+          --start-time "$nd" --end-time "$(pydate "${nd} +7 days" %Y-%m-%d)" \
+          -i "$IR/clim_daily.zarr" -o "${stem_short}_${nd}_clim.zarr"
+      $S rename -v precip_avg --to-name precip \
+          -i "${stem_short}_${nd}_clim.zarr" -o "${stem_short}_${nd}_clim_named.zarr"
+      clim_paths+=("${stem_short}_${nd}_clim_named.zarr")
+    done
+
+    if (( ${#clim_paths[@]} == 1 )); then
+      rm -rf "${stem_short}_clim_multi.zarr"
+      cp -R "${clim_paths[0]}" "${stem_short}_clim_multi.zarr"
+    else
+      local clim_args=() cp_path
+      for cp_path in "${clim_paths[@]}"; do clim_args+=(-i "$cp_path"); done
+      $S concat --dim time "${clim_args[@]}" -o "${stem_short}_clim_multi.zarr"
+    fi
+
+    $S difference -v precip \
+        -i "${stem_short}_fc.zarr" -i "${stem_short}_clim_multi.zarr" \
+        -o "${stem_short}_anom.zarr"
+
+    # indicator requires a stamped daily cadence even for a non-windowed
+    # (N=1) "mean 1d" rule; relabeling has no numerical effect here since
+    # no multi-day window is ever taken -- bookkeeping, not a calculation.
+    python3 - "${stem_short}_anom.zarr" "${stem_short}_anom_daily.zarr" <<'PY'
+import sys
+import xarray as xr
+src, dest = sys.argv[1], sys.argv[2]
+ds = xr.open_zarr(src, consolidated=True).compute()
+ds["precip"].attrs["data_interval"] = "1 day"
+for v in ds.variables:
+    ds[v].encoding = {}
+ds.to_zarr(dest, mode="w", consolidated=True)
+PY
+    $S indicator -v precip --rule "precip mean 1d > 0" --probability \
+        -i "${stem_short}_anom_daily.zarr" -o "${stem_short}_prob_native.zarr"
+
+
+    pieces+=(-i "${stem_short}_prob_native.zarr")
+  fi
+
+  local na_vals=() na
+  for na in $(kind_mondays obs) $(kind_mondays hybrid) $(kind_mondays na); do
+    na_vals+=(--value "$na")
+  done
+  if (( ${#na_vals[@]} > 0 )); then
+    $S select --dim time "${na_vals[@]}" \
+        -i "$IR/nan_wk.zarr" -o "${stem_short}_nan_gaps.zarr"
+    pieces+=(-i "${stem_short}_nan_gaps.zarr")
+  fi
+
+  if (( ${#pieces[@]} == 0 )); then
+    echo "ERROR: kmsa produced no forecast weeks for probability panel" >&2
+    exit 1
+  elif (( ${#pieces[@]} == 2 )); then
+    $S select --dim time "${kmsa_order[@]}" "${pieces[@]}" -o "$dest"
+  else
+    $S concat --dim time "${pieces[@]}" -o "${stem_short}_unsorted.zarr"
+    $S select --dim time "${kmsa_order[@]}" -i "${stem_short}_unsorted.zarr" -o "$dest"
+  fi
 }
 
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
@@ -581,6 +739,15 @@ plot_sond \
     'Weekly rainfall anomaly (mm)' \
     "$IR/kenya_sond_weekly.patch.json" \
     ppt_anom_week
+
+compute_prob_above_kmsa "$IR/kenya_kmsa_prob.zarr"
+plot_sond \
+    "$IR/kenya_kmsa_prob.zarr" \
+    kenya_kmsa_prob_above.png \
+    'Probability of Above-Normal Rainfall - KMSA Downscaled Forecast' \
+    'P(above climatology)' \
+    "$IR/kenya_sond_weekly.patch.json" \
+    "brown,wheat,white,lightgreen,green" 0 1 probability
 
 # --- AIFS-ENS / GEFS, same 16-week canvas ---------------------------------
 prep_dynamical_daily ecmwf-aifs-ens-forecast kenya_aifs
