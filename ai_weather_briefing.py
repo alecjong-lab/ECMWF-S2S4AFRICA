@@ -656,6 +656,11 @@ optional_picture_names |= {
     "median_wet_climatology", "wet5_climatology", "wet7_climatology",
 }
 
+# The Great Horn tercile plot is regional context, not core to the Kenya
+# briefing, and needs a Great_Horn plot run (or a GCS top-up) on top of the
+# Kenya pipeline, so a missing one shouldn't block the send either.
+optional_picture_names.add("ECMWF_tercile_plot_EA")
+
 # Picture-only shapes (no AI narration). Fill only when the shape name or
 # alt text equals a plot stem exactly (e.g. kenya_weekly_rainfall_analog_years).
 # Unlabeled pictures are left as template placeholders.

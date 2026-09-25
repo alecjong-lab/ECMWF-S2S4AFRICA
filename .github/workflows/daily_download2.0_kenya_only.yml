@@ -390,11 +390,10 @@ jobs:
       # Great_Horn is fetched because ai_weather_briefing.py is
       # Kenya/Great_Horn-hardcoded while this workflow runs COUNTRIES=Kenya, so
       # plots/Great_Horn/.../chance_of_above_or_below.png can never exist
-      # locally -- and it is a *required* picture, so without it the script
-      # exits 1 before prs.save() and writes no .pptx at all (the step is
-      # continue-on-error, so that failure is silent and the email goes out with
-      # no deck). Not gated on force_all: force_all means "regenerate what this
-      # workflow can build", and it cannot build this.
+      # locally. It's an optional picture (a missing one leaves a blank slot
+      # rather than blocking the deck), so this only keeps it in the briefing
+      # when the main run has published it. Not gated on force_all: force_all
+      # means "regenerate what this workflow can build", and it cannot build this.
       - name: Top up briefing prerequisites from GCS
         continue-on-error: true
         working-directory: main_repo
