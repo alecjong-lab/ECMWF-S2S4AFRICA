@@ -26,6 +26,7 @@ jobs:
       TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
       EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
       EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+      AZURE_STORAGE_SAS_TOKEN: ${{ secrets.AZURE_STORAGE_SAS_TOKEN }}
 
     steps:
       - name: Checkout repo

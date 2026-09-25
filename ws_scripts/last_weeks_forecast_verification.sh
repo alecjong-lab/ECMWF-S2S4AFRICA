@@ -26,7 +26,11 @@ if [[ "$CHIRPS_LATEST" > "$FCST_REF" ]]; then
 else
   ASOF="$CHIRPS_LATEST"
 fi
-ISO=$(run resolve-time last-week --as-of "$ASOF" --emit iso)
+# `last-week --as-of X` always excludes the Mon-Sun week that CONTAINS X,
+# even when X is that week's own Sunday (the week is already fully
+# complete) — nudge as-of forward a day so a fully-elapsed week isn't
+# skipped an extra week back. See week1_mae_vs_chirps.sh for the same fix.
+ISO=$(run resolve-time last-week --as-of "$(pydate "${ASOF} +1 days" %Y-%m-%d)" --emit iso)
 VERIFY_START="${ISO%%/*}"
 VERIFY_END="${ISO##*/}"
 AGG_END=$(pydate "$VERIFY_END +1 days" %Y-%m-%d)
