@@ -485,24 +485,6 @@ downscaled_picture_paths = {
     "chance_20mm": f"{kenya_path}/weekly/weekly_chance_higherthan_20mm_downscaled.png",
 }
 
-# downscaled counterparts (Kenya only): onset maps from the per-member daily
-# downscaled forecast (downscaled block in run_rainfall_onset.py), and dry/wet
-# spell + weekly >20mm chance maps (gef.plot_downscaled_spell_maps /
-# gef.plot_downscaled_exceedance, called from dowscale_dekade.py).
-# downscaled_onset_icpac is the default 20mm wet-spell definition.
-downscaled_picture_paths = {
-    "downscaled_onset_icpac": f"{kenya_path}/monthly/onset_downscaled.png",
-    "downscaled_onset_icpac10mm": f"{kenya_path}/monthly/onset_downscaled_icpac10mm.png",
-    "downscaled_onset_accum": f"{kenya_path}/monthly/onset_downscaled_accum.png",
-    "dwn_wet_5": f"{kenya_path}/monthly/prob_wetspell_5days_downscaled.png",
-    "dwn_wet_7": f"{kenya_path}/monthly/prob_wetspell_7days_downscaled.png",
-    "dwn_wet_median": f"{kenya_path}/monthly/median_wetspell_length_downscaled.png",
-    "dwn_dry_5": f"{kenya_path}/monthly/prob_dryspell_5days_downscaled.png",
-    "dwn_dry_7": f"{kenya_path}/monthly/prob_dryspell_7days_downscaled.png",
-    "dwn_dry_median": f"{kenya_path}/monthly/median_dryspell_length_downscaled.png",
-    "chance_20mm": f"{kenya_path}/weekly/weekly_chance_higherthan_20mm_downscaled.png",
-}
-
 # Great Horn tercile plot (regional counterpart to the Kenya-only ECMWF_tercile_plot)
 ecmwf_tercile_ea_path = f"{great_horn_path}/weekly/chance_of_above_or_below.png"
 
@@ -533,7 +515,6 @@ picture_paths = {
     "wet5_climatology": wet5_climatology_path,
     "wet7_climatology": wet7_climatology_path,
     "exceed20mm": exceed20mm_path,
-    **downscaled_picture_paths,
     **downscaled_picture_paths,
 }
 
