@@ -117,14 +117,6 @@ classify_weeks() {
     if [[ "$sun" < "$CHIRPS_END" || "$sun" == "$CHIRPS_END" ]]; then
       KINDS+=("obs")
     elif [[ "$mon" < "$INIT" ]]; then
-      # Hybrid whenever the week starts before the forecast itself does --
-      # not just before CHIRPS_END. CHIRPS_END is normally INIT-1 (one-day
-      # lag), so this matches "mon <= CHIRPS_END" in the common case, but
-      # when CHIRPS lags INIT by 2+ days, a week can start after
-      # CHIRPS_END yet still before INIT, leaving a day neither obs nor
-      # forecast covers; that week still needs the hybrid splice, and the
-      # strict min-coverage 1.0 on plain forecast weeks would otherwise
-      # silently drop it instead of NaN-filling it.
       KINDS+=("hybrid")
     elif [[ -n "$fcst_last" && ( "$sun" < "$fcst_last" || "$sun" == "$fcst_last" ) ]]; then
       KINDS+=("forecast")
@@ -226,18 +218,12 @@ build_hybrid() {
   sun=$(pydate "${mon} +6 days" %Y-%m-%d)
 
   # fcst_start is the later of "day after CHIRPS's own coverage" and the
-  # forecast's own INIT date. CHIRPS normally lags INIT by exactly one
-  # day, so these agree; but CHIRPS can lag further, leaving a real gap
-  # this week that only the forecast (starting at INIT, not CHIRPS_END+1)
-  # can fill.
+  # forecast's own INIT date.
   fcst_start=$(pydate "${CHIRPS_END} +1 days" %Y-%m-%d)
   if [[ "$INIT" > "$fcst_start" ]]; then
     fcst_start="$INIT"
   fi
 
-  # A hybrid week's Monday can now fall after CHIRPS_END too (same gap as
-  # above), leaving zero real obs days for this specific week -- skip the
-  # obs fetch entirely rather than pass chirps-fetch an inverted range.
   has_obs=0
   if [[ "$mon" < "$CHIRPS_END" || "$mon" == "$CHIRPS_END" ]]; then
     has_obs=1
@@ -504,13 +490,7 @@ prep_dynamical_daily() {
       -i "$IR/${stem}_mem_named.zarr" -o "$IR/${stem}_mem_daily.zarr"
 }
 
-# Probability of above-normal rainfall per SOND week, ensemble members only.
-# Reuses the KINDS/MONDAYS classification already set by compose_sond for the
-# same stem, and the same clim_daily.zarr used by make_anomaly, so the dates
-# and grid logic match the precip/anomaly panels exactly. Forecast weeks get
-# a real probability (fraction of members with a positive weekly anomaly);
-# every other week (obs, hybrid, na) is the same all-NaN template used
-# elsewhere, so only forecast panels ever render.
+
 compute_prob_above() {
   local stem="$1" dest="$2"
   local stem_short="${dest%.zarr}"
@@ -568,21 +548,7 @@ compute_prob_above() {
   write_patch "${stem_short}.patch.json" "$force_na"
 }
 
-# KMSA has no members in precip_downscaled_daily, but the WEEKLY
-# precip_downscaled product does (101 members, 6 lead weeks). Those lead
-# weeks are anchored to INIT's own weekday (often not Monday), not to the
-# fixed SOND grid, so each native week is mapped onto the Monday of the
-# calendar week it starts in (week_monday, same skill GRID_START itself
-# uses -- INIT's weekday varies, so this is not always a fixed N-day
-# offset) and kept only if that Monday is already classified "forecast" for KMSA by
-# compose_sond above (same KINDS/MONDAYS). Climatology is matched to each
-# native week's exact real date range (not the shifted Monday), so the
-# comparison itself is exact. The data's own time coordinate is never
-# relabeled -- kmsa_order below (a KMSA-specific ORDER) substitutes each
-# kept week's real native date in place of the Monday value, so the final
-# select/concat still reorders and validates by exact match, same as
-# everywhere else. Only the panel *placement* is approximate; plot_sond's
-# subplot titles come from MONDAYS by panel position, not from the data.
+# kmsa weekly has ens members
 compute_prob_above_kmsa() {
   local dest="$1"
   local stem_short="${dest%.zarr}"
@@ -611,12 +577,7 @@ compute_prob_above_kmsa() {
     real_dates+=("$nd")
   done
 
-  # A KMSA-specific ORDER: each forecast week's own real native date (still
-  # a valid, just differently-anchored, label for that SOND week) stands in
-  # for the usual Monday value, so the final select below can still do an
-  # exact-value lookup/reorder -- same loud-failure validation as
-  # elsewhere, no coordinate relabeling needed. Only the fixed-position
-  # subplot titles (from MONDAYS, not from the data) need to "say" Monday.
+
   local kmsa_order=() mon_i nd_match
   for mon_i in "${MONDAYS[@]}"; do
     nd_match=""
@@ -636,11 +597,7 @@ compute_prob_above_kmsa() {
   local clim_paths=()
   local pieces=()
   if (( ${#real_dates[@]} > 0 )); then
-    # select --dim time drops the dim entirely on a single --value; the
-    # weekly product only has 6 sparse dates (no arbitrary "+1 day" to pad
-    # with), so pad with another real native date instead when needed and
-    # drop it again below via a real (dim-preserving) xarray .sel list on
-    # just real_dates -- the padding date never reaches that list.
+
     local fc_vals=() nd
     for nd in "${real_dates[@]}"; do
       fc_vals+=(--value "$nd")
@@ -694,10 +651,7 @@ PY
     $S indicator -v precip --rule "precip mean 1d > 0" --probability \
         -i "${stem_short}_anom_daily.zarr" -o "${stem_short}_prob_native.zarr"
 
-    # No relabeling needed: kmsa_order above already asks for each real
-    # forecast week's own native value by exact match, so the final
-    # select/concat below naturally drops the padding date's row (if any)
-    # along with it -- nothing here ever requests that value.
+
     pieces+=(-i "${stem_short}_prob_native.zarr")
   fi
 
