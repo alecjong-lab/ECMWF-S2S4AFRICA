@@ -9,6 +9,7 @@ import geopandas as gpd
 import matplotlib
 # matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
@@ -17,6 +18,8 @@ from ecmwfapi import ECMWFDataServer
 import json
 import re
 import operator
+import warnings
+from contextlib import contextmanager
 from scipy.ndimage import gaussian_filter
 from scipy.ndimage import grey_opening, grey_closing
 from IPython.display import clear_output
@@ -481,6 +484,33 @@ def set_extent_from_dataset(ds):
     lon1 = ds.longitude.min().values
     return lat1, lat2, lon1, lon2
 
+@contextmanager
+def extent_of(ds, pad_cells=0.5):
+    """
+    Temporarily set the module-level lat1/lat2/lon1/lon2 plotting extent to
+    ds's own coordinate bounds (padded by pad_cells grid cells, so edge cells
+    aren't drawn cut in half), restoring the previous extent afterwards.
+
+    For data clipped to a shapefile: the map then ends at the shape's edges
+    instead of at the country bbox, without leaking the tighter extent into
+    later plots that rely on the bbox set by the calling script.
+
+        with extent_of(clipped_ds):
+            plot_panel_and_save(clipped_ds, ...)
+    """
+    global lat1, lat2, lon1, lon2
+    saved = (lat1, lat2, lon1, lon2)
+    dlat = abs(float(ds.latitude.diff('latitude').mean())) * pad_cells if ds.sizes['latitude'] > 1 else 0
+    dlon = abs(float(ds.longitude.diff('longitude').mean())) * pad_cells if ds.sizes['longitude'] > 1 else 0
+    lat1 = float(ds.latitude.max()) + dlat
+    lat2 = float(ds.latitude.min()) - dlat
+    lon1 = float(ds.longitude.min()) - dlon
+    lon2 = float(ds.longitude.max()) + dlon
+    try:
+        yield
+    finally:
+        lat1, lat2, lon1, lon2 = saved
+
 def plot_dim_order(ds, preferred=('latitude', 'longitude', 'number', 'step')):
     """
     Dim order for panel plotting/raster writing, skipping dims `ds` doesn't have.
@@ -524,10 +554,11 @@ def remove_coastline_and_borders(ax):
             artist.remove()
 
 def plot_panel_and_save(ds, variable, cmap, fontsize, save_path, vmin=None, vmax=None,
-                         boundary_gdf=None, boundary_axes=None):
+                         boundary_gdf=None, boundary_axes=None, norm=None, cbar_ticks=None):
     """panel_plot_variable + optional admin-boundary overlay + savefig, in one call."""
     fig = panel_plot_variable(ds, variable=variable, forecast_timestep=ds.step.values,
-                               cmap=cmap, fontsize=fontsize, vmin=vmin, vmax=vmax)
+                               cmap=cmap, fontsize=fontsize, vmin=vmin, vmax=vmax, norm=norm,
+                               cbar_ticks=cbar_ticks)
     if boundary_gdf is not None:
         for ax in fig.axes[boundary_axes]:
             remove_coastline_and_borders(ax)
@@ -535,46 +566,248 @@ def plot_panel_and_save(ds, variable, cmap, fontsize, save_path, vmin=None, vmax
     plt.savefig(save_path, bbox_inches='tight')
     return fig
 
+# Discrete colour scales for "chance" maps: 10 bins of 10% each, so a reader can
+# read a cell's chance straight off the colorbar instead of guessing a shade on
+# a continuous scale. Median spell lengths get day bins, finer at the short end
+# where a day's difference matters most.
+PROB_BOUNDS = np.arange(0, 101, 10)
+SPELL_DAY_BOUNDS = [0, 1, 2, 3, 4, 5, 7, 10, 14, 21, 28]
+# exceedance chances: grays for unlikely (< 30%), blues for a real but
+# uncertain chance (30-60%), yellow -> red for likely (> 60%) -- one colour
+# per PROB_BOUNDS bin
+EXCEEDANCE_COLORS = [
+    '#e6e6e6',  #  0-10% light gray
+    '#c4c4c4',  # 10-20% darker gray
+    '#9e9e9e',  # 20-30% gray
+    '#a6d8f0',  # 30-40% light blue
+    '#3a8fd9',  # 40-50% blue
+    '#2bb3a0',  # 50-60% blue-green
+    '#fff3a0',  # 60-70% light yellow
+    '#ffd21f',  # 70-80% yellow
+    '#fb8c1e',  # 80-90% orange
+    '#d7191c',  # 90-100% red
+]
+# median spell length: blues for short spells, greens for about a week,
+# yellow -> dark red for long ones -- one colour per SPELL_DAY_BOUNDS bin
+SPELL_LENGTH_COLORS = [
+    '#b3dcf5',  #  0-1 days light blue
+    '#5aa7e0',  #  1-2 days blue
+    '#1f5fb4',  #  2-3 days darker blue
+    '#26a69a',  #  3-4 days blue-green
+    '#a5d68a',  #  4-5 days light green
+    '#43a047',  #  5-7 days green
+    '#ffe135',  #  7-10 days yellow
+    '#fb8c1e',  # 10-14 days orange
+    '#e31a1c',  # 14-21 days red
+    '#8b0000',  # 21-28 days dark red
+]
+
+def discrete_cmap(name, boundaries, start=0.08):
+    """
+    (cmap, norm) giving one solid colour per bin between `boundaries`.
+    `name` is either a list of colours (one per bin, used as-is) or a
+    matplotlib colormap name, sampled evenly -- starting a little past the
+    colormap's near-white end so the lowest bin still reads as a colour
+    against the white map background.
+    """
+    n_bins = len(boundaries) - 1
+    if isinstance(name, (list, tuple)):
+        if len(name) != n_bins:
+            raise ValueError(f"{len(name)} colours given for {n_bins} bins")
+        colors = list(name)
+    else:
+        colors = matplotlib.colormaps[name](np.linspace(start, 1.0, n_bins))
+    return mcolors.ListedColormap(colors), mcolors.BoundaryNorm(boundaries, n_bins)
+
+def plot_downscaled_exceedance(rescaled_forecast, threshold, shapefile_path, save_path, fontsize):
+    """
+    Weekly chance (% of ensemble members) of the downscaled forecast exceeding
+    `threshold` mm -- the downscaled counterpart of plot_s2s.py's
+    weekly_chance_higherthan_20mm.png -- clipped to and outlined with
+    shapefile_path, on the discrete PROB_BOUNDS colour scale. Computed straight
+    from the weekly downscaled totals: the daily disaggregation (and its
+    profile smoothing) only moves rain between days within a week and leaves
+    every weekly total unchanged, so it doesn't come into it.
+    """
+    prob = get_exceedance_percentage(rescaled_forecast, 'tp', threshold, comparison='greater')
+    prob['tp'].attrs['GRIB_name'] = f'chance of more than {threshold:g} mm in the week'
+    prob = prob.assign_coords(time=rescaled_forecast.time).rio.write_crs("EPSG:4326")
+    prob = clip_to_shapefile(prob, shapefile_path, transpose=True)
+
+    outline = gpd.read_file(shapefile_path).set_crs("EPSG:4326", allow_override=True).dissolve()
+    cmap_, norm = discrete_cmap(EXCEEDANCE_COLORS, PROB_BOUNDS)
+    with extent_of(prob):  # map ends at the shapefile's edges, not the country bbox
+        plot_panel_and_save(prob, 'tp', cmap_, fontsize, save_path, norm=norm, cbar_ticks=PROB_BOUNDS,
+                            boundary_gdf=outline, boundary_axes=slice(0, prob.sizes['step']))
+    plt.close()
+
+def plot_downscaled_spell_maps(rescaled_forecast, data, shapefile_path, save_dir, fontsize,
+                               profile_sigma=None, spell_days=28, threshold=1.0, suffix='_downscaled'):
+    """
+    Dry/wet spell maps from the per-member daily downscaled forecast -- the
+    downscaled counterpart of plot_s2s.py's Kenya spell plots (same 1mm/day
+    threshold and first-28-days window). Writes prob_{dry,wet}spell_{5,7}days
+    and median_{dry,wet}spell_length maps (+ suffix) to save_dir, clipped to
+    and outlined with shapefile_path.
+
+    rescaled_forecast : weekly downscaled Dataset with a 'number' dim
+    data : raw daily accumulated ECMWF ensemble Dataset (same 'number' values)
+    profile_sigma : passed to disaggregate_weekly_to_daily (smooths the 1.5deg
+        daily timing profile so the maps don't show blocky coarse-cell edges)
+
+    Each member is split into days with its own ECMWF member's daily profile
+    and reduced to its longest dry/wet spell before moving on, so the full
+    (member, day, fine grid) array is never held in memory at once. Uses the
+    module-level lat1/lat2/lon1/lon2 extent like panel_plot_variable.
+    """
+    dry_lengths, wet_lengths = [], []
+    for n in rescaled_forecast.number.values:
+        daily_member = disaggregate_weekly_to_daily(
+            rescaled_forecast.tp.sel(number=n), data.tp.sel(number=n), profile_sigma=profile_sigma
+        ).tp.isel(step=slice(None, spell_days))
+        dry_lengths.append(dry_spell_length(daily_member, threshold=threshold))
+        wet_lengths.append(wet_spell_length(daily_member, threshold=threshold))
+    last_step = daily_member.step.values[-1]
+    dry_lengths = xr.concat(dry_lengths, dim='number')
+    wet_lengths = xr.concat(wet_lengths, dim='number')
+
+    outline = gpd.read_file(shapefile_path).set_crs("EPSG:4326", allow_override=True).dissolve()
+    os.makedirs(save_dir, exist_ok=True)
+
+    def to_plot(da, name, units):
+        # same shape plot_s2s.py hands panel_plot_variable: a 'tp' dataset
+        # with a single step coord, clipped to the shapefile
+        da = da.assign_coords(step=last_step, time=data.time)
+        da.attrs['GRIB_name'] = name
+        da.attrs['units'] = units
+        ds = da.to_dataset(name='tp').rio.write_crs("EPSG:4326")
+        return clip_to_shapefile(ds, shapefile_path, transpose=True)
+
+    for spell_name, lengths in [('dry', dry_lengths), ('wet', wet_lengths)]:
+        # same 10 colours as the median spell length maps, here one per 10% bin
+        prob_cmap, prob_norm = discrete_cmap(SPELL_LENGTH_COLORS, PROB_BOUNDS)
+        for min_len in (5, 7):
+            prob = (lengths >= min_len).mean('number') * 100
+            ds = to_plot(prob, f'chance of {spell_name} spell longer than {min_len}', '%')
+            with extent_of(ds):  # map ends at the shapefile's edges, not the country bbox
+                plot_panel_and_save(ds, 'tp', prob_cmap, fontsize,
+                                    f'{save_dir}/prob_{spell_name}spell_{min_len}days{suffix}.png',
+                                    norm=prob_norm, cbar_ticks=PROB_BOUNDS, boundary_gdf=outline, boundary_axes=slice(0, 1))
+            plt.close()
+
+        # median spell length, same definition as plot_s2s.py: the longest
+        # spell length at least half the members reach
+        probs = xr.concat([(lengths >= i).mean('number') * 100 for i in range(spell_days)], dim='spell_length')
+        count_above = (probs >= 50).sum('spell_length')
+        median_length = (count_above - 1).where(count_above > 0)
+        ds = to_plot(median_length, f'Median {spell_name} spell length', 'days')
+        days_cmap, days_norm = discrete_cmap(SPELL_LENGTH_COLORS, SPELL_DAY_BOUNDS)
+        with extent_of(ds):
+            plot_panel_and_save(ds, 'tp', days_cmap, fontsize,
+                                f'{save_dir}/median_{spell_name}spell_length{suffix}.png',
+                                norm=days_norm, cbar_ticks=SPELL_DAY_BOUNDS, boundary_gdf=outline, boundary_axes=slice(0, 1))
+        plt.close()
+
+def run_in_processes(fn, arg_tuples, max_workers=None):
+    """
+    fn(*args) for every args in arg_tuples, spread over worker processes;
+    returns the results in order. fn must be a module-level function (so it
+    can be pickled by reference).
+
+    Pipeline scripts are flat scripts without an `if __name__ == "__main__"`
+    guard, and 'spawn'/'forkserver' workers (Windows, macOS, Linux on Python
+    3.14+) re-run the parent's main script on startup unless it is hidden --
+    which here would re-run the whole pipeline script in every worker. So the
+    main module's __file__/__spec__ is hidden while the pool is up; workers
+    then only import this module (via fn) and never touch the calling script.
+    Falls back to running serially if the pool can't be used.
+    """
+    import sys
+    from concurrent.futures import ProcessPoolExecutor
+
+    arg_tuples = list(arg_tuples)
+    if not arg_tuples:
+        return []
+    if max_workers is None:
+        max_workers = min(len(arg_tuples), os.cpu_count() or 1)
+    if max_workers <= 1:
+        return [fn(*args) for args in arg_tuples]
+
+    # multiprocessing reads main.__spec__ unconditionally, so it's set to None
+    # (what a plain `python script.py` has anyway) rather than removed
+    main = sys.modules['__main__']
+    hidden = {k: main.__dict__[k] for k in ('__file__', '__spec__') if k in main.__dict__}
+    main.__dict__.pop('__file__', None)
+    main.__spec__ = None
+    try:
+        with ProcessPoolExecutor(max_workers=max_workers) as pool:
+            futures = [pool.submit(fn, *args) for args in arg_tuples]
+            return [f.result() for f in futures]
+    except Exception as e:
+        print(f"run_in_processes: parallel run failed ({e!r}), running serially instead")
+        return [fn(*args) for args in arg_tuples]
+    finally:
+        main.__dict__.update(hidden)
+
+def _plot_county_panels(clip, anomaly_clip, gdf, county_path, fontsize, vmax, anom_vmin, anom_vmax):
+    """One county's downscaled-forecast + anomaly panel plots (worker side of
+    plot_admin1_county_breakdown)."""
+    set_extent_from_dataset(clip)
+    for ds, cmap_, vmin_, vmax_, fname in [
+        (clip, cmap, 0, vmax, 'dowscaled_forecast.png'),
+        (anomaly_clip, 'BrBG', anom_vmin, anom_vmax, 'dowscaled_forecast_anomaly.png'),
+    ]:
+        fig = panel_plot_variable(ds, variable='tp', forecast_timestep=clip.step.values,
+                                   cmap=cmap_, fontsize=fontsize, vmin=vmin_, vmax=vmax_,
+                                   outer_labels_only=True, max_ticks=4)
+        for ax in fig.get_axes()[:-1]:
+            remove_coastline_and_borders(ax)
+            gdf.boundary.plot(ax=ax, color='black')
+        plt.savefig(f'{county_path}/{fname}', bbox_inches='tight')
+        plt.close(fig)
+
 def plot_admin1_county_breakdown(rescaled_forecast, chirps_ds, states1, save_dir,
-                                  transpose_first=False, buffer_size=0.05):
+                                  transpose_first=False, buffer_size=0.05, max_workers=None):
     """
     For each admin-1 region in `states1`, clip the rescaled forecast to a
     buffered boundary and save the downscaled-forecast panel plus its anomaly
     vs. `chirps_ds` climatology under f'{save_dir}/<adm1_name>/'.
+
+    The clipping and colour-scale quantiles are cheap and done here; the
+    plotting (~2s per figure, nearly all of it matplotlib/cartopy layout) is
+    spread over worker processes with run_in_processes. Only the ensemble
+    mean is sent to the workers -- panel_plot_variable plots the ensemble mean
+    anyway, while the colour scales are still taken from all members here,
+    same as before.
     """
     base = rescaled_forecast.transpose() if transpose_first else rescaled_forecast
 
+    jobs = []
     for name in states1['adm1_name']:
         gdf = states1[states1['adm1_name'] == name]
         gdf_buffered = gdf.copy()
-        gdf_buffered["geometry"] = gdf.geometry.buffer(buffer_size)
+        # buffer_size is a deliberate margin in degrees, so geopandas' warning
+        # about buffering in a geographic CRS doesn't apply here
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='Geometry is in a geographic CRS')
+            gdf_buffered["geometry"] = gdf.geometry.buffer(buffer_size)
 
         clip = base.rio.clip(gdf_buffered.geometry, gdf_buffered.crs, drop=True, all_touched=True)
-        clat1, clat2, clon1, clon2 = set_extent_from_dataset(clip)
+        clat1, clat2, clon1, clon2 = clip.latitude.max().values, clip.latitude.min().values, clip.longitude.min().values, clip.longitude.max().values
         fontsize = 8 + 10 * 1/(clat1-clat2)*(clon2-clon1) + (clon2-clon1)/(clat1-clat2)*2
 
         county_path = f'{save_dir}/{name}/'
         os.makedirs(county_path, exist_ok=True)
 
-        fig = panel_plot_variable(clip, variable='tp', forecast_timestep=clip.step.values,
-                                   cmap=cmap, fontsize=fontsize, vmin=0,
-                                   vmax=int(clip.quantile(0.99).tp.values))
-        for ax in fig.get_axes()[:-1]:
-            remove_coastline_and_borders(ax)
-            gdf.boundary.plot(ax=ax, color='black')
-        plt.savefig(f'{county_path}/dowscaled_forecast.png', bbox_inches='tight')
-        plt.close()
-
+        vmax = int(clip.quantile(0.99).tp.values)
         anomaly_clip = compute_rainfall_anomaly(clip, chirps_ds)
-        vmin, vmax = symmetric_vmin_vmax(anomaly_clip)
+        anom_vmin, anom_vmax = symmetric_vmin_vmax(anomaly_clip)
 
-        fig = panel_plot_variable(anomaly_clip, variable='tp', forecast_timestep=clip.step.values,
-                                   cmap='BrBG', fontsize=fontsize, vmin=vmin, vmax=vmax)
-        for ax in fig.get_axes()[:-1]:
-            remove_coastline_and_borders(ax)
-            gdf.boundary.plot(ax=ax, color='black')
-        plt.savefig(f'{county_path}/dowscaled_forecast_anomaly.png', bbox_inches='tight')
-        plt.close()
+        if 'number' in clip.dims:
+            clip, anomaly_clip = ensemble_mean(clip), ensemble_mean(anomaly_clip)
+        jobs.append((clip, anomaly_clip, gdf, county_path, fontsize, vmax, anom_vmin, anom_vmax))
+
+    run_in_processes(_plot_county_panels, jobs, max_workers=max_workers)
 
 def link_ECMWF_key(api_config):
     # Get the current working directory
@@ -1488,7 +1721,8 @@ def make_windroses(ensemble_mean,lat,lon,num_partitions,num_steps):
 cities = {
 }
 
-def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax='None',add_contour=None,contourlevels=None,contourcmap=None,contourwidths=None,fontsize=16,norm=None):
+def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax='None',add_contour=None,contourlevels=None,contourcmap=None,contourwidths=None,fontsize=16,norm=None,
+                  label_left=True,label_bottom=True,max_ticks=None):
     '''
     function to plot a variable from the ECMWF forecast with the option of adding another variable as contour
 
@@ -1541,9 +1775,15 @@ def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax=
     ax.add_feature(cfeature.COASTLINE, edgecolor='black')
     ax.add_feature(cfeature.BORDERS, linestyle=':',alpha=0.7)
     
-    gl = ax.gridlines(draw_labels=True,alpha=0)
+    # max_ticks caps the number of lat/lon gridline labels; cartopy's own
+    # choice can be dense on a small extent, and every label gets re-measured
+    # on each layout pass, which dominates the plotting time
+    locs = {} if max_ticks is None else {'xlocs': mticker.MaxNLocator(max_ticks), 'ylocs': mticker.MaxNLocator(max_ticks)}
+    gl = ax.gridlines(draw_labels=True,alpha=0,**locs)
     gl.top_labels = False
     gl.right_labels = False
+    gl.left_labels = label_left
+    gl.bottom_labels = label_bottom
     
     # Add axis labels
     ax.set_xlabel('Longitude')
@@ -1555,7 +1795,8 @@ def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax=
              
     return contour,lines
 
-def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=None,vmin=None,units=None,change=False,add_contour=None,contourlevels=None,contourcmap=None,contourwidths=None,fontsize=16,level=None,norm=None):
+def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=None,vmin=None,units=None,change=False,add_contour=None,contourlevels=None,contourcmap=None,contourwidths=None,fontsize=16,level=None,norm=None,
+                        outer_labels_only=False,max_ticks=None,cbar_ticks=None):
     ds=ds.sel(longitude=slice(lon1,lon2),latitude=slice(lat1,lat2))
 
     if any(t == 0 for t in [len(ds.longitude),len(ds.latitude)]):
@@ -1625,7 +1866,12 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
 
     for i, s in enumerate(np.atleast_1d(forecast_timestep)):
         ax = axes[i]
-        contour,lines=plot_variable(ds,variable,s,vmax,vmin,cities=cities,cmap=cmap,ax=ax,add_contour=add_contour,contourlevels=contourlevels,contourcmap=contourcmap,contourwidths=contourwidths,fontsize=fontsize,norm=norm)
+        # outer_labels_only: lat/lon labels only on the left column and on each
+        # column's lowest visible panel (panels share axes, so inner labels repeat)
+        label_left = (not outer_labels_only) or i % ncols == 0
+        label_bottom = (not outer_labels_only) or i + ncols >= num_steps
+        contour,lines=plot_variable(ds,variable,s,vmax,vmin,cities=cities,cmap=cmap,ax=ax,add_contour=add_contour,contourlevels=contourlevels,contourcmap=contourcmap,contourwidths=contourwidths,fontsize=fontsize,norm=norm,
+                                    label_left=label_left,label_bottom=label_bottom,max_ticks=max_ticks)
     for j in range(num_steps, len(axes)):
         axes[j].set_visible(False) #delete extra empty plots
 
@@ -1645,6 +1891,9 @@ def panel_plot_variable(ds,variable,forecast_timestep,cmap,cities=cities,vmax=No
     # with nrows; scale it down by nrows so the gap stays a constant size.
     cbar_pad = 0.05 / nrows
     cbar = fig.colorbar(contour, ax=used_axes, orientation='horizontal', location='bottom', shrink=cbar_shrink, pad=cbar_pad, aspect=cbar_aspect)
+    if cbar_ticks is not None:
+        # e.g. every bin edge of a discrete colour scale, so each bin can be read off
+        cbar.set_ticks(cbar_ticks)
     try:
         cbar.set_label(ds[variable].GRIB_name+f' [{units}]')
     except:
@@ -2135,7 +2384,6 @@ def clip_by_overlap(ds, regions_gdf, region_name, threshold=0.5, lat_dim='latitu
     """
     import numpy as np
     import xarray as xr
-    from shapely.geometry import box
 
     region_geom = regions_gdf.loc[[region_name]].geometry.union_all()
 
@@ -2145,13 +2393,21 @@ def clip_by_overlap(ds, regions_gdf, region_name, threshold=0.5, lat_dim='latitu
     dlat = float(ds[lat_dim].diff(lat_dim).mean())
     dlon = float(ds[lon_dim].diff(lon_dim).mean())
 
-    frac = np.zeros((len(lats), len(lons)))
+    # every grid cell as a box at once; shapely 2's vectorized ops then work
+    # over the whole grid in C instead of one Python call per cell. Cells lying
+    # fully inside the region are simply 1 -- only cells on the region's edge
+    # need the (expensive, on a detailed boundary) intersection. Same selection
+    # as intersecting cell by cell, much faster on a fine downscaled grid.
+    import shapely
+    lon2d, lat2d = np.meshgrid(lons, lats)
+    cells = shapely.box(lon2d - dlon/2, lat2d - dlat/2, lon2d + dlon/2, lat2d + dlat/2)
+    shapely.prepare(region_geom)
+    inside = shapely.contains_properly(region_geom, cells)
+    edge = shapely.intersects(region_geom, cells) & ~inside
 
-    for i, lat in enumerate(lats):
-        for j, lon in enumerate(lons):
-            cell = box(lon - dlon/2, lat - dlat/2, lon + dlon/2, lat + dlat/2)
-            if region_geom.intersects(cell):
-                frac[i, j] = region_geom.intersection(cell).area / cell.area
+    frac = np.zeros((len(lats), len(lons)))
+    frac[inside] = 1.0
+    frac[edge] = shapely.area(shapely.intersection(cells[edge], region_geom)) / shapely.area(cells[edge])
 
     frac_da = xr.DataArray(
         frac,
@@ -2355,7 +2611,7 @@ def gaussian_filter_ignore_nan(field, sigma):
     return result
 
 def disaggregate_weekly_to_daily(
-    rescaled_forecast: xr.DataArray, data: xr.DataArray
+    rescaled_forecast: xr.DataArray, data: xr.DataArray, profile_sigma=None
 ) -> xr.Dataset:
     """
     Disaggregate a weekly downscaled forecast into daily values, using the
@@ -2374,6 +2630,14 @@ def disaggregate_weekly_to_daily(
         Daily, ensemble-mean, ACCUMULATED ECMWF forecast on its native
         1.5-degree grid, dims (longitude, latitude, step). step is
         timedelta64[ns] and includes step=0 with 0 mm accumulated.
+    profile_sigma : float, optional
+        Gridded input only. Gaussian sigma, in fine-grid cells, used to
+        spatially smooth each week's daily fractions (the share of the week's
+        rain falling on each day) before applying them. The nearest-neighbor
+        1.5deg profile otherwise gives every fine cell inside one coarse cell
+        the exact same day-to-day timing, which shows up as blocky 1.5deg
+        edges in anything timing-dependent (dry/wet spells, onset). Fractions
+        are renormalized after smoothing, so weekly totals are unchanged.
 
     Returns
     -------
@@ -2399,7 +2663,8 @@ def disaggregate_weekly_to_daily(
     # accumulated -> daily increments (drops step=0)
     daily = data.diff("step")
 
-    if "longitude" in rescaled_forecast.dims and "latitude" in rescaled_forecast.dims:
+    gridded = "longitude" in rescaled_forecast.dims and "latitude" in rescaled_forecast.dims
+    if gridded:
         # nearest-neighbor match: every fine grid cell -> nearest 1.5deg cell
         lon2d, lat2d = xr.broadcast(rescaled_forecast.longitude, rescaled_forecast.latitude)
         daily_matched = daily.sel(longitude=lon2d, latitude=lat2d, method="nearest")
@@ -2416,6 +2681,21 @@ def disaggregate_weekly_to_daily(
         week_total = week_daily.sum("step")
         n_days = week_daily.sizes["step"]
         fraction = xr.where(week_total != 0, week_daily / week_total, 1.0 / n_days)
+
+        if gridded and profile_sigma:
+            # one filter call over every day (and member, if present) at once,
+            # smoothing only along latitude/longitude (sigma 0 skips an axis).
+            # The fractions come from the gap-free 1.5deg field, so they
+            # normally have no NaNs and the plain filter suffices; the
+            # NaN-aware version (two filter passes) is only for when they do.
+            sigma = [profile_sigma if d in ("latitude", "longitude") else 0 for d in fraction.dims]
+            values = fraction.values
+            if np.isnan(values).any():
+                smoothed = gaussian_filter_ignore_nan(values, sigma)
+            else:
+                smoothed = gaussian_filter(values, sigma=sigma)
+            fraction = fraction.copy(data=smoothed)
+            fraction = fraction / fraction.sum("step")
 
         pieces.append(fraction * rescaled_forecast.sel(step=w))
 

@@ -9,6 +9,18 @@ import re
 import sys
 import pandas as pd
 import regionmask
+import matplotlib.pyplot as plt
+import time
+
+_t_start = _t_last = time.perf_counter()
+
+def tick(label):
+    """Print how long the section since the previous tick() took, to see which
+    stage of this script is slow."""
+    global _t_last
+    now = time.perf_counter()
+    print(f"[timing] {label}: {now - _t_last:.1f}s (total {now - _t_start:.1f}s)", flush=True)
+    _t_last = now
 
 if "DATE_STR" in os.environ:
     date_str=os.environ["DATE_STR"]
@@ -38,6 +50,7 @@ data=xr.open_zarr(precip_zarr,consolidated=True).compute()
 # the same job. This must stay in step with plot_s2s.py's own derivation of the
 # same two datasets -- if the step selection or accumulation handling changes
 # there, change it here too.
+tick('load ECMWF precip zarr')
 steps=data.step.values*1e-9/3600
 steps=steps.astype('int')
 dekade = [data.step.values[i] for i in np.where(steps%240==0)[0]]
@@ -53,6 +66,11 @@ districts=gpd.read_file("Kenya_shapes/ken_admin2.shp")
 states1=gpd.read_file("Kenya_shapes/ken_admin1.shp")
 
 kenya_counties_shp = "downscale_data/Kenya_Counties_KNSDI.shp"
+
+# gaussian sigma (in 0.05deg fine-grid cells) for smoothing the 1.5deg daily
+# timing profile the downscaled spell maps are disaggregated with -- see
+# gef.disaggregate_weekly_to_daily's profile_sigma
+SPELL_PROFILE_SIGMA = float(os.environ.get("SPELL_PROFILE_SIGMA", 10))
 
 region_map = {
     "Nyandarua": "Highlands East of the Rift Valley","Laikipia": "Highlands East of the Rift Valley","Nyeri": "Highlands East of the Rift Valley",
@@ -121,6 +139,7 @@ forecast_files = {
 
 }
 
+tick('weekly/dekadal aggregates + shapefiles')
 if (int(month),int(day)) in forecast_files.keys():
     keys = list(forecast_files)
     start = keys.index((month, day))
@@ -145,10 +164,12 @@ if (int(month),int(day)) in forecast_files.keys():
         apply_rank_sort=True, bbox=dekade_bboxes[country]
     )
 
+    tick('dekadal: load climatologies')
     data_to_add=data_dekade.isel(step=slice(None,len(reforecast_clims_ds.step))).assign_coords({"year":int(data_dekade.time.dt.year.values)}).mean('number').sel(longitude=slice(dekade_bboxes[country]['lon1'],dekade_bboxes[country]['lon2']),latitude=slice(dekade_bboxes[country]['lat1'],dekade_bboxes[country]['lat2']))
     extended_fclim=xr.concat([reforecast_clims_ds,data_to_add],dim='year')
 
     rescaled_forecast = gef.build_rescaled_forecast(extended_fclim, chirps_dekades_ds, data_dekade, sortby_lat=True)
+    tick('dekadal: build_rescaled_forecast (Great_Horn)')
     rescaled_forecast.to_netcdf(f'data/{date_str}/data_dekade_{country}_downscaled.nc')
 
     anomaly = gef.compute_rainfall_anomaly(rescaled_forecast, chirps_dekades_ds)
@@ -156,13 +177,15 @@ if (int(month),int(day)) in forecast_files.keys():
     rescaled_forecast=rescaled_forecast.rio.write_crs("EPSG:4326")
     anomaly=anomaly.rio.write_crs("EPSG:4326")
 
+    tick('dekadal: save nc + anomaly')
     gef.plot_admin1_county_breakdown(
         rescaled_forecast, chirps_dekades_ds, states1,
         save_dir=f'plots/Kenya/{date_str}/dekadal/counties'
     )
 
+    tick('dekadal: admin1 county breakdown plots')
     for country in os.environ["DEKADE_COUNTRIES"].split(','):
-        fs=12
+        fs=16
         gef.lat1=dekade_bboxes[country]['lat1']
         gef.lat2=dekade_bboxes[country]['lat2']
         gef.lon1=dekade_bboxes[country]['lon1']
@@ -187,6 +210,7 @@ if (int(month),int(day)) in forecast_files.keys():
             vmin=vmin,vmax=vmax
         )
 
+        tick(f'dekadal {country}: panel + anomaly plots')
         if country=='Kenya':
             kenya_dekade = rescaled_forecast.sortby('latitude', ascending=False).sel(
                 longitude=slice(dekade_bboxes['Kenya']['lon1'], dekade_bboxes['Kenya']['lon2']),
@@ -221,6 +245,7 @@ if (int(month),int(day)) in forecast_files.keys():
 
             df.to_csv('data/Kenya2026.csv')
 
+            tick('dekadal Kenya: save nc + district timeseries csv')
             #Generate geotiffs and other file formats
             dirname=f'data/{date_str}/geotifs_kenya/'
             os.makedirs(dirname,exist_ok=True)
@@ -235,23 +260,31 @@ if (int(month),int(day)) in forecast_files.keys():
                 # EHdr (ESRI .bil) has no Float64 band type -- write float32.
                 to_save.tp.astype('float32').rio.to_raster(f"{dirname+fname}.bil", driver="EHdr")
 
+            tick('dekadal Kenya: geotiffs')
             rescaled_forecast = rescaled_forecast.rio.write_crs("EPSG:4326")
             ds_to_plot = gef.clip_to_shapefile(rescaled_forecast, kenya_counties_shp, transpose=True, sortby_lat=True)
-            gef.plot_panel_and_save(
-                ds_to_plot,'tp',cmap,fs,
-                f'plots/{country}/{date_str}/dekadal/dekadal_precip_downscaled_clipped.png',
-                vmax=int(ds_to_plot.quantile(0.99).tp.values)
-            )
+            # map ends at the shapefile's edges, not the country bbox
+            with gef.extent_of(ds_to_plot):
+                gef.plot_panel_and_save(
+                    ds_to_plot,'tp',cmap,fs,
+                    f'plots/{country}/{date_str}/dekadal/dekadal_precip_downscaled_clipped.png',
+                    vmax=int(ds_to_plot.quantile(0.99).tp.values)
+                )
 
             anomaly = anomaly.rio.write_crs("EPSG:4326")
             ds_to_plot = gef.clip_to_shapefile(anomaly, kenya_counties_shp, reproject_gdf=False)
             vmin,vmax=gef.symmetric_vmin_vmax(ds_to_plot)
-            gef.plot_panel_and_save(
-                ds_to_plot,'tp','BrBG',fs,
-                f'plots/{country}/{date_str}/dekadal/dekadal_precip_downscaled_anomaly_clipped.png',
-                vmin=vmin,vmax=vmax,boundary_gdf=districts,boundary_axes=slice(0,6)
-            )
+            # map ends at the shapefile's edges, not the country bbox
+            with gef.extent_of(ds_to_plot):
+                gef.plot_panel_and_save(
+                    ds_to_plot,'tp','BrBG',fs,
+                    f'plots/{country}/{date_str}/dekadal/dekadal_precip_downscaled_anomaly_clipped.png',
+                    # one outline per map panel -- a fixed slice(0,6) also hit the
+                    # colorbar axis when there are fewer than 6 dekads
+                    vmin=vmin,vmax=vmax,boundary_gdf=districts,boundary_axes=slice(0,ds_to_plot.sizes['step'])
+                )
 
+tick('dekadal: clipped plots')
 weekly_bboxes = {
     "Kenya":      {"lat1": 6,  "lon1":33,  "lat2": -5,  "lon2": 42 },
     "Kenya_plus": {"lat1": 7.5,"lon1":27,  "lat2": -7.5,"lon2": 43 },
@@ -297,6 +330,7 @@ for country in countries_to_downscale:
     fclim_chirps=[f"downscale_data/chirpsv3_weeks/chirpsv3_weeks_2005_2025_sorted_{dix[0]}-{dix[1]}_{country}.nc" for dix in day_and_month]
     chirps_weeks_ds = gef.stack_climatology_steps(fclim_chirps, data_weekly.step.values)
 
+    tick(f'weekly {country}: load climatologies')
     data_to_add=data_weekly.assign_coords({"year":int(data_weekly.time.dt.year.values)}).mean('number').sel(longitude=slice(weekly_bboxes[country+'_plus']['lon1'],weekly_bboxes[country+'_plus']['lon2']),latitude=slice(weekly_bboxes[country+'_plus']['lat1'],weekly_bboxes[country+'_plus']['lat2']))
     extended_fclim=xr.concat([reforecast_clims_ds,data_to_add],dim='year')
 
@@ -306,6 +340,7 @@ for country in countries_to_downscale:
         extended_fclim=xr.concat([reforecast_clims_ds,data_to_add],dim='year')
         rescaled_forecast_hold.append(gef.build_rescaled_forecast(extended_fclim, chirps_weeks_ds, data_weekly, upscale_factor=upscale_factor))
 
+    tick(f'weekly {country}: build_rescaled_forecast x {len(rescaled_forecast_hold)} members')
     rescaled_forecast=xr.concat(rescaled_forecast_hold,dim='number')
 
     if country == 'Kenya':
@@ -315,9 +350,10 @@ for country in countries_to_downscale:
         )
         kenya_weekly.to_netcdf(f'data/{date_str}/data_weekly_Kenya_downscaled.nc')
 
+    tick(f'weekly {country}: concat members + save nc')
     rescaled_forecast_month = rescaled_forecast.isel(step=slice(0,4)).sum('step',keep_attrs=True).assign_coords(step=rescaled_forecast.isel(step=3).step).expand_dims('step')
 
-    fs=12
+    fs=16
 
     gef.lat1=weekly_bboxes[country]['lat1']
     gef.lat2=weekly_bboxes[country]['lat2']
@@ -333,10 +369,12 @@ for country in countries_to_downscale:
         vmax=int(ds_to_plot.quantile(0.95).tp.values)
     )
 
+    tick(f'weekly {country}: weekly panel plot')
     CE_Kenya_dwnscaled_timeseries=rescaled_forecast.sel(longitude=slice(36,42),latitude=slice(5,-5)).mean({'longitude','latitude'})
     CE_Kenya_dwnscaled_timeseries_daily=gef.disaggregate_weekly_to_daily(CE_Kenya_dwnscaled_timeseries.tp,data.sel(longitude=slice(36,42),latitude=slice(5,-5)).mean({'longitude','latitude'}).tp)
     CE_Kenya_dwnscaled_timeseries_daily.to_zarr(f'{data_path}/CE_Kenya_dwnscaled_timeseries_daily.zarr', mode='w', consolidated=True)
 
+    tick(f'weekly {country}: CE Kenya daily timeseries zarr')
     os.makedirs(f'plots/{country}/{date_str}/monthly/', exist_ok=True)
     ds_to_plot_month=rescaled_forecast_month.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','number','step')
     gef.plot_panel_and_save(
@@ -345,6 +383,7 @@ for country in countries_to_downscale:
         vmax=int(ds_to_plot_month.quantile(0.95).tp.values)
     )
 
+    tick(f'weekly {country}: monthly panel plot')
     if country=='Kenya':
         # Daily downscaled GeoTIFF, one band per lead day, staged for the Kenya bucket
         # by the workflows. rioxarray only writes 2D/3D arrays, so write the ensemble
@@ -362,15 +401,41 @@ for country in countries_to_downscale:
             tags={"band_dim_name": "day"},
         )
 
+        tick('weekly Kenya: daily downscaled GeoTIFF')
+        # Dry/wet spell maps from the per-member daily downscaled forecast (the
+        # downscaled counterpart of plot_s2s.py's Kenya spell plots)
+        try:
+            gef.plot_downscaled_spell_maps(
+                rescaled_forecast, data, kenya_counties_shp,
+                f'plots/{country}/{date_str}/monthly', fs, profile_sigma=SPELL_PROFILE_SIGMA,
+            )
+        except Exception as e:
+            print(f"Downscaled dry/wet spell plots failed ({e}), skipping")
+        tick('weekly Kenya: dry/wet spell maps')
+
+        # weekly chance of > 20mm (downscaled counterpart of plot_s2s.py's
+        # weekly_chance_higherthan_20mm.png)
+        try:
+            gef.plot_downscaled_exceedance(
+                rescaled_forecast, 20, kenya_counties_shp,
+                f'plots/{country}/{date_str}/weekly/weekly_chance_higherthan_20mm_downscaled.png', fs,
+            )
+        except Exception as e:
+            print(f"Downscaled 20mm exceedance plot failed ({e}), skipping")
+
+        tick('weekly Kenya: 20mm exceedance plot')
         rescaled_forecast = rescaled_forecast.rio.write_crs("EPSG:4326")
         ds_to_plot = gef.clip_to_shapefile(rescaled_forecast, kenya_counties_shp, transpose=True)
-        gef.plot_panel_and_save(
-            ds_to_plot,'tp',cmap,fs,
-            f'plots/{country}/{date_str}/weekly/weekly_precip_downscaled_clipped.png',
-            vmax=int(ds_to_plot.quantile(0.99).tp.values),
-            boundary_gdf=districts,boundary_axes=slice(0,6)
-        )
+        # map ends at the shapefile's edges, not the country bbox
+        with gef.extent_of(ds_to_plot):
+            gef.plot_panel_and_save(
+                ds_to_plot,'tp',cmap,fs,
+                f'plots/{country}/{date_str}/weekly/weekly_precip_downscaled_clipped.png',
+                vmax=int(ds_to_plot.quantile(0.99).tp.values),
+                boundary_gdf=districts,boundary_axes=slice(0,ds_to_plot.sizes['step'])
+            )
 
+        tick('weekly Kenya: clipped weekly plot')
         anomaly = gef.compute_rainfall_anomaly(rescaled_forecast, chirps_weeks_ds)
 
         ds_to_plot=anomaly.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).transpose('latitude', 'longitude','number','step')
@@ -395,18 +460,22 @@ for country in countries_to_downscale:
         anomaly = anomaly.rio.write_crs("EPSG:4326")
         ds_to_plot = gef.clip_to_shapefile(anomaly, kenya_counties_shp, transpose=True)
         vmin,vmax=gef.symmetric_vmin_vmax(ds_to_plot)
-        gef.plot_panel_and_save(
-            ds_to_plot,'tp','BrBG',fs,
-            f'plots/{country}/{date_str}/weekly/weekly_precip_downscaled_anomaly_clipped.png',
-            vmin=vmin,vmax=vmax,boundary_gdf=districts,boundary_axes=slice(0,6)
-        )
+        # map ends at the shapefile's edges, not the country bbox
+        with gef.extent_of(ds_to_plot):
+            gef.plot_panel_and_save(
+                ds_to_plot,'tp','BrBG',fs,
+                f'plots/{country}/{date_str}/weekly/weekly_precip_downscaled_anomaly_clipped.png',
+                vmin=vmin,vmax=vmax,boundary_gdf=districts,boundary_axes=slice(0,ds_to_plot.sizes['step'])
+            )
 
+        tick('weekly Kenya: anomaly plots (weekly, monthly, clipped)')
         gef.plot_admin1_county_breakdown(
             rescaled_forecast, chirps_weeks_ds, states1,
             save_dir=f'plots/Kenya/{date_str}/weekly/counties',
             transpose_first=False
         )
 
+        tick('weekly Kenya: admin1 county breakdown plots')
         try:
             promt_unformat3={}
             rescaled_forecast_kenya=rescaled_forecast.sel(longitude=slice(weekly_bboxes[country]['lon1'],weekly_bboxes[country]['lon2']),latitude=slice(weekly_bboxes[country]['lat1'],weekly_bboxes[country]['lat2'])).mean('number')
@@ -417,3 +486,6 @@ for country in countries_to_downscale:
             gef.save_dict(promt_unformat3,f"{prefix}/promt_unformat3.json")
         except:
             gef.save_dict({},f"{prefix}/promt_unformat3.json")
+    tick(f'weekly {country}: prompt json')
+
+print(f"[timing] total: {time.perf_counter() - _t_start:.1f}s", flush=True)
