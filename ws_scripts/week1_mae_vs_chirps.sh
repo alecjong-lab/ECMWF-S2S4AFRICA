@@ -155,14 +155,19 @@ week_mae() {  # $1=key $2=week
     --input "mae_${p}_clip.zarr" --output "mae_${p}_mean.zarr" || return 1
 }
 
-declare -A MODEL_LABEL=(
-  [aifs]="AIFS"
-  [ifs]="ECMWF ENS"
-  [er]="ECMWF ER"
-  [kmsa]="KMSA downscaled"
-  [gefs]="GEFS"
-  [cumulus]="Cumulus AI"
-)
+# Portable stand-in for an associative array: macOS ships bash 3.2, which
+# has no `declare -A` (see _portable_date.sh for the same constraint on
+# `date`).
+model_label() {
+  case "$1" in
+    aifs) echo "AIFS" ;;
+    ifs) echo "ECMWF ENS" ;;
+    er) echo "ECMWF ER" ;;
+    kmsa) echo "KMSA downscaled" ;;
+    gefs) echo "GEFS" ;;
+    cumulus) echo "Cumulus AI" ;;
+  esac
+}
 
 # A model that fails every week (e.g. a missing credential) is dropped from
 # the plot rather than aborting the whole script — the other models still
@@ -178,7 +183,7 @@ for key in aifs ifs er kmsa gefs cumulus; do
     fi
   done
   if (( ${#ok[@]} == 0 )); then
-    echo "WARNING: no $key weeks succeeded; dropping ${MODEL_LABEL[$key]} from the plot" >&2
+    echo "WARNING: no $key weeks succeeded; dropping $(model_label "$key") from the plot" >&2
     continue
   elif (( ${#ok[@]} == 1 )); then
     cp -R "${ok[0]}" "mae_${key}_series.zarr"
@@ -228,7 +233,7 @@ for key in "${SUCCESS_KEYS[@]}"; do
   PLOT_ARGS+=(--input "intermediate_results/mae_${key}_series.zarr")
 done
 for key in "${SUCCESS_KEYS[@]}"; do
-  PLOT_ARGS+=(--label "${MODEL_LABEL[$key]}")
+  PLOT_ARGS+=(--label "$(model_label "$key")")
 done
 
 $WS plot-timeseries \

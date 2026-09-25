@@ -296,9 +296,13 @@ build_forecast_piece() {
 # mode=totals converts the blank weeks to precip totals like the real
 # pieces (compose_sond); mode=raw leaves them as the raw template
 # (compute_prob_above, where blanks sit alongside a [0,1] probability field).
+# target_var, if non-empty, renames the blank piece's variable (nan_wk.zarr
+# is always "precip") to match the real pieces' variable — required when a
+# panel ends up 100% blank, since then nothing else renames it and the
+# downstream plot_sond --layer variable=... lookup would find nothing.
 assemble_sond_weeks() {
-  local src="$1" dest="$2" mode="$3"
-  shift 3
+  local src="$1" dest="$2" mode="$3" target_var="$4"
+  shift 4
   local piece_paths=("$@")
   local stem="${dest%.zarr}"
 
@@ -317,20 +321,30 @@ assemble_sond_weeks() {
   local covered=()
   [[ -n "$data_zarr" ]] && covered=($(zarr_dates "$data_zarr"))
 
-  local gap_vals=() mon c hit
+  # gap_vals is --value/date pairs (for the $S select call below); gap_count
+  # is the actual number of blank weeks, kept separate so array length isn't
+  # double-counted the way final_paths below deliberately avoids too.
+  local gap_vals=() gap_count=0 mon c hit
   for mon in "${MONDAYS[@]}"; do
     hit=""
     for c in "${covered[@]}"; do
       [[ "$c" == "$mon" ]] && { hit=1; break; }
     done
-    [[ -z "$hit" ]] && gap_vals+=(--value "$mon")
+    if [[ -z "$hit" ]]; then
+      gap_vals+=(--value "$mon")
+      gap_count=$((gap_count + 1))
+    fi
   done
 
-  local pieces=()
-  [[ -n "$data_zarr" ]] && pieces+=(-i "$data_zarr")
+  # Bare paths, one per real piece — NOT `-i path` pairs, so
+  # ${#final_paths[@]} is an honest piece count (a 2-element `-i path` array
+  # would silently double-count and misroute a single real piece into
+  # concat, which requires at least two inputs).
+  local final_paths=()
+  [[ -n "$data_zarr" ]] && final_paths+=("$data_zarr")
 
-  if (( ${#gap_vals[@]} > 0 )); then
-    echo "INFO: $src leaving ${#gap_vals[@]}/${#MONDAYS[@]} SOND week(s) blank (no data)" >&2
+  if (( gap_count > 0 )); then
+    echo "INFO: $src leaving ${gap_count}/${#MONDAYS[@]} SOND week(s) blank (no data)" >&2
     $S select --dim time "${gap_vals[@]}" \
         -i "$IR/nan_wk.zarr" -o "${stem}_nan_gaps_rate.zarr"
     if [[ "$mode" == totals ]]; then
@@ -340,16 +354,26 @@ assemble_sond_weeks() {
       rm -rf "${stem}_nan_gaps.zarr"
       cp -R "${stem}_nan_gaps_rate.zarr" "${stem}_nan_gaps.zarr"
     fi
-    pieces+=(-i "${stem}_nan_gaps.zarr")
+    if [[ -n "$target_var" ]]; then
+      $S rename -v precip --to-name "$target_var" \
+          -i "${stem}_nan_gaps.zarr" -o "${stem}_nan_gaps_named.zarr"
+      final_paths+=("${stem}_nan_gaps_named.zarr")
+    else
+      final_paths+=("${stem}_nan_gaps.zarr")
+    fi
   fi
 
-  if (( ${#pieces[@]} == 0 )); then
+  if (( ${#final_paths[@]} == 0 )); then
     echo "ERROR: $src produced no SOND weeks" >&2
     exit 1
-  elif (( ${#pieces[@]} == 1 )); then
-    $S select --dim time "${ORDER[@]}" "${pieces[@]}" -o "$dest"
+  elif (( ${#final_paths[@]} == 1 )); then
+    $S select --dim time "${ORDER[@]}" -i "${final_paths[0]}" -o "$dest"
   else
-    $S concat --dim time "${pieces[@]}" -o "${stem}_unsorted.zarr"
+    local final_args=() fp
+    for fp in "${final_paths[@]}"; do
+      final_args+=(-i "$fp")
+    done
+    $S concat --dim time "${final_args[@]}" -o "${stem}_unsorted.zarr"
     $S select --dim time "${ORDER[@]}" -i "${stem}_unsorted.zarr" -o "$dest"
   fi
 }
@@ -397,7 +421,7 @@ compose_sond() {
     fi
   fi
 
-  assemble_sond_weeks "$src" "$dest" totals "${piece_paths[@]}"
+  assemble_sond_weeks "$src" "$dest" totals "" "${piece_paths[@]}"
 
   write_patch "${stem}.patch.json"
 }
@@ -479,7 +503,7 @@ compute_prob_above() {
   # Everything other than a real forecast week (obs, hybrid, na, or a
   # forecast week whose probability came back short) is blank by design —
   # only forecast panels ever render a probability.
-  assemble_sond_weeks "$stem" "$dest" raw "${piece_paths[@]}"
+  assemble_sond_weeks "$stem" "$dest" raw probability "${piece_paths[@]}"
 }
 
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
