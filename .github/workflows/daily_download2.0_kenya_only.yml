@@ -105,20 +105,13 @@ jobs:
                   sys.exit(1)
           else:
               run = datetime.now(timezone.utc).date()
-          # Model init lags the run: products for a briefing dated `run` are
-          # normally the ECMWF forecast from two days earlier. That init is
-          # occasionally not published yet, so the download step falls back
-          # to three days earlier — see "Run download script" below.
+          # Model init lags the run: products for a briefing dated `run`
+          # are the ECMWF forecast from two days earlier.
           ecmwf = run - timedelta(days=2)
-          ecmwf_fallback = run - timedelta(days=3)
           with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
               fh.write(f"run_date={run.isoformat()}\n")
               fh.write(f"ecmwf_date={ecmwf.isoformat()}\n")
-              fh.write(f"ecmwf_date_fallback={ecmwf_fallback.isoformat()}\n")
-          print(
-              f"Run date {run.isoformat()}; ECMWF model date {ecmwf.isoformat()} "
-              f"(fallback {ecmwf_fallback.isoformat()})"
-          )
+          print(f"Run date {run.isoformat()}; ECMWF model date {ecmwf.isoformat()}")
           PY
 
       # ── Work out which stages the main run already finished ───
@@ -289,7 +282,7 @@ jobs:
         continue-on-error: true
         env:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
-          DATE_STR: ${{ steps.dates.outputs.ecmwf_date_fallback }}
+          DATE_STR: ${{ steps.dates.outputs.ecmwf_date }}
         with:
           timeout_minutes: 45
           max_attempts: 3
@@ -301,18 +294,9 @@ jobs:
         id: briefing_date
         run: echo "date=${{ steps.dates.outputs.run_date }}" >> $GITHUB_OUTPUT
 
-      # Every later stage keys off this step's output, not steps.dates directly,
-      # so a successful 3-day fallback carries through to plotting, staging,
-      # and upload consistently instead of leaving them on the failed 2-day date.
       - name: Get ECMWF lagged date
         id: ecmwf_date
-        run: |
-          if [[ "${{ steps.download_primary.outcome }}" == "failure" ]]; then
-            echo "::warning::ECMWF 2-day lag (${{ steps.dates.outputs.ecmwf_date }}) failed; using 3-day lag (${{ steps.dates.outputs.ecmwf_date_fallback }}) for the rest of this run."
-            echo "date=${{ steps.dates.outputs.ecmwf_date_fallback }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "date=${{ steps.dates.outputs.ecmwf_date }}" >> "$GITHUB_OUTPUT"
-          fi
+        run: echo "date=${{ steps.dates.outputs.ecmwf_date }}" >> $GITHUB_OUTPUT
 
       - name: Fetch forecast
         if: ${{ steps.detect.outputs.run_gefs_fetch != 'false' }}

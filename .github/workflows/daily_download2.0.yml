@@ -50,7 +50,7 @@ jobs:
         with:
           python-version: "3.12"
 
-       - name: Install dependencies
+      - name: Install dependencies
         working-directory: main_repo
         run: |
           pip install -r requirements.txt
@@ -63,23 +63,16 @@ jobs:
           from datetime import datetime, timedelta, timezone
 
           run = datetime.now(timezone.utc).date()
-          # Model init lags the run: products for a briefing dated `run` are
-          # normally the ECMWF forecast from two days earlier. That init is
-          # occasionally not published yet, so the download step falls back
-          # to three days earlier — see "Run download script" below.
+          # Model init lags the run: products for a briefing dated `run`
+          # are the ECMWF forecast from two days earlier.
           ecmwf = run - timedelta(days=2)
-          ecmwf_fallback = run - timedelta(days=3)
           with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
               fh.write(f"run_date={run.isoformat()}\n")
               fh.write(f"ecmwf_date={ecmwf.isoformat()}\n")
-              fh.write(f"ecmwf_date_fallback={ecmwf_fallback.isoformat()}\n")
-          print(
-              f"Run date {run.isoformat()}; ECMWF model date {ecmwf.isoformat()} "
-              f"(fallback {ecmwf_fallback.isoformat()})"
-          )
+          print(f"Run date {run.isoformat()}; ECMWF model date {ecmwf.isoformat()}")
           PY
 
-      - name: Run download script (2-day lag)
+      - name: Run download script (dynamical.org)
         id: download_primary
         uses: nick-fields/retry@v3
         continue-on-error: true
@@ -93,21 +86,24 @@ jobs:
             cd main_repo
             python download_s2s.py
 
-      # The 2-day init is occasionally not published yet (embargo/ingest lag),
-      # which download_s2s.py reports as a non-zero exit. `outcome` (not
-      # `conclusion`) reflects that real result even though the step above has
-      # continue-on-error: true. Only runs when the primary attempt actually
-      # failed, not when it was skipped for some other reason.
-      - name: Run download script (3-day lag fallback)
+      # dynamical.org's catalog occasionally lags the CDS/ECDS store it's
+      # built from. Same model date, same zarr store names/layout (the
+      # dynamical rewrite matched this script's output on purpose), just a
+      # different source — so downstream steps don't need to know which one
+      # ran. `outcome` (not `conclusion`) reflects the real result even
+      # though the step above has continue-on-error: true.
+      - name: Run download script (CDS/ECDS fallback)
         id: download_fallback
         if: steps.download_primary.outcome == 'failure'
         uses: nick-fields/retry@v3
         continue-on-error: true
         env:
           BOUNDING_BOX: "22.5,-21,-34.5,55.5"
-          DATE_STR: ${{ steps.dates.outputs.ecmwf_date_fallback }}
+          DATE_STR: ${{ steps.dates.outputs.ecmwf_date }}
         with:
-          timeout_minutes: 5
+          # CDS/ECDS requests queue server-side and are much slower than
+          # dynamical.org, so this keeps the pre-dynamical 100-minute timeout.
+          timeout_minutes: 100
           max_attempts: 3
           command: |
             cd main_repo
@@ -117,18 +113,9 @@ jobs:
         id: briefing_date
         run: echo "date=${{ steps.dates.outputs.run_date }}" >> $GITHUB_OUTPUT
 
-      # Every later stage keys off this step's output, not steps.dates directly,
-      # so a successful 3-day fallback carries through to plotting, staging,
-      # and upload consistently instead of leaving them on the failed 2-day date.
       - name: Get ECMWF lagged date
         id: ecmwf_date
-        run: |
-          if [[ "${{ steps.download_primary.outcome }}" == "failure" ]]; then
-            echo "::warning::ECMWF 2-day lag (${{ steps.dates.outputs.ecmwf_date }}) failed; using 3-day lag (${{ steps.dates.outputs.ecmwf_date_fallback }}) for the rest of this run."
-            echo "date=${{ steps.dates.outputs.ecmwf_date_fallback }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "date=${{ steps.dates.outputs.ecmwf_date }}" >> "$GITHUB_OUTPUT"
-          fi
+        run: echo "date=${{ steps.dates.outputs.ecmwf_date }}" >> $GITHUB_OUTPUT
 
       - name: Fetch forecast
         working-directory: main_repo
