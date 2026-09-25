@@ -90,11 +90,6 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          version: "0.11.20"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -102,6 +97,20 @@ jobs:
 
       - name: Install briefing dependencies
         run: pip install -r requirements.txt
+
+      # Must run AFTER pip install: requirements.txt pulls in an unpinned
+      # `uv` package too, and pip installs it into the same bin directory
+      # actions/setup-python put first on PATH. Installing this step earlier
+      # let that unpinned pip-installed uv shadow the 0.11.20 pin for every
+      # later `uv`/`uvx` call (see UV_NO_PROJECT comment below) — which is
+      # why ws_scripts steps here hit "project directory is inside the cache
+      # directory" on their very first skill call, while daily_download2.0*.yml
+      # (which already installs uv in this same pip-then-astral order) never
+      # has that problem.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.20"
 
       - name: Compute DATE_STR
         id: date
