@@ -7,7 +7,9 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
+import matplotlib.patches
 from matplotlib.colors import ListedColormap, BoundaryNorm, LinearSegmentedColormap
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rioxarray
@@ -48,6 +50,15 @@ bbox = bboxes[country]
 kenya_shapefile = "downscale_data/Kenya_Counties_KNSDI.shp"
 
 plot_dir = f'plots/{country}/{date_str}/monthly'
+
+# minimum % of ensemble members that must find an onset for a cell to get an
+# onset-date color; cells below it are hatched out instead (see plot_onset_map)
+ONSET_AGREEMENT_THRESH = float(os.environ.get("ONSET_AGREEMENT_THRESH", 66))
+
+# gaussian sigma (in 0.05deg fine-grid cells) for smoothing the 1.5deg daily
+# timing profile the downscaled forecast is disaggregated with -- see
+# gef.disaggregate_weekly_to_daily's profile_sigma (0 = no smoothing)
+ONSET_PROFILE_SIGMA = float(os.environ.get("ONSET_PROFILE_SIGMA", 10))
 os.makedirs(plot_dir, exist_ok=True)
 
 
@@ -127,11 +138,16 @@ def build_discrete_cmap(vmin, vmax, n_shades=4):
     return cmap, norm, np.array(boundaries), segment_edges
 
 
-def plot_onset_map(onset, bbox, year, title, save_path, forecast_start, n_time, search_days=21):
+def plot_onset_map(onset, bbox, year, title, save_path, forecast_start, n_time, search_days=21,
+                   agreement_thresh=None):
     """
     Map of ensemble-mean onset day-of-year (deterministic sources plot their
-    single onset field directly), with % of members finding a valid onset
-    annotated per grid cell where an ensemble dimension is present.
+    single onset field directly). Where an ensemble dimension is present,
+    cells where fewer than agreement_thresh % of members found an onset are
+    not colored but hatched instead, so only onsets a large enough share of
+    the ensemble agrees on get a date color. Cells where no member at all
+    found an onset stay blank. On a coarse grid (e.g. S2S) the % of members
+    is also written in each cell.
 
     The color scale runs from the forecast's first day (forecast_start) to
     the last day that still leaves a full search_days window for the
@@ -141,6 +157,8 @@ def plot_onset_map(onset, bbox, year, title, save_path, forecast_start, n_time, 
     data's own min/max) puts every source on a comparable "days since
     forecast start" scale regardless of which onsets it actually found.
     """
+    if agreement_thresh is None:
+        agreement_thresh = ONSET_AGREEMENT_THRESH
     onset_doy = onset.dt.dayofyear  # NaT -> NaN
 
     has_ensemble = 'number' in onset_doy.dims
@@ -152,14 +170,11 @@ def plot_onset_map(onset, bbox, year, title, save_path, forecast_start, n_time, 
         pct_valid = None
 
     mean_doy = mean_doy.sel(longitude=slice(bbox['lon1'], bbox['lon2']), latitude=slice(bbox['lat1'], bbox['lat2']))
-    # per-cell "% of members" text only stays legible on a coarse grid (e.g. S2S);
-    # a fine grid (e.g. GEFS's ~0.25deg) draws contour lines of that field instead
-    show_text = show_contour = False
+    # per-cell "% of members" text only stays legible on a coarse grid (e.g. S2S)
+    show_text = False
     if pct_valid is not None:
         pct_valid = pct_valid.sel(longitude=slice(bbox['lon1'], bbox['lon2']), latitude=slice(bbox['lat1'], bbox['lat2']))
-        is_coarse = pct_valid.sizes['latitude'] * pct_valid.sizes['longitude'] <= 200
-        show_text = is_coarse
-        show_contour = not is_coarse
+        show_text = pct_valid.sizes['latitude'] * pct_valid.sizes['longitude'] <= 200
 
     if bool(mean_doy.isnull().all()):
         print(f"{title}: no onset found anywhere, skipping plot")
@@ -173,36 +188,47 @@ def plot_onset_map(onset, bbox, year, title, save_path, forecast_start, n_time, 
 
     fig, ax = plt.subplots(figsize=(9, 7), subplot_kw={'projection': ccrs.PlateCarree()})
 
-    mesh = mean_doy.plot.pcolormesh(
+    low_agreement = None
+    if pct_valid is not None:
+        low_agreement = (pct_valid < agreement_thresh) & mean_doy.notnull()
+        colored_doy = mean_doy.where(~low_agreement)
+    else:
+        colored_doy = mean_doy
+
+    mesh = colored_doy.plot.pcolormesh(
         x='longitude', y='latitude', ax=ax, cmap=onset_cmap, norm=onset_norm,
         transform=ccrs.PlateCarree(), add_colorbar=False,
     )
 
-    # gridpoints where only a small minority of ensemble members actually found
-    # an onset are unreliable -- fade them out rather than drawing them as a
-    # solid, equally-confident-looking color. Cells xarray already masked
-    # (mean_doy is NaN, e.g. no onset at all) are left alone since matplotlib
-    # already renders those as fully transparent.
-    if pct_valid is not None:
-        mean_doy_ll = mean_doy.transpose('latitude', 'longitude')
-        pct_valid_ll = pct_valid.transpose('latitude', 'longitude')
-        low_confidence = ((pct_valid_ll < 10) & mean_doy_ll.notnull()).values.ravel()
+    if low_agreement is not None and bool(low_agreement.any()):
+        # pcolor (not pcolormesh) so masked cells are left out of the collection
+        # entirely -- only the low-agreement cells get the hatch. Hatching is a
+        # texture rather than a fill color, so it can't be mistaken for any band
+        # of the onset colorscale (which already uses gray).
+        hatch_field = low_agreement.where(low_agreement).transpose('latitude', 'longitude')
+        lon_c, lat_c = hatch_field.longitude.values, hatch_field.latitude.values
+        hatch = ax.pcolor(
+            lon_c, lat_c, np.ma.masked_invalid(hatch_field.values.astype(float)),
+            cmap=ListedColormap(['white']), transform=ccrs.PlateCarree(),
+            shading='nearest', edgecolor='#555555', linewidth=0, hatch='////',
+        )
+        hatch.set_zorder(mesh.get_zorder() + 0.1)
+        ax.legend(
+            handles=[matplotlib.patches.Patch(facecolor='white', edgecolor='#555555', hatch='////',
+                                              label=f'< {agreement_thresh:g}% of members find an onset')],
+            loc='lower left', fontsize=10, framealpha=0.9,
+        )
 
-        mesh.update_scalarmappable()
-        facecolors = mesh.get_facecolor()
-        facecolors[low_confidence, -1] = 0.5
-        mesh.set_facecolor(facecolors)
-        # Collection.draw() calls update_scalarmappable() on every draw, which
-        # would recompute facecolors from cmap(norm(array)) and wipe out the
-        # alpha edit above. Normally set_array(None) is the escape hatch (it
-        # makes update_scalarmappable() a no-op), but cartopy's GeoQuadMesh
-        # overrides both set_array/get_array to assume a real array and breaks
-        # on None -- so just neutralize this instance's update_scalarmappable
-        # instead of touching the array.
-        mesh.update_scalarmappable = lambda: None
-
-    ax.coastlines(resolution='10m', linewidth=0.8)
-    ax.add_feature(cfeature.BORDERS, linewidth=0.6)
+    if country == 'Kenya':
+        # outline the KMD county shapefile the data is clipped to, instead of
+        # cartopy's Natural Earth coastline/borders -- the two don't quite line
+        # up, so drawing both makes the clipped data look offset from the border
+        kenya_outline = gpd.read_file(kenya_shapefile).set_crs("EPSG:4326", allow_override=True).dissolve()
+        ax.add_geometries(kenya_outline.geometry, crs=ccrs.PlateCarree(),
+                          facecolor='none', edgecolor='black', linewidth=1.0, zorder=3)
+    else:
+        ax.coastlines(resolution='10m', linewidth=0.8)
+        ax.add_feature(cfeature.BORDERS, linewidth=0.6)
     gl = ax.gridlines(draw_labels=True, linewidth=0.3, color='gray', alpha=0.5, linestyle='--')
     gl.top_labels = False
     gl.right_labels = False
@@ -210,82 +236,19 @@ def plot_onset_map(onset, bbox, year, title, save_path, forecast_start, n_time, 
     gl.ylabel_style = {'size': 11}
     ax.set_title(title, fontsize=15, fontweight='bold', pad=10)
 
-    if show_text or show_contour:
+    if show_text:
         lon2d, lat2d = np.meshgrid(pct_valid.longitude.values, pct_valid.latitude.values)
-        pct_vals = pct_valid.values
-
-        if show_contour and np.isfinite(pct_vals).sum() >= 4:  # contour needs a few real points to work with
-            # levels fit to this source's own % range rather than a fixed
-            # 25/50/75 -- a source whose members rarely agree (e.g. GEFS
-            # topping out well under 50%) would otherwise show no lines at all
-            finite = pct_vals[np.isfinite(pct_vals)]
-            levels = np.linspace(finite.min(), finite.max(), 5)[1:-1]
-            if len(levels) >= 2 and levels[-1] > levels[0]:
-                cs = ax.contour(
-                    lon2d, lat2d, pct_vals, levels=levels,
-                    colors='red', linewidths=1.5, transform=ccrs.PlateCarree(),
-                )
-                # one label per level, placed on its longest segment -- every
-                # level always gets a label here, even if that puts it close
-                # to a neighboring level's label (e.g. a steep gradient); the
-                # per-level pick already keeps a single disconnected-patch
-                # level from producing multiple cluttered labels. The first
-                # and last levels are pinned to the top (max-latitude) of
-                # their segment and the level(s) in between to the bottom
-                # (min-latitude), alternating vertical position to cut down
-                # on overlap between adjacent levels' labels. Horizontally,
-                # the first level is pushed to the rightmost point of that
-                # band and every other level to the leftmost, so a typical
-                # 3-level set spreads across top-right / bottom-left /
-                # top-left corners instead of clustering on one side.
-                n_levels = len(cs.allsegs)
-                label_pos = []
-                for i, segs in enumerate(cs.allsegs):
-                    longest = max((s for s in segs if len(s) >= 2), key=len, default=None)
-                    if longest is None:
-                        continue
-                    is_edge_level = i == 0 or i == n_levels - 1
-                    lat = longest[:, 1]
-                    target_lat = lat.max() if is_edge_level else lat.min()
-                    near_target = np.isclose(lat, target_lat, atol=(lat.max() - lat.min()) * 0.1 or 1e-6)
-                    candidates = longest[near_target]
-                    lon_idx = np.argmax(candidates[:, 0]) if i == 0 else np.argmin(candidates[:, 0])
-                    label_pos.append(tuple(candidates[lon_idx]))
-
-                if label_pos:
-                    clabels = ax.clabel(cs, inline=True, fontsize=12, fmt='%d%%', colors='white', manual=label_pos)
-                    # nudge each label a little off its exact line position so
-                    # text doesn't sit flush on the contour, alternating left/
-                    # right by index for a bit of extra separation; clamped to
-                    # the axes' actual rendered extent (not the nominal bbox,
-                    # which can be wider than the data actually drawn) so a
-                    # label can never land outside the visible plot.
-                    xlim, ylim = ax.get_xlim(), ax.get_ylim()
-                    shift = 0.02 * (xlim[1] - xlim[0])
-                    # inset margin so a clamped label's text box doesn't get
-                    # cut off by the axes frame
-                    margin_x = 0.06 * (xlim[1] - xlim[0])
-                    margin_y = 0.06 * (ylim[1] - ylim[0])
-                    for i, lbl in enumerate(clabels):
-                        lbl.set_bbox(dict(facecolor='black', edgecolor='none', pad=1))
-                        lbl.set_rotation(0)
-                        x, y = lbl.get_position()
-                        dx = shift if i % 2 == 0 else -shift
-                        x = min(max(x + dx, xlim[0] + margin_x), xlim[1] - margin_x)
-                        y = min(max(y, ylim[0] + margin_y), ylim[1] - margin_y)
-                        lbl.set_position((x, y))
-
-        if show_text:
-            for i in range(lat2d.shape[0]):
-                for j in range(lat2d.shape[1]):
-                    val = pct_vals[i, j]
-                    if not np.isnan(val):
-                        ax.text(
-                            lon2d[i, j], lat2d[i, j], f'{val:.0f}%',
-                            transform=ccrs.PlateCarree(), ha='center', va='center',
-                            fontsize=18, color='black',
-                            path_effects=[pe.withStroke(linewidth=2, foreground='white')],
-                        )
+        pct_vals = pct_valid.transpose('latitude', 'longitude').values
+        for i in range(lat2d.shape[0]):
+            for j in range(lat2d.shape[1]):
+                val = pct_vals[i, j]
+                if not np.isnan(val):
+                    ax.text(
+                        lon2d[i, j], lat2d[i, j], f'{val:.0f}%',
+                        transform=ccrs.PlateCarree(), ha='center', va='center',
+                        fontsize=18, color='black',
+                        path_effects=[pe.withStroke(linewidth=2, foreground='white')],
+                    )
 
     cbar = fig.colorbar(
         mesh, ax=ax, orientation='vertical', pad=0.03, shrink=0.85, aspect=25,
@@ -476,3 +439,62 @@ try:
                    n_time=universal_n_time or gefs.tp.sizes['step'], search_days=30)
 except Exception as e:
     print(f"GEFS: could not compute onset from {gefs_path} ({e}), skipping")
+
+# ---- daily disaggregated downscaled forecast, per ensemble member (Kenya only)
+if country == 'Kenya':
+    downscaled_path = f'{data_path}/data_weekly_Kenya_downscaled.nc'
+    try:
+        rescaled_forecast = xr.open_dataset(downscaled_path).load()
+        rescaled_forecast = clip_to_kenya(rescaled_forecast)
+        # raw daily ECMWF ensemble (accumulated since init) -- per member, so each
+        # downscaled member is split into days with its own member's daily profile
+        data = xr.open_zarr(s2s_path, consolidated=True).compute()
+
+        # disaggregate one member at a time: doing all 101 members at once
+        # broadcasts the 1.5deg daily profile onto the fine grid for every member
+        # (several GB); onset is per-member anyway, so nothing is lost
+        daily_members = [
+            gef.disaggregate_weekly_to_daily(rescaled_forecast.tp.sel(number=n), data.tp.sel(number=n),
+                                             profile_sigma=ONSET_PROFILE_SIGMA or None).tp
+            for n in rescaled_forecast.number.values
+        ]
+        daily_downscaled = xr.concat(daily_members, dim='number').transpose('number', 'step', 'latitude', 'longitude')
+        daily_downscaled.attrs['units'] = 'mm day-1'
+        valid_time = data.time + daily_downscaled.step
+
+        title_period = (
+            f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
+            f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
+        )
+        year = pd.Timestamp(data.time.values).year
+        forecast_start = universal_forecast_start or pd.Timestamp(valid_time.min().values)
+        n_time = universal_n_time or daily_downscaled.sizes['step']
+
+        onset_downscaled = gef.rainfall_onset_date(daily_downscaled, time_dim='step', valid_time=valid_time)
+        clean_for_netcdf(onset_downscaled).to_netcdf(f'{data_path}/rainfall_onset_downscaled_{country}.nc')
+        summarize('downscaled', onset_downscaled)
+        plot_onset_map(onset_downscaled, bbox, year,
+                       f'Downscaled rainy season onset — {country}\n{title_period}',
+                       f'{plot_dir}/onset_downscaled.png',
+                       forecast_start=forecast_start, n_time=n_time)
+
+        # ICPAC_10mm: same wet-spell definition, but a 10mm (not 20mm) 3-day wet-spell total
+        onset_downscaled_icpac10mm = gef.rainfall_onset_date(daily_downscaled, wet_spell_thresh=10.0, time_dim='step', valid_time=valid_time)
+        clean_for_netcdf(onset_downscaled_icpac10mm).to_netcdf(f'{data_path}/rainfall_onset_icpac10mm_downscaled_{country}.nc')
+        summarize('downscaled (ICPAC_10mm)', onset_downscaled_icpac10mm)
+        plot_onset_map(onset_downscaled_icpac10mm, bbox, year,
+                       f'Downscaled rainy season onset (ICPAC_10mm) — {country}\n{title_period}',
+                       f'{plot_dir}/onset_downscaled_icpac10mm.png',
+                       forecast_start=forecast_start, n_time=n_time)
+
+        onset_downscaled_accum = gef.rainfall_onset_date_accum(daily_downscaled, time_dim='step', valid_time=valid_time)
+        clean_for_netcdf(onset_downscaled_accum).to_netcdf(f'{data_path}/rainfall_onset_accum_downscaled_{country}.nc')
+        summarize('downscaled (accum)', onset_downscaled_accum)
+        plot_onset_map(onset_downscaled_accum, bbox, year,
+                       f'Downscaled start of growing season — {country}\n{title_period}',
+                       f'{plot_dir}/onset_downscaled_accum.png',
+                       forecast_start=forecast_start, n_time=n_time, search_days=30)
+    except Exception as e:
+        print(f"downscaled: could not compute onset from {downscaled_path} ({e}), skipping")
+else:
+    print("downscaled: only available for Kenya, skipping")
