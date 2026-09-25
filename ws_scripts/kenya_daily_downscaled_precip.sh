@@ -338,6 +338,9 @@ build_forecast_piece() {
 # is always "precip") to match the real pieces' variable — required when a
 # panel ends up 100% blank, since then nothing else renames it and the
 # downstream plot_sond --layer variable=... lookup would find nothing.
+# Only then, though: alongside a real piece the blank one keeps "precip"
+# (and its mm/day units), since renaming it would make concat try to join
+# a mm/day field with the dimensionless probability and fail.
 assemble_sond_weeks() {
   local src="$1" dest="$2" mode="$3" target_var="$4"
   shift 4
@@ -392,7 +395,7 @@ assemble_sond_weeks() {
       rm -rf "${stem}_nan_gaps.zarr"
       cp -R "${stem}_nan_gaps_rate.zarr" "${stem}_nan_gaps.zarr"
     fi
-    if [[ -n "$target_var" ]]; then
+    if [[ -n "$target_var" && -z "$data_zarr" ]]; then
       $S rename -v precip --to-name "$target_var" \
           -i "${stem}_nan_gaps.zarr" -o "${stem}_nan_gaps_named.zarr"
       final_paths+=("${stem}_nan_gaps_named.zarr")
