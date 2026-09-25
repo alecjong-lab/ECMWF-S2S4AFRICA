@@ -27,6 +27,7 @@ jobs:
       TAHMO_API_USERNAME: ${{ secrets.TAHMO_API_USERNAME }}
       EARTHDATA_PASSWORD: ${{ secrets.EARTHDATA_PASSWORD }}
       EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+      AZURE_STORAGE_SAS_TOKEN: ${{ secrets.AZURE_STORAGE_SAS_TOKEN }}
       # uvx unpacks forecasting-skills into UV_CACHE_DIR; uv 0.11 then
       # refuses `uv run --script` on those bundled skill scripts unless
       # project discovery is off.

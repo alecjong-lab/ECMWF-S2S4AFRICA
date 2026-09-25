@@ -155,6 +155,19 @@ week_mae() {  # $1=key $2=week
     --input "mae_${p}_clip.zarr" --output "mae_${p}_mean.zarr" || return 1
 }
 
+declare -A MODEL_LABEL=(
+  [aifs]="AIFS"
+  [ifs]="ECMWF ENS"
+  [er]="ECMWF ER"
+  [kmsa]="KMSA downscaled"
+  [gefs]="GEFS"
+  [cumulus]="Cumulus AI"
+)
+
+# A model that fails every week (e.g. a missing credential) is dropped from
+# the plot rather than aborting the whole script — the other models still
+# have a figure to show.
+SUCCESS_KEYS=()
 for key in aifs ifs er kmsa gefs cumulus; do
   ok=()
   for w in "${WEEKS[@]}"; do
@@ -165,8 +178,8 @@ for key in aifs ifs er kmsa gefs cumulus; do
     fi
   done
   if (( ${#ok[@]} == 0 )); then
-    echo "ERROR: no $key weeks succeeded" >&2
-    exit 1
+    echo "WARNING: no $key weeks succeeded; dropping ${MODEL_LABEL[$key]} from the plot" >&2
+    continue
   elif (( ${#ok[@]} == 1 )); then
     cp -R "${ok[0]}" "mae_${key}_series.zarr"
   else
@@ -176,7 +189,13 @@ for key in aifs ifs er kmsa gefs cumulus; do
     done
     $WS concat --dim time "${inputs[@]}" --output "mae_${key}_series.zarr"
   fi
+  SUCCESS_KEYS+=("$key")
 done
+
+if (( ${#SUCCESS_KEYS[@]} == 0 )); then
+  echo "ERROR: no model produced any weeks; nothing to plot" >&2
+  exit 1
+fi
 
 cd ..
 
@@ -204,17 +223,18 @@ PATCH=$(python3 -c "import json,sys; print(json.dumps({
   }
 }))" "$TICK_VALUES" "$TICK_LABELS")
 
+PLOT_ARGS=()
+for key in "${SUCCESS_KEYS[@]}"; do
+  PLOT_ARGS+=(--input "intermediate_results/mae_${key}_series.zarr")
+done
+for key in "${SUCCESS_KEYS[@]}"; do
+  PLOT_ARGS+=(--label "${MODEL_LABEL[$key]}")
+done
+
 $WS plot-timeseries \
-  --input intermediate_results/mae_aifs_series.zarr \
-  --input intermediate_results/mae_ifs_series.zarr \
-  --input intermediate_results/mae_er_series.zarr \
-  --input intermediate_results/mae_kmsa_series.zarr \
-  --input intermediate_results/mae_gefs_series.zarr \
-  --input intermediate_results/mae_cumulus_series.zarr \
+  "${PLOT_ARGS[@]}" \
   --variable mae \
   --mark bar --bar-mode grouped \
-  --label AIFS --label "ECMWF ENS" --label "ECMWF ER" \
-  --label "KMSA downscaled" --label GEFS --label "Cumulus AI" \
   --title "Kenya week-1 rainfall forecast MAE vs CHIRPS · ${WEEKS[0]} – ${LAST_SUN}" \
   --ylabel "MAE (mm / week)" \
   --fontsize 16 --figsize 13,6.5 \
