@@ -5,7 +5,7 @@
 # Cumulus AI needs GOOGLE_APPLICATION_CREDENTIALS (gs://sheerwater-datalake is private).
 set -eo pipefail
 
-WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
+WS="uvx --from git+https://github.com/rhiza-research/weather-skills@old-dev forecasting-skills"
 run() { $WS "$@"; }
 
 # shellcheck source=./_portable_date.sh

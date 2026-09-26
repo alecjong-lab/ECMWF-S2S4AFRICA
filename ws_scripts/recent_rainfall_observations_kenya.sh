@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-DEV="git+https://github.com/rhiza-research/forecasting-skills@dev"
+DEV="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
@@ -42,7 +42,7 @@ uvx --from "$DEV" forecasting-skills plot \
   --variable precip \
   --input step4.zarr --output chirps_kenya_weekly_rainfall.png
 
-DEV="git+https://github.com/rhiza-research/forecasting-skills@dev"
+DEV="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 CLIM="git+https://github.com/rhiza-research/forecasting-skills@mohini/skills"
 
 BBOX=5.506/33.893569/-4.67677/41.855083
