@@ -124,8 +124,12 @@ kind_mondays() {
 
 # Shared panel styling. Overlay fontsize is pinned at 10 so it does NOT scale
 # with --fontsize. Annotation x/y are DATA coords (lon/lat), not axes fractions.
+# force_na=1 labels every week "not available" regardless of KINDS — for a
+# panel (e.g. a probability panel) whose own real-data pieces all came back
+# empty even though KINDS (built from a *different* panel's data, e.g. the
+# precip series) predicted some of those weeks would have forecast data.
 write_patch() {
-  local dest="$1" i comma="" text color
+  local dest="$1" force_na="$2" i comma="" text color kind
   {
     echo '{'
     echo '  "theme": {"rc": {"axes.facecolor": "#9e9e9e", "axes.titlesize": 20, "figure.titlesize": 24,'
@@ -133,7 +137,9 @@ write_patch() {
     echo '  "layout": {"colorbar": {"labelsize": 22, "ticksize": 17, "labelpad": 16}},'
     echo '  "annotations": ['
     for i in "${!KINDS[@]}"; do
-      case "${KINDS[$i]}" in
+      kind="${KINDS[$i]}"
+      [[ "$force_na" == "1" ]] && kind="na"
+      case "$kind" in
         obs) text=obs; color="#c8e6c9" ;;
         hybrid) text="obs+forecast"; color="#ffe0b2" ;;
         forecast) text=forecast; color="#bbdefb" ;;
@@ -187,6 +193,10 @@ align_to_chirps() {
 
 # Hybrid week: CHIRPS through CHIRPS_END + Monday-of-week init for the rest.
 # That older init covers the days the latest init has already stepped past.
+# Guarded per-command (like week_mae()/prepare_forecast() in the other
+# ws_scripts) so any failure just drops this piece instead of aborting the
+# whole script — under `set -eo pipefail`, calling this as an `if` condition
+# would otherwise silently suspend -e for its entire body.
 build_hybrid() {
   local src="$1" var="$2" dest="$3"
   local mon sun obs_end fcst_start d
@@ -197,27 +207,27 @@ build_hybrid() {
   fcst_start=$(pydate "${obs_end} +1 days" %Y-%m-%d)
 
   $S chirps-fetch --bbox $BBOX --start-time "$mon" --end-time "$obs_end" \
-      --workers 8 -o "$IR/${src}_hyb_obs_raw.zarr"
+      --workers 8 -o "$IR/${src}_hyb_obs_raw.zarr" || return 1
   # Daily agg stamps aggregation_coverage so concat with the forecast days
   # does not fail (AIFS/GEFS already carry that coord).
   $S aggregate-temporal --period daily --method mean \
-      -i "$IR/${src}_hyb_obs_raw.zarr" -o "$IR/${src}_hyb_obs.zarr"
+      -i "$IR/${src}_hyb_obs_raw.zarr" -o "$IR/${src}_hyb_obs.zarr" || return 1
 
   case "$src" in
     kmsa)
       if ! $S kenya-forecast-fetch --dataset precip_downscaled_daily \
           --date "$mon" -v tp -o "$IR/${src}_hyb_raw.zarr"; then
         $S kenya-forecast-fetch --dataset precip_downscaled_daily \
-            --date "$INIT" -v tp -o "$IR/${src}_hyb_raw.zarr"
+            --date "$INIT" -v tp -o "$IR/${src}_hyb_raw.zarr" || return 1
       fi
-      $S step-to-time -i "$IR/${src}_hyb_raw.zarr" -o "$IR/${src}_hyb_time.zarr"
-      $S clip-region --bbox $BBOX -i "$IR/${src}_hyb_time.zarr" -o "$IR/${src}_hyb_ken.zarr"
+      $S step-to-time -i "$IR/${src}_hyb_raw.zarr" -o "$IR/${src}_hyb_time.zarr" || return 1
+      $S clip-region --bbox $BBOX -i "$IR/${src}_hyb_time.zarr" -o "$IR/${src}_hyb_ken.zarr" || return 1
       align_to_chirps "$IR/${src}_hyb_ken.zarr" "$IR/${src}_hyb_grid.zarr" \
-          "$IR/${src}_hyb_obs.zarr"
+          "$IR/${src}_hyb_obs.zarr" || return 1
       $S rename -v tp --to-name precip \
-          -i "$IR/${src}_hyb_grid.zarr" -o "$IR/${src}_hyb_ren.zarr"
+          -i "$IR/${src}_hyb_grid.zarr" -o "$IR/${src}_hyb_ren.zarr" || return 1
       $S aggregate-temporal --period daily --method mean \
-          -i "$IR/${src}_hyb_ren.zarr" -o "$IR/${src}_hyb_named.zarr"
+          -i "$IR/${src}_hyb_ren.zarr" -o "$IR/${src}_hyb_named.zarr" || return 1
       ;;
     *)
       local ds=ecmwf-aifs-ens-forecast
@@ -225,19 +235,19 @@ build_hybrid() {
       if ! $S dynamical-fetch --dataset "$ds" --date "$mon" --bbox $BBOX \
           -v precipitation_surface -o "$IR/${src}_hyb_raw.zarr"; then
         $S dynamical-fetch --dataset "$ds" --date "$INIT" --bbox $BBOX \
-            -v precipitation_surface -o "$IR/${src}_hyb_raw.zarr"
+            -v precipitation_surface -o "$IR/${src}_hyb_raw.zarr" || return 1
       fi
       $S aggregate-temporal --period daily --method mean \
-          -i "$IR/${src}_hyb_raw.zarr" -o "$IR/${src}_hyb_1d.zarr"
+          -i "$IR/${src}_hyb_raw.zarr" -o "$IR/${src}_hyb_1d.zarr" || return 1
       $S summarize-dim --dim number --method mean \
-          -i "$IR/${src}_hyb_1d.zarr" -o "$IR/${src}_hyb_ens.zarr"
-      $S step-to-time -i "$IR/${src}_hyb_ens.zarr" -o "$IR/${src}_hyb_time.zarr"
+          -i "$IR/${src}_hyb_1d.zarr" -o "$IR/${src}_hyb_ens.zarr" || return 1
+      $S step-to-time -i "$IR/${src}_hyb_ens.zarr" -o "$IR/${src}_hyb_time.zarr" || return 1
       $S rename -v precipitation_surface --to-name precip \
-          -i "$IR/${src}_hyb_time.zarr" -o "$IR/${src}_hyb_ren.zarr"
+          -i "$IR/${src}_hyb_time.zarr" -o "$IR/${src}_hyb_ren.zarr" || return 1
       $S unit-convert --to-standard \
-          -i "$IR/${src}_hyb_ren.zarr" -o "$IR/${src}_hyb_std.zarr"
+          -i "$IR/${src}_hyb_ren.zarr" -o "$IR/${src}_hyb_std.zarr" || return 1
       align_to_chirps "$IR/${src}_hyb_std.zarr" "$IR/${src}_hyb_named.zarr" \
-          "$IR/${src}_hyb_obs.zarr"
+          "$IR/${src}_hyb_obs.zarr" || return 1
       ;;
   esac
 
@@ -253,19 +263,132 @@ build_hybrid() {
     days+=(--value "$d")
   fi
   $S select --dim time "${days[@]}" \
-      -i "$IR/${src}_hyb_named.zarr" -o "$IR/${src}_hyb_fcst.zarr"
+      -i "$IR/${src}_hyb_named.zarr" -o "$IR/${src}_hyb_fcst.zarr" || return 1
   $S concat --dim time \
       -i "$IR/${src}_hyb_obs.zarr" -i "$IR/${src}_hyb_fcst.zarr" \
-      -o "$IR/${src}_hyb_daily.zarr"
+      -o "$IR/${src}_hyb_daily.zarr" || return 1
   $S aggregate-temporal --period weekly --method mean --align left \
       --start-time "$mon" --end-time "$(pydate "${mon} +7 days" %Y-%m-%d)" \
-      -i "$IR/${src}_hyb_daily.zarr" -o "$IR/${src}_hyb_wk_rate.zarr"
-  $S convert-to-totals -i "$IR/${src}_hyb_wk_rate.zarr" -o "$dest"
+      -i "$IR/${src}_hyb_daily.zarr" -o "$IR/${src}_hyb_wk_rate.zarr" || return 1
+  $S convert-to-totals -i "$IR/${src}_hyb_wk_rate.zarr" -o "$dest" || return 1
+}
+
+# Complete forecast weeks, aligned onto the CHIRPS grid and converted to mm
+# totals. Guarded per-command for the same reason as build_hybrid().
+build_forecast_piece() {
+  local src="$1" var="$2" fcst_daily="$3" first="$4" last_mon="$5" dest="$6"
+  $S aggregate-temporal --period weekly --method mean --align left \
+      --start-time "$first" \
+      --end-time "$(pydate "${last_mon} +7 days" %Y-%m-%d)" \
+      -i "$fcst_daily" -o "$IR/${src}_fcst_wk_rate.zarr" || return 1
+  align_to_chirps "$IR/${src}_fcst_wk_rate.zarr" "$IR/${src}_fcst_wk_grid.zarr" \
+      "$IR/chirps_wk_rate.zarr" || return 1
+  if [[ "$var" != precip ]]; then
+    $S rename -v "$var" --to-name precip \
+        -i "$IR/${src}_fcst_wk_grid.zarr" -o "$IR/${src}_fcst_wk_named.zarr" || return 1
+  else
+    rm -rf "$IR/${src}_fcst_wk_named.zarr"
+    cp -R "$IR/${src}_fcst_wk_grid.zarr" "$IR/${src}_fcst_wk_named.zarr" || return 1
+  fi
+  $S convert-to-totals --min-coverage 1.0 \
+      -i "$IR/${src}_fcst_wk_named.zarr" -o "$dest" || return 1
+}
+
+# Assemble the SOND weeks for one panel: concat whatever real-data pieces it
+# was handed, then blank-fill (via the all-NaN weekly template) any Monday
+# that isn't actually present in the result — whether classify_weeks never
+# expected data for it, or a piece that was expected came back short or
+# failed outright. A data gap degrades to a blank panel, never a crash.
+# mode=totals converts the blank weeks to precip totals like the real
+# pieces (compose_sond); mode=raw leaves them as the raw template
+# (compute_prob_above, where blanks sit alongside a [0,1] probability field).
+# target_var, if non-empty, renames the blank piece's variable (nan_wk.zarr
+# is always "precip") to match the real pieces' variable — required when a
+# panel ends up 100% blank, since then nothing else renames it and the
+# downstream plot_sond --layer variable=... lookup would find nothing.
+assemble_sond_weeks() {
+  local src="$1" dest="$2" mode="$3" target_var="$4"
+  shift 4
+  local piece_paths=("$@")
+  local stem="${dest%.zarr}"
+
+  local data_zarr=""
+  if (( ${#piece_paths[@]} == 1 )); then
+    data_zarr="${piece_paths[0]}"
+  elif (( ${#piece_paths[@]} > 1 )); then
+    local concat_args=() p
+    for p in "${piece_paths[@]}"; do
+      concat_args+=(-i "$p")
+    done
+    $S concat --dim time "${concat_args[@]}" -o "${stem}_data.zarr"
+    data_zarr="${stem}_data.zarr"
+  fi
+
+  local covered=()
+  [[ -n "$data_zarr" ]] && covered=($(zarr_dates "$data_zarr"))
+
+  # gap_vals is --value/date pairs (for the $S select call below); gap_count
+  # is the actual number of blank weeks, kept separate so array length isn't
+  # double-counted the way final_paths below deliberately avoids too.
+  local gap_vals=() gap_count=0 mon c hit
+  for mon in "${MONDAYS[@]}"; do
+    hit=""
+    for c in "${covered[@]}"; do
+      [[ "$c" == "$mon" ]] && { hit=1; break; }
+    done
+    if [[ -z "$hit" ]]; then
+      gap_vals+=(--value "$mon")
+      gap_count=$((gap_count + 1))
+    fi
+  done
+
+  # Bare paths, one per real piece — NOT `-i path` pairs, so
+  # ${#final_paths[@]} is an honest piece count (a 2-element `-i path` array
+  # would silently double-count and misroute a single real piece into
+  # concat, which requires at least two inputs).
+  local final_paths=()
+  [[ -n "$data_zarr" ]] && final_paths+=("$data_zarr")
+
+  if (( gap_count > 0 )); then
+    echo "INFO: $src leaving ${gap_count}/${#MONDAYS[@]} SOND week(s) blank (no data)" >&2
+    $S select --dim time "${gap_vals[@]}" \
+        -i "$IR/nan_wk.zarr" -o "${stem}_nan_gaps_rate.zarr"
+    if [[ "$mode" == totals ]]; then
+      $S convert-to-totals --min-coverage 0.0 \
+          -i "${stem}_nan_gaps_rate.zarr" -o "${stem}_nan_gaps.zarr"
+    else
+      rm -rf "${stem}_nan_gaps.zarr"
+      cp -R "${stem}_nan_gaps_rate.zarr" "${stem}_nan_gaps.zarr"
+    fi
+    if [[ -n "$target_var" ]]; then
+      $S rename -v precip --to-name "$target_var" \
+          -i "${stem}_nan_gaps.zarr" -o "${stem}_nan_gaps_named.zarr"
+      final_paths+=("${stem}_nan_gaps_named.zarr")
+    else
+      final_paths+=("${stem}_nan_gaps.zarr")
+    fi
+  fi
+
+  if (( ${#final_paths[@]} == 0 )); then
+    echo "ERROR: $src produced no SOND weeks" >&2
+    exit 1
+  elif (( ${#final_paths[@]} == 1 )); then
+    $S select --dim time "${ORDER[@]}" -i "${final_paths[0]}" -o "$dest"
+  else
+    local final_args=() fp
+    for fp in "${final_paths[@]}"; do
+      final_args+=(-i "$fp")
+    done
+    $S concat --dim time "${final_args[@]}" -o "${stem}_unsorted.zarr"
+    $S select --dim time "${ORDER[@]}" -i "${stem}_unsorted.zarr" -o "$dest"
+  fi
 }
 
 # 16-week totals: complete CHIRPS weeks + hybrid + complete forecast weeks +
 # all-NaN gaps. Forecast is coarsened onto the CHIRPS grid (half-cell lon
-# offset) so concat/difference keep every cell.
+# offset) so concat/difference keep every cell. Each source is attempted
+# independently; whichever weeks don't come from real data end up blank via
+# assemble_sond_weeks, instead of aborting the whole script.
 compose_sond() {
   local src="$1" fcst_daily="$2" var="$3" dest="$4"
   local stem="${dest%.zarr}"
@@ -273,62 +396,38 @@ compose_sond() {
   fcst_last=$(zarr_last_date "$fcst_daily")
   classify_weeks "$fcst_last"
 
-  local pieces=()
+  local piece_paths=()
 
   if [[ -n "$(kind_mondays obs)" ]]; then
-    $S convert-to-totals --min-coverage 1.0 \
-        -i "$IR/chirps_wk_rate.zarr" -o "$IR/${src}_obs_totals.zarr"
-    pieces+=(-i "$IR/${src}_obs_totals.zarr")
+    if $S convert-to-totals --min-coverage 1.0 \
+        -i "$IR/chirps_wk_rate.zarr" -o "$IR/${src}_obs_totals.zarr"; then
+      piece_paths+=("$IR/${src}_obs_totals.zarr")
+    else
+      echo "WARNING: $src obs weeks failed to build; leaving them blank" >&2
+    fi
   fi
 
   if [[ -n "$(kind_mondays hybrid)" ]]; then
-    build_hybrid "$src" "$var" "$IR/${src}_hyb_totals.zarr"
-    pieces+=(-i "$IR/${src}_hyb_totals.zarr")
+    if build_hybrid "$src" "$var" "$IR/${src}_hyb_totals.zarr"; then
+      piece_paths+=("$IR/${src}_hyb_totals.zarr")
+    else
+      echo "WARNING: $src hybrid week failed to build; leaving it blank" >&2
+    fi
   fi
 
   local first_fcst last_fcst_mon
   first_fcst=$(kind_mondays forecast | head -n1)
   last_fcst_mon=$(kind_mondays forecast | tail -n1)
   if [[ -n "$first_fcst" ]]; then
-    $S aggregate-temporal --period weekly --method mean --align left \
-        --start-time "$first_fcst" \
-        --end-time "$(pydate "${last_fcst_mon} +7 days" %Y-%m-%d)" \
-        -i "$fcst_daily" -o "$IR/${src}_fcst_wk_rate.zarr"
-    align_to_chirps "$IR/${src}_fcst_wk_rate.zarr" "$IR/${src}_fcst_wk_grid.zarr" \
-        "$IR/chirps_wk_rate.zarr"
-    if [[ "$var" != precip ]]; then
-      $S rename -v "$var" --to-name precip \
-          -i "$IR/${src}_fcst_wk_grid.zarr" -o "$IR/${src}_fcst_wk_named.zarr"
+    if build_forecast_piece "$src" "$var" "$fcst_daily" "$first_fcst" "$last_fcst_mon" \
+        "$IR/${src}_fcst_totals.zarr"; then
+      piece_paths+=("$IR/${src}_fcst_totals.zarr")
     else
-      rm -rf "$IR/${src}_fcst_wk_named.zarr"
-      cp -R "$IR/${src}_fcst_wk_grid.zarr" "$IR/${src}_fcst_wk_named.zarr"
+      echo "WARNING: $src forecast weeks failed to build; leaving them blank" >&2
     fi
-    $S convert-to-totals --min-coverage 1.0 \
-        -i "$IR/${src}_fcst_wk_named.zarr" -o "$IR/${src}_fcst_totals.zarr"
-    pieces+=(-i "$IR/${src}_fcst_totals.zarr")
   fi
 
-  local na_vals=() na
-  for na in $(kind_mondays na); do
-    na_vals+=(--value "$na")
-  done
-  if (( ${#na_vals[@]} > 0 )); then
-    $S select --dim time "${na_vals[@]}" \
-        -i "$IR/nan_wk.zarr" -o "$IR/${src}_nan_gaps_rate.zarr"
-    $S convert-to-totals --min-coverage 0.0 \
-        -i "$IR/${src}_nan_gaps_rate.zarr" -o "$IR/${src}_nan_gaps.zarr"
-    pieces+=(-i "$IR/${src}_nan_gaps.zarr")
-  fi
-
-  if (( ${#pieces[@]} == 0 )); then
-    echo "ERROR: $src produced no SOND weeks" >&2
-    exit 1
-  elif (( ${#pieces[@]} == 1 )); then
-    $S select --dim time "${ORDER[@]}" "${pieces[@]}" -o "$dest"
-  else
-    $S concat --dim time "${pieces[@]}" -o "${stem}_unsorted.zarr"
-    $S select --dim time "${ORDER[@]}" -i "${stem}_unsorted.zarr" -o "$dest"
-  fi
+  assemble_sond_weeks "$src" "$dest" totals "" "${piece_paths[@]}"
 
   write_patch "${stem}.patch.json"
 }
@@ -369,7 +468,7 @@ prep_dynamical_daily() {
 compute_prob_above() {
   local stem="$1" dest="$2"
   local stem_short="${dest%.zarr}"
-  local pieces=()
+  local piece_paths=()
 
   # Climatology regridded onto the forecast's native grid ONCE, across the
   # whole date range (not per week).
@@ -396,33 +495,30 @@ compute_prob_above() {
     fcst_vals+=(--value "$(pydate "${mon} +1 days" %Y-%m-%d)")
   fi
   if (( ${#fcst_vals[@]} > 0 )); then
-    $S select --dim time "${fcst_vals[@]}" \
-        -i "${stem_short}_prob_daily.zarr" -o "${stem_short}_prob_native.zarr"
-    align_to_chirps "${stem_short}_prob_native.zarr" \
+    if $S select --dim time "${fcst_vals[@]}" \
+        -i "${stem_short}_prob_daily.zarr" -o "${stem_short}_prob_native.zarr" \
+        && align_to_chirps "${stem_short}_prob_native.zarr" \
         "${stem_short}_prob.zarr" \
-        "$IR/chirps_wk_rate.zarr"
-    pieces+=(-i "${stem_short}_prob.zarr")
+        "$IR/chirps_wk_rate.zarr"; then
+      piece_paths+=("${stem_short}_prob.zarr")
+    else
+      echo "WARNING: $stem forecast probability weeks failed to build; leaving them blank" >&2
+    fi
   fi
 
-  local na_vals=() na
-  for na in $(kind_mondays obs) $(kind_mondays hybrid) $(kind_mondays na); do
-    na_vals+=(--value "$na")
-  done
-  if (( ${#na_vals[@]} > 0 )); then
-    $S select --dim time "${na_vals[@]}" \
-        -i "$IR/nan_wk.zarr" -o "${stem_short}_nan_gaps.zarr"
-    pieces+=(-i "${stem_short}_nan_gaps.zarr")
-  fi
+  # Everything other than a real forecast week (obs, hybrid, na, or a
+  # forecast week whose probability came back short) is blank by design —
+  # only forecast panels ever render a probability.
+  assemble_sond_weeks "$stem" "$dest" raw probability "${piece_paths[@]}"
 
-  if (( ${#pieces[@]} == 0 )); then
-    echo "ERROR: $stem produced no forecast weeks for probability panel" >&2
-    exit 1
-  elif (( ${#pieces[@]} == 1 )); then
-    $S select --dim time "${ORDER[@]}" "${pieces[@]}" -o "$dest"
-  else
-    $S concat --dim time "${pieces[@]}" -o "${stem_short}_unsorted.zarr"
-    $S select --dim time "${ORDER[@]}" -i "${stem_short}_unsorted.zarr" -o "$dest"
-  fi
+  # KINDS reflects the *precip* panel this reuses classify_weeks from, so a
+  # week it calls "forecast" can still be entirely blank here if this
+  # panel's own probability build failed for every one of those weeks. Only
+  # force every label to "not available" when that happened for all of
+  # them — a genuinely mixed panel keeps the normal per-week KINDS labels.
+  local force_na=""
+  (( ${#piece_paths[@]} == 0 )) && force_na=1
+  write_patch "${stem_short}.patch.json" "$force_na"
 }
 
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
@@ -511,7 +607,7 @@ plot_sond \
     kenya_aifs_prob_above.png \
     'Probability of Above-Normal Rainfall - AIFS-ENS Forecast' \
     'P(above climatology)' \
-    "$IR/kenya_aifs_wk.patch.json" \
+    "$IR/kenya_aifs_prob.patch.json" \
     "brown,wheat,white,lightgreen,green" 0 1 probability
 
 prep_dynamical_daily noaa-gefs-forecast-35-day kenya_gefs
@@ -538,5 +634,5 @@ plot_sond \
     kenya_gefs_prob_above.png \
     'Probability of Above-Normal Rainfall - GEFS Forecast' \
     'P(above climatology)' \
-    "$IR/kenya_gefs_wk.patch.json" \
+    "$IR/kenya_gefs_prob.patch.json" \
     "brown,wheat,white,lightgreen,green" 0 1 probability
