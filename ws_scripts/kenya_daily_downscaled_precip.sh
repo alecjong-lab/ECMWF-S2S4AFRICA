@@ -17,7 +17,7 @@ set -eo pipefail
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
 
-S="uvx --from git+https://github.com/rhiza-research/forecasting-skills@dev forecasting-skills"
+S="uvx --from git+https://github.com/rhiza-research/forecasting-skills@old-dev forecasting-skills"
 
 # Kenya product extent used by the week-1 MAE slide (N/W/S/E).
 BBOX=5.506/33.893569/-4.67677/41.855083

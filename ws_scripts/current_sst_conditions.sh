@@ -7,7 +7,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
 
 REPO="git+https://github.com/rhiza-research/forecasting-skills"
 # all skills from the dev branch ...
-SK="uvx --from $REPO@dev forecasting-skills"
+SK="uvx --from $REPO@old-dev forecasting-skills"
 # ... except clim-fetch, from the mohini/skills branch
 SK_CLIM="uvx --from $REPO@mohini/skills forecasting-skills"
 

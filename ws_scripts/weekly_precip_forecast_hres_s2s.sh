@@ -10,7 +10,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
 # ---------------------------------------------------------------- skill pins
 # weather-skills @dev for everything except HRES fetch, which only exists on
 # the mohini/skills branch so far.
-WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
+WS="uvx --from git+https://github.com/rhiza-research/weather-skills@old-dev forecasting-skills"
 HRES="uvx --from git+https://github.com/rhiza-research/weather-skills@mohini/skills forecasting-skills"
 
 # CDSAPI_KEY/ECMWF_DATASTORES_KEY must be set (CI and run_skills.sh already
