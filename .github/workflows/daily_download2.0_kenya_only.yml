@@ -409,6 +409,55 @@ jobs:
           gcloud storage rsync -r "gs://${BUCKET}/plots/Great_Horn/${DATE_STR}" "plots/Great_Horn/${DATE_STR}" || true
           gcloud storage rsync -r "gs://${BUCKET}/plots/briefing/${BRIEFING_DATE}" "plots/briefing/${BRIEFING_DATE}" || true
 
+      # Publish the Kenya bucket before the ws_scripts: seasonal_progression_vs_analog_years.sh
+      # and kenya_daily_downscaled_precip.sh read today's downscaled forecast back from
+      # gs://${KENYA_BUCKET}, and uploading afterwards made them silently use the previous init.
+      # ── Stage Kenya-only plots, downscaled NetCDF, and cropped zarr data ──
+      - name: Stage Kenya bucket contents
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          STAGE_DIR="kenya_bucket_staging/${{ steps.ecmwf_date.outputs.date }}"
+          mkdir -p "$STAGE_DIR"
+          for sub in weekly dekadal monthly; do
+            src="plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/$sub"
+            if [ -d "$src" ]; then
+              mkdir -p "$STAGE_DIR/$sub"
+              cp -r "$src"/. "$STAGE_DIR/$sub/"
+            fi
+          done
+          mkdir -p "$STAGE_DIR/data"
+          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/gefs" ]; then
+            mkdir -p "$STAGE_DIR/data/gefs"
+            cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/gefs/gefs_kenya.zarr" "$STAGE_DIR/data/gefs/" 2>/dev/null || true
+          fi
+          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" ]; then
+            cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" "$STAGE_DIR/data/"
+          fi
+          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" ]; then
+            find "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" -maxdepth 1 \
+              -type f -iname '*Kenya*downscaled*.nc' \
+              -exec cp -v {} "$STAGE_DIR/data/" \;
+            find "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" -maxdepth 1 \
+              -type f -iname 'daily_downscaled_kenya.tif' \
+              -exec cp -v {} "$STAGE_DIR/data/" \;
+          fi
+          python crop_kenya_zarr.py \
+            --data-dir "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" \
+            --output "$STAGE_DIR/data"
+
+      # ── Upload Kenya-only bucket contents ─────────────────────────
+      - name: Upload to Kenya bucket
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          STAGE_DIR="kenya_bucket_staging/${{ steps.ecmwf_date.outputs.date }}"
+          if [ -d "$STAGE_DIR" ]; then
+            gcloud storage rsync -r "$STAGE_DIR" "gs://${KENYA_BUCKET}/${{ steps.ecmwf_date.outputs.date }}" --exclude='.*index\.md$'
+          else
+            echo "No Kenya staging directory found, skipping."
+          fi
+
       # ── Weather-skills briefing plots (ws_scripts/*.sh) ──────
       - name: Install uv for ws_scripts
         uses: astral-sh/setup-uv@v5
@@ -493,6 +542,7 @@ jobs:
         continue-on-error: true
         working-directory: main_repo/ws_scripts
         env:
+          INIT_OVERRIDE: ${{ steps.ecmwf_date.outputs.date }}
           ECMWF_DATASTORES_URL: "https://ecds.ecmwf.int/api"
           ECMWF_DATASTORES_KEY: ${{ secrets.CDSAPI_KEY }}
         run: bash seasonal_progression_vs_analog_years.sh
@@ -543,6 +593,8 @@ jobs:
         if: ${{ steps.ws.outputs.kenya_daily_downscaled_precip == 'true' }}
         continue-on-error: true
         working-directory: main_repo/ws_scripts
+        env:
+          INIT_OVERRIDE: ${{ steps.ecmwf_date.outputs.date }}
         run: bash kenya_daily_downscaled_precip.sh
 
       - name: Collect briefing plots
@@ -633,52 +685,6 @@ jobs:
             done
           else
             echo "No $OUTPUT_DIR directory found, skipping."
-          fi
-
-      # ── Stage Kenya-only plots, downscaled NetCDF, and cropped zarr data ──
-      - name: Stage Kenya bucket contents
-        continue-on-error: true
-        working-directory: main_repo
-        run: |
-          STAGE_DIR="kenya_bucket_staging/${{ steps.ecmwf_date.outputs.date }}"
-          mkdir -p "$STAGE_DIR"
-          for sub in weekly dekadal monthly; do
-            src="plots/Kenya/${{ steps.ecmwf_date.outputs.date }}/$sub"
-            if [ -d "$src" ]; then
-              mkdir -p "$STAGE_DIR/$sub"
-              cp -r "$src"/. "$STAGE_DIR/$sub/"
-            fi
-          done
-          mkdir -p "$STAGE_DIR/data"
-          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/gefs" ]; then
-            mkdir -p "$STAGE_DIR/data/gefs"
-            cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/gefs/gefs_kenya.zarr" "$STAGE_DIR/data/gefs/" 2>/dev/null || true
-          fi
-          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" ]; then
-            cp -r "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}/geotifs_kenya" "$STAGE_DIR/data/"
-          fi
-          if [ -d "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" ]; then
-            find "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" -maxdepth 1 \
-              -type f -iname '*Kenya*downscaled*.nc' \
-              -exec cp -v {} "$STAGE_DIR/data/" \;
-            find "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" -maxdepth 1 \
-              -type f -iname 'daily_downscaled_kenya.tif' \
-              -exec cp -v {} "$STAGE_DIR/data/" \;
-          fi
-          python crop_kenya_zarr.py \
-            --data-dir "$OUTPUT_DIR/${{ steps.ecmwf_date.outputs.date }}" \
-            --output "$STAGE_DIR/data"
-
-      # ── Upload Kenya-only bucket contents ─────────────────────────
-      - name: Upload to Kenya bucket
-        continue-on-error: true
-        working-directory: main_repo
-        run: |
-          STAGE_DIR="kenya_bucket_staging/${{ steps.ecmwf_date.outputs.date }}"
-          if [ -d "$STAGE_DIR" ]; then
-            gcloud storage rsync -r "$STAGE_DIR" "gs://${KENYA_BUCKET}/${{ steps.ecmwf_date.outputs.date }}" --exclude='.*index\.md$'
-          else
-            echo "No Kenya staging directory found, skipping."
           fi
 
       # ── Generate markdown index for everything just uploaded ─────
@@ -1068,7 +1074,10 @@ jobs:
             "${src[@]}" \
             --emails "${{ matrix.emails }}"
 
+      # Hold the email back rather than sending recipients "(upload failed)"
+      # in place of the deck link; the step after this turns the run red.
       - name: Email Kenya briefing
+        if: needs.preview.outputs.drive_url != '' || steps.drive.outputs.drive_url != ''
         uses: dawidd6/action-send-mail@v16
         with:
           server_address: smtp.resend.com
@@ -1080,7 +1089,7 @@ jobs:
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
             Today's Kenya S2S briefing is a shared Google Slides deck:
-            ${{ needs.preview.outputs.drive_url || steps.drive.outputs.drive_url || '(upload failed)' }}
+            ${{ needs.preview.outputs.drive_url || steps.drive.outputs.drive_url }}
             Please comment on that deck rather than a local copy.
             Latest expert analysis deck:
             ${{ needs.preview.outputs.deck_url || '(none found)' }}
@@ -1088,3 +1097,9 @@ jobs:
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
           attachments: ${{ needs.preview.outputs.attachments }}
+
+      - name: Fail if Kenya briefing email was held back
+        if: needs.preview.outputs.drive_url == '' && steps.drive.outputs.drive_url == ''
+        run: |
+          echo "::error::Kenya briefing Drive upload returned no link (step outcome: ${{ steps.drive.outcome }}); the Kenya email was NOT sent. See the 'Share Kenya briefing on Drive' step log."
+          exit 1
