@@ -202,7 +202,19 @@ jobs:
         if: ${{ inputs.run_all == true || inputs.run_last_weeks_forecast_verification == true }}
         continue-on-error: true
         working-directory: ws_scripts
+        env:
+          AZURE_STORAGE_SAS_TOKEN: ${{ secrets.AZURE_STORAGE_SAS_TOKEN }}
         run: bash last_weeks_forecast_verification.sh
+
+      - name: Upload verification plots
+        if: ${{ always() && (inputs.run_all == true || inputs.run_last_weeks_forecast_verification == true) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: last-week-verification
+          path: |
+            ws_scripts/*_chirps_*.png
+            ws_scripts/intermediate_results/*_chirps_*.png
+          if-no-files-found: warn
 
       - name: Run week1_mae_vs_chirps.sh
         if: ${{ inputs.run_all == true || inputs.run_week1_mae_vs_chirps == true }}
