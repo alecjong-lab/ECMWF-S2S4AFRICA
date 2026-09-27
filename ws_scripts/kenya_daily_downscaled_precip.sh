@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Kenya weekly rainfall totals + anomaly, 16 Monday SOND weeks.
-# CHIRPS obs, a hybrid obs+forecast transition week, latest-init forecast
-# for complete lead weeks, all-NaN (never zeros) for the rest.
+# CHIRPS obs, a hybrid obs+forecast transition week, older-init forecast for
+# any week before the latest init starts, latest-init forecast for complete
+# lead weeks, all-NaN (never zeros) for the rest. Each panel is tagged with
+# its source: CHIRPS, CHIRPS / fcst, or fcst.
 # Matching canvases so the slides flip:
 #   kenya_daily_downscaled_precip[_anomaly]  — KMSA daily downscale
 #   kenya_aifs_daily_precip[_anomaly]        — dynamical.org AIFS-ENS
@@ -108,7 +110,10 @@ zarr_last_date() { zarr_dates "$1" | tail -n1; }
 
 zarr_has_times() { [[ -n "$(zarr_dates "$1" 2>/dev/null | head -n1)" ]]; }
 
-# KIND[i] = obs | hybrid | forecast | na from CHIRPS_END + last forecast day.
+# KIND[i] = obs | hybrid | bridge | forecast | na from CHIRPS_END, INIT and
+# the last forecast day. hybrid = CHIRPS then forecast; bridge = no CHIRPS
+# but starts before INIT, so the latest init cannot cover it and an older
+# init fills it (otherwise a blank panel sits between obs and forecast).
 classify_weeks() {
   local fcst_last="$1" mon sun
   KINDS=()
@@ -116,8 +121,10 @@ classify_weeks() {
     sun=$(pydate "${mon} +6 days" %Y-%m-%d)
     if [[ "$sun" < "$CHIRPS_END" || "$sun" == "$CHIRPS_END" ]]; then
       KINDS+=("obs")
-    elif [[ "$mon" < "$INIT" ]]; then
+    elif [[ "$mon" < "$CHIRPS_END" || "$mon" == "$CHIRPS_END" ]]; then
       KINDS+=("hybrid")
+    elif [[ "$mon" < "$INIT" ]]; then
+      KINDS+=("bridge")
     elif [[ -n "$fcst_last" && ( "$sun" < "$fcst_last" || "$sun" == "$fcst_last" ) ]]; then
       KINDS+=("forecast")
     else
@@ -153,9 +160,9 @@ write_patch() {
       kind="${KINDS[$i]}"
       [[ "$force_na" == "1" ]] && kind="na"
       case "$kind" in
-        obs) text=obs; color="#c8e6c9" ;;
-        hybrid) text="obs+forecast"; color="#ffe0b2" ;;
-        forecast) text=forecast; color="#bbdefb" ;;
+        obs) text=CHIRPS; color="#c8e6c9" ;;
+        hybrid) text="CHIRPS / fcst"; color="#ffe0b2" ;;
+        bridge | forecast) text=fcst; color="#bbdefb" ;;
         *) text="not available"; color="white" ;;
       esac
       printf '%s    {"text": "%s", "panel": %d, "x": 37.9, "y": 4.8, "ha": "center", "va": "center", "fontsize": 10, "color": "black", "zorder": 12, "bbox": {"facecolor": "%s", "edgecolor": "black", "alpha": 0.9, "boxstyle": "round,pad=0.3"}}' \
@@ -204,73 +211,75 @@ align_to_chirps() {
       -i "$src" -o "$dest"
 }
 
-# Hybrid week: CHIRPS through CHIRPS_END + Monday-of-week init for the rest.
-# That older init covers the days the latest init has already stepped past.
+# Hybrid / bridge week MON: CHIRPS through CHIRPS_END (hybrid only), then
+# the newest init that starts on or before the first missing day, for the
+# rest of the week. That older init covers the days the latest init has
+# already stepped past, so no day between CHIRPS and INIT is left empty.
 # Guarded per-command (like week_mae()/prepare_forecast() in the other
 # ws_scripts) so any failure just drops this piece instead of aborting the
 # whole script — under `set -eo pipefail`, calling this as an `if` condition
 # would otherwise silently suspend -e for its entire body.
 build_hybrid() {
-  local src="$1" var="$2" dest="$3"
-  local mon sun fcst_start d has_obs grid_ref
-  mon=$(kind_mondays hybrid | head -n1)
-  [[ -n "$mon" ]] || return 0
+  local src="$1" var="$2" mon="$3" dest="$4"
+  local sun fcst_start d has_obs grid_ref off init=""
+  local h="$IR/${src}_hyb_${mon}"
   sun=$(pydate "${mon} +6 days" %Y-%m-%d)
 
-  # fcst_start is the later of "day after CHIRPS's own coverage" and the
-  # forecast's own INIT date.
-  fcst_start=$(pydate "${CHIRPS_END} +1 days" %Y-%m-%d)
-  if [[ "$INIT" > "$fcst_start" ]]; then
-    fcst_start="$INIT"
-  fi
-
+  fcst_start="$mon"
   has_obs=0
   if [[ "$mon" < "$CHIRPS_END" || "$mon" == "$CHIRPS_END" ]]; then
     has_obs=1
+    fcst_start=$(pydate "${CHIRPS_END} +1 days" %Y-%m-%d)
     $S chirps-fetch --bbox $BBOX --start-time "$mon" --end-time "$CHIRPS_END" \
-        --workers 8 -o "$IR/${src}_hyb_obs_raw.zarr" || return 1
+        --workers 8 -o "${h}_obs_raw.zarr" || return 1
     # Daily agg stamps aggregation_coverage so concat with the forecast days
     # does not fail (AIFS/GEFS already carry that coord).
     $S aggregate-temporal --period daily --method mean \
-        -i "$IR/${src}_hyb_obs_raw.zarr" -o "$IR/${src}_hyb_obs.zarr" || return 1
+        -i "${h}_obs_raw.zarr" -o "${h}_obs.zarr" || return 1
   fi
-  grid_ref="$IR/${src}_hyb_obs.zarr"
+  grid_ref="${h}_obs.zarr"
   (( has_obs )) || grid_ref="$IR/chirps_wk_rate.zarr"
+
+  local ds=ecmwf-aifs-ens-forecast
+  [[ "$src" == gefs ]] && ds=noaa-gefs-forecast-35-day
+  for off in 0 1 2 3 4 5 6 7; do
+    d=$(pydate "${fcst_start} -${off} days" %Y-%m-%d)
+    if [[ "$src" == kmsa ]]; then
+      $S kenya-forecast-fetch --dataset precip_downscaled_daily \
+          --date "$d" -v tp -o "${h}_raw.zarr" && init="$d" && break
+    else
+      $S dynamical-fetch --dataset "$ds" --date "$d" --bbox $BBOX \
+          -v precipitation_surface -o "${h}_raw.zarr" && init="$d" && break
+    fi
+  done
+  if [[ -z "$init" ]]; then
+    echo "WARNING: $src has no init on/before $fcst_start for week $mon" >&2
+    return 1
+  fi
+  echo "INFO: $src week $mon: fcst $fcst_start..$sun from init $init" >&2
 
   case "$src" in
     kmsa)
-      if ! $S kenya-forecast-fetch --dataset precip_downscaled_daily \
-          --date "$mon" -v tp -o "$IR/${src}_hyb_raw.zarr"; then
-        $S kenya-forecast-fetch --dataset precip_downscaled_daily \
-            --date "$INIT" -v tp -o "$IR/${src}_hyb_raw.zarr" || return 1
-      fi
-      $S step-to-time -i "$IR/${src}_hyb_raw.zarr" -o "$IR/${src}_hyb_time.zarr" || return 1
-      $S clip-region --bbox $BBOX -i "$IR/${src}_hyb_time.zarr" -o "$IR/${src}_hyb_ken.zarr" || return 1
-      align_to_chirps "$IR/${src}_hyb_ken.zarr" "$IR/${src}_hyb_grid.zarr" \
+      $S step-to-time -i "${h}_raw.zarr" -o "${h}_time.zarr" || return 1
+      $S clip-region --bbox $BBOX -i "${h}_time.zarr" -o "${h}_ken.zarr" || return 1
+      align_to_chirps "${h}_ken.zarr" "${h}_grid.zarr" \
           "$grid_ref" || return 1
       $S rename -v tp --to-name precip \
-          -i "$IR/${src}_hyb_grid.zarr" -o "$IR/${src}_hyb_ren.zarr" || return 1
+          -i "${h}_grid.zarr" -o "${h}_ren.zarr" || return 1
       $S aggregate-temporal --period daily --method mean \
-          -i "$IR/${src}_hyb_ren.zarr" -o "$IR/${src}_hyb_named.zarr" || return 1
+          -i "${h}_ren.zarr" -o "${h}_named.zarr" || return 1
       ;;
     *)
-      local ds=ecmwf-aifs-ens-forecast
-      [[ "$src" == gefs ]] && ds=noaa-gefs-forecast-35-day
-      if ! $S dynamical-fetch --dataset "$ds" --date "$mon" --bbox $BBOX \
-          -v precipitation_surface -o "$IR/${src}_hyb_raw.zarr"; then
-        $S dynamical-fetch --dataset "$ds" --date "$INIT" --bbox $BBOX \
-            -v precipitation_surface -o "$IR/${src}_hyb_raw.zarr" || return 1
-      fi
       $S aggregate-temporal --period daily --method mean \
-          -i "$IR/${src}_hyb_raw.zarr" -o "$IR/${src}_hyb_1d.zarr" || return 1
+          -i "${h}_raw.zarr" -o "${h}_1d.zarr" || return 1
       $S summarize-dim --dim number --method mean \
-          -i "$IR/${src}_hyb_1d.zarr" -o "$IR/${src}_hyb_ens.zarr" || return 1
-      $S step-to-time -i "$IR/${src}_hyb_ens.zarr" -o "$IR/${src}_hyb_time.zarr" || return 1
+          -i "${h}_1d.zarr" -o "${h}_ens.zarr" || return 1
+      $S step-to-time -i "${h}_ens.zarr" -o "${h}_time.zarr" || return 1
       $S rename -v precipitation_surface --to-name precip \
-          -i "$IR/${src}_hyb_time.zarr" -o "$IR/${src}_hyb_ren.zarr" || return 1
+          -i "${h}_time.zarr" -o "${h}_ren.zarr" || return 1
       $S unit-convert --to-standard \
-          -i "$IR/${src}_hyb_ren.zarr" -o "$IR/${src}_hyb_std.zarr" || return 1
-      align_to_chirps "$IR/${src}_hyb_std.zarr" "$IR/${src}_hyb_named.zarr" \
+          -i "${h}_ren.zarr" -o "${h}_std.zarr" || return 1
+      align_to_chirps "${h}_std.zarr" "${h}_named.zarr" \
           "$grid_ref" || return 1
       ;;
   esac
@@ -287,22 +296,21 @@ build_hybrid() {
     days+=(--value "$d")
   fi
   $S select --dim time "${days[@]}" \
-      -i "$IR/${src}_hyb_named.zarr" -o "$IR/${src}_hyb_fcst.zarr" || return 1
+      -i "${h}_named.zarr" -o "${h}_fcst.zarr" || return 1
   if (( has_obs )); then
     $S concat --dim time \
-        -i "$IR/${src}_hyb_obs.zarr" -i "$IR/${src}_hyb_fcst.zarr" \
-        -o "$IR/${src}_hyb_daily.zarr" || return 1
+        -i "${h}_obs.zarr" -i "${h}_fcst.zarr" \
+        -o "${h}_daily.zarr" || return 1
   else
-    rm -rf "$IR/${src}_hyb_daily.zarr"
-    cp -R "$IR/${src}_hyb_fcst.zarr" "$IR/${src}_hyb_daily.zarr" || return 1
+    rm -rf "${h}_daily.zarr"
+    cp -R "${h}_fcst.zarr" "${h}_daily.zarr" || return 1
   fi
   $S aggregate-temporal --period weekly --method mean --align left \
       --start-time "$mon" --end-time "$(pydate "${mon} +7 days" %Y-%m-%d)" \
-      -i "$IR/${src}_hyb_daily.zarr" -o "$IR/${src}_hyb_wk_rate.zarr" || return 1
+      -i "${h}_daily.zarr" -o "${h}_wk_rate.zarr" || return 1
   # 0.0: never reject a hybrid week outright -- it's already a best-effort
-  # splice, and a real gap day (has_obs=0 above) makes <1.0 coverage
-  # unavoidable, not a sign of something to fabricate around.
-  $S convert-to-totals --min-coverage 0.0 -i "$IR/${src}_hyb_wk_rate.zarr" -o "$dest" || return 1
+  # splice of obs and an older init.
+  $S convert-to-totals --min-coverage 0.0 -i "${h}_wk_rate.zarr" -o "$dest" || return 1
 }
 
 # Complete forecast weeks, aligned onto the CHIRPS grid and converted to mm
@@ -419,7 +427,7 @@ assemble_sond_weeks() {
   fi
 }
 
-# 16-week totals: complete CHIRPS weeks + hybrid + complete forecast weeks +
+# 16-week totals: complete CHIRPS weeks + hybrid/bridge + complete forecast weeks +
 # all-NaN gaps. Forecast is coarsened onto the CHIRPS grid (half-cell lon
 # offset) so concat/difference keep every cell. Each source is attempted
 # independently; whichever weeks don't come from real data end up blank via
@@ -442,13 +450,14 @@ compose_sond() {
     fi
   fi
 
-  if [[ -n "$(kind_mondays hybrid)" ]]; then
-    if build_hybrid "$src" "$var" "$IR/${src}_hyb_totals.zarr"; then
-      piece_paths+=("$IR/${src}_hyb_totals.zarr")
+  local gap
+  for gap in $(kind_mondays hybrid) $(kind_mondays bridge); do
+    if build_hybrid "$src" "$var" "$gap" "$IR/${src}_hyb_${gap}_totals.zarr"; then
+      piece_paths+=("$IR/${src}_hyb_${gap}_totals.zarr")
     else
-      echo "WARNING: $src hybrid week failed to build; leaving it blank" >&2
+      echo "WARNING: $src week $gap failed to build; leaving it blank" >&2
     fi
-  fi
+  done
 
   local first_fcst last_fcst_mon
   first_fcst=$(kind_mondays forecast | head -n1)
@@ -536,7 +545,7 @@ compute_prob_above() {
     fi
   fi
 
-  # Everything other than a real forecast week (obs, hybrid, na, or a
+  # Everything other than a real forecast week (obs, hybrid, bridge, na, or a
   # forecast week whose probability came back short) is blank by design —
   # only forecast panels ever render a probability.
   assemble_sond_weeks "$stem" "$dest" raw probability "${piece_paths[@]}"
@@ -659,7 +668,8 @@ PY
   fi
 
   local na_vals=() na
-  for na in $(kind_mondays obs) $(kind_mondays hybrid) $(kind_mondays na); do
+  for na in $(kind_mondays obs) $(kind_mondays hybrid) $(kind_mondays bridge) \
+      $(kind_mondays na); do
     na_vals+=(--value "$na")
   done
   if (( ${#na_vals[@]} > 0 )); then
