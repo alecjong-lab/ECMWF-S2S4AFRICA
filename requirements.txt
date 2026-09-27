@@ -25,3 +25,16 @@ uv
 python-pptx
 icechunk
 
+# Native-library pins: last versions seen in a crash-free run (2026-08-21).
+# Newer releases of these made most pipeline scripts abort at interpreter
+# exit with "double free or corruption" / segfault. Unpin one at a time to
+# find the culprit, then keep only that pin.
+eccodes==2.47.0
+eccodeslib==2.48.0.26
+eckitlib==2.1.1.26
+pyproj==3.7.2
+cartopy==0.25.0
+gribberish==1.5.0
+icechunk==2.1.2
+numcodecs==0.16.5
+zarr==3.3.0

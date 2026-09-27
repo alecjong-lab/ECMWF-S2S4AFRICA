@@ -18,6 +18,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -223,10 +224,46 @@ def upload_pptx(local, folder_id):
             for e in _listing_entries(":drive:", flags)
             if e.get("Name") in names or e.get("Name", "").startswith(title)
         ]
-    if not entries or not entries[0].get("ID"):
+    file_id = entries[0].get("ID") if entries else None
+    if not file_id:
+        file_id = _find_uploaded_id(folder_id, names)
+    if not file_id:
         raise SystemExit(f"rclone uploaded but could not find an ID for {filename}")
-    file_id = entries[0]["ID"]
     return file_id, slides_url(file_id)
+
+
+def _find_uploaded_id(folder_id, names, attempts=5, delay=3):
+    """Look up a just-uploaded file via the Drive API.
+
+    rclone's listing can miss a file Drive created a moment ago, so retry a
+    few times before giving up.
+    """
+    try:
+        token = drive_token()
+    except SystemExit:
+        return None
+    clauses = " or ".join(f"name = '{n}'" for n in sorted(names))
+    query = f"'{folder_id}' in parents and ({clauses}) and trashed = false"
+    url = "https://www.googleapis.com/drive/v3/files?" + urllib.parse.urlencode(
+        {
+            "q": query,
+            "fields": "files(id,name)",
+            "orderBy": "createdTime desc",
+            "supportsAllDrives": "true",
+            "includeItemsFromAllDrives": "true",
+        }
+    )
+    for attempt in range(attempts):
+        try:
+            files = drive_request("GET", url, token).get("files") or []
+        except RuntimeError as exc:
+            print(f"WARNING: Drive ID lookup failed ({exc})", file=sys.stderr)
+            return None
+        if files:
+            return files[0]["id"]
+        if attempt < attempts - 1:
+            time.sleep(delay)
+    return None
 
 
 def resolve_slides_link(file_id, drive_url, token):

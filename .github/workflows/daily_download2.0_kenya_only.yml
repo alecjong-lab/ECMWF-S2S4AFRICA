@@ -960,6 +960,7 @@ jobs:
 
       - name: Auth to Google Cloud
         if: steps.check_plots.outputs.plots_ok == 'true'
+        id: gcp_auth
         uses: google-github-actions/auth@v2
         with:
           create_credentials_file: true
@@ -979,6 +980,8 @@ jobs:
         if: steps.check_plots.outputs.plots_ok == 'true'
         id: drive
         continue-on-error: true
+        env:
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.gcp_auth.outputs.access_token }}
         run: |
           python -u repo_scripts/publish_briefing_to_drive.py \
             --file "${{ steps.check_plots.outputs.briefing }}" \
@@ -1040,6 +1043,7 @@ jobs:
           path: repo_scripts
 
       - name: Auth to Google Cloud
+        id: gcp_auth
         uses: google-github-actions/auth@v2
         with:
           create_credentials_file: true
@@ -1057,6 +1061,8 @@ jobs:
       - name: Share Kenya briefing on Drive
         id: drive
         continue-on-error: true
+        env:
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.gcp_auth.outputs.access_token }}
         run: |
           file_id="${{ needs.preview.outputs.drive_file_id }}"
           if [ -n "$file_id" ]; then

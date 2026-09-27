@@ -60,6 +60,9 @@ jobs:
       # boundary via needs.<job>.outputs. send-test-briefing resolves its
       # own copy locally instead — see the "Resolve test recipients" step there.
     env:
+      # Print the Python stack when a native library segfaults/aborts
+      # (the "double free or corruption" crashes in the plot scripts).
+      PYTHONFAULTHANDLER: "1"
       OUTPUT_DIR: data
       BUCKET: africa-forecasting-data
       KENYA_BUCKET: kenya-forecasting-data
@@ -765,6 +768,7 @@ jobs:
 
       - name: Auth to Google Cloud
         if: steps.check_plots.outputs.plots_ok == 'true'
+        id: gcp_auth
         uses: google-github-actions/auth@v2
         with:
           create_credentials_file: true
@@ -788,6 +792,8 @@ jobs:
         if: steps.check_plots.outputs.plots_ok == 'true'
         id: drive
         continue-on-error: true
+        env:
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.gcp_auth.outputs.access_token }}
         run: |
           python -u repo_scripts/publish_briefing_to_drive.py \
             --file "${{ steps.check_plots.outputs.briefing }}" \
