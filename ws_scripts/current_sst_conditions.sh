@@ -6,10 +6,10 @@ set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
 
 REPO="git+https://github.com/rhiza-research/forecasting-skills"
-# all skills from the dev branch ...
-SK="uvx --from $REPO@dev forecasting-skills"
-# ... except clim-fetch, from the mohini/skills branch
-SK_CLIM="uvx --from $REPO@mohini/skills forecasting-skills"
+# all skills from the old-dev branch ...
+SK="uvx --from $REPO@old-dev forecasting-skills"
+# ... clim-fetch included (same old-dev pin)
+SK_CLIM="uvx --from $REPO@old-dev forecasting-skills"
 
 BBOX="30.0/20.0/-40.0/120.0"   # Indian Ocean basin, from: $SK resolve-region "Indian Ocean"
 

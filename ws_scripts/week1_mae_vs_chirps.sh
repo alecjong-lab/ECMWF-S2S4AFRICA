@@ -7,7 +7,7 @@ set -eo pipefail
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
 
-WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
+WS="uvx --from git+https://github.com/rhiza-research/weather-skills@old-dev forecasting-skills"
 
 BBOX="5.506/33.893569/-4.67677/41.855083"
 N_WEEKS=4

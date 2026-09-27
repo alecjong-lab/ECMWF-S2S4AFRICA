@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-SKILLS="git+https://github.com/rhiza-research/forecasting-skills@dev"
+SKILLS="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
@@ -33,10 +33,10 @@ uvx --from "$SKILLS" forecasting-skills plot \
 
 set -eo pipefail
 
-SKILLS="git+https://github.com/rhiza-research/forecasting-skills@dev"
-CLIM_SKILLS="git+https://github.com/rhiza-research/forecasting-skills@mohini/skills"
+SKILLS="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
+CLIM_SKILLS="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 
-# --- climatology baseline (mohini/skills) ---
+# --- climatology baseline ---
 uvx --from "$CLIM_SKILLS" forecasting-skills clim-fetch \
   --dataset chirps --variable precip --window 7 --align left \
   --start-time "$START" --end-time "$CLIM_END" \

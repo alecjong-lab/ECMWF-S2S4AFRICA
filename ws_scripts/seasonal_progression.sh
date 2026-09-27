@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -eo pipefail
-S="git+https://github.com/rhiza-research/forecasting-skills@dev"
+S="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 BBOX=5.0/36.5/-5.0/42.0   # from: resolve-region "Kenya OND region"
 
 # shellcheck source=./_portable_date.sh
@@ -42,7 +42,7 @@ uvx --from $S forecasting-skills plot-timeseries \
   --output kenya_ond_daily_rainfall_vs_climatology.png
 
 
-S="git+https://github.com/rhiza-research/forecasting-skills@dev"
+S="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 
 # observed: weekly means -> weekly totals
 uvx --from $S forecasting-skills aggregate-temporal \
@@ -69,7 +69,7 @@ uvx --from $S forecasting-skills plot-timeseries \
   --ylabel 'Rainfall [mm/week]' --fontsize 16 \
   --output kenya_ond_weekly_rainfall_vs_climatology.png
 
-S="git+https://github.com/rhiza-research/forecasting-skills@dev"
+S="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 
 # weekly climatology with correct weekly std
 uvx --from $S forecasting-skills clim-fetch \

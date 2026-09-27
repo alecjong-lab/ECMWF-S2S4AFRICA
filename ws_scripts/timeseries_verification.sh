@@ -5,7 +5,7 @@
 # inits accumulate — that is expected, not a bug.
 set -eo pipefail
 
-SKILLS="git+https://github.com/rhiza-research/forecasting-skills@dev"
+SKILLS="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 run() { uvx --from "$SKILLS" forecasting-skills "$@"; }
 
 mkdir -p intermediate_results

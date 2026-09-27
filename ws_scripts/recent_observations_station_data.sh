@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-S="uvx --from git+https://github.com/rhiza-research/forecasting-skills@dev forecasting-skills"
+S="uvx --from git+https://github.com/rhiza-research/forecasting-skills@old-dev forecasting-skills"
 mkdir -p intermediate_results
 
 # shellcheck source=./_portable_date.sh

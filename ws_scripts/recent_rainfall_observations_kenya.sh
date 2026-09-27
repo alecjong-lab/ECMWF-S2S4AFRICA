@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-DEV="git+https://github.com/rhiza-research/forecasting-skills@dev"
+DEV="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
@@ -42,8 +42,8 @@ uvx --from "$DEV" forecasting-skills plot \
   --variable precip \
   --input step4.zarr --output chirps_kenya_weekly_rainfall.png
 
-DEV="git+https://github.com/rhiza-research/forecasting-skills@dev"
-CLIM="git+https://github.com/rhiza-research/forecasting-skills@mohini/skills"
+DEV="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
+CLIM="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 
 BBOX=5.506/33.893569/-4.67677/41.855083
 
@@ -64,7 +64,7 @@ uvx --from "$DEV" forecasting-skills aggregate-temporal \
   --align left --method mean --period weekly \
   --input step2.zarr --output step3.zarr
 
-# --- climatology branch (mohini/skills) ---
+# --- climatology branch ---
 uvx --from "$CLIM" forecasting-skills clim-fetch \
   --dataset chirps --variable precip \
   --window 7 --align left \

@@ -5,7 +5,7 @@
 # The weekly downscale is already weekly — convert-to-totals only.
 set -eo pipefail
 
-WS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
+WS="uvx --from git+https://github.com/rhiza-research/weather-skills@old-dev forecasting-skills"
 IR=intermediate_results
 mkdir -p "$IR"
 

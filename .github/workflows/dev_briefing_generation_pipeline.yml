@@ -411,7 +411,7 @@ jobs:
         run: |
           mkdir -p "plots/Great_Horn/${DATE_STR}" "plots/briefing/${BRIEFING_DATE}"
           gcloud storage rsync -r "gs://${BUCKET}/plots/Great_Horn/${DATE_STR}" "plots/Great_Horn/${DATE_STR}" || true
-          gcloud storage rsync -r "gs://${BUCKET}/plots/briefing/${BRIEFING_DATE}" "plots/briefing/${BRIEFING_DATE}" || true
+          # dont sync all plots so failures are clearly visible
 
       # ── Weather-skills briefing plots (ws_scripts/*.sh) ──────
       - name: Install uv for ws_scripts
