@@ -18,6 +18,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -197,6 +198,11 @@ def share_user(file_id, email, token, role):
 def _listing_entries(path, flags):
     listing = rclone("lsjson", "--files-only", path, *flags, check=False)
     if listing.returncode != 0:
+        print(
+            f"WARNING: rclone lsjson {path} failed ({listing.returncode}): "
+            f"{(listing.stderr or '').strip()}",
+            file=sys.stderr,
+        )
         return []
     try:
         return json.loads(listing.stdout or "[]")
@@ -204,17 +210,7 @@ def _listing_entries(path, flags):
         return []
 
 
-def upload_pptx(local, folder_id):
-    filename = os.path.basename(local)
-    title = os.path.splitext(filename)[0]
-    flags = drive_flags(folder_id)
-    copy = rclone("copyto", "-v", local, f":drive:{filename}", *flags, check=False)
-    if copy.returncode != 0:
-        sys.stderr.write(copy.stderr or copy.stdout or "")
-        raise SystemExit(f"rclone copy failed ({copy.returncode})")
-    if copy.stderr:
-        print(copy.stderr, file=sys.stderr)
-
+def _rclone_lookup_id(filename, title, flags):
     names = {filename, title}
     entries = _listing_entries(f":drive:{filename}", flags)
     if not entries:
@@ -223,9 +219,79 @@ def upload_pptx(local, folder_id):
             for e in _listing_entries(":drive:", flags)
             if e.get("Name") in names or e.get("Name", "").startswith(title)
         ]
-    if not entries or not entries[0].get("ID"):
+    if entries and entries[0].get("ID"):
+        return entries[0]["ID"]
+    return None
+
+
+def _api_lookup_id(folder_id, title):
+    """Newest non-trashed file in ``folder_id`` whose name starts with ``title``."""
+    try:
+        token = drive_token()
+    except SystemExit as exc:
+        print(f"WARNING: Drive API lookup skipped ({exc})", file=sys.stderr)
+        return None
+    escaped = title.replace("\\", "\\\\").replace("'", "\\'")
+    query = f"'{folder_id}' in parents and name contains '{escaped}' and trashed = false"
+    try:
+        listed = drive_request(
+            "GET",
+            "https://www.googleapis.com/drive/v3/files?"
+            + urllib.parse.urlencode(
+                {
+                    "q": query,
+                    "orderBy": "createdTime desc",
+                    "fields": "files(id,name,createdTime)",
+                    "supportsAllDrives": "true",
+                    "includeItemsFromAllDrives": "true",
+                }
+            ),
+            token,
+        )
+    except Exception as exc:
+        print(f"WARNING: Drive API lookup failed ({exc})", file=sys.stderr)
+        return None
+    for f in listed.get("files") or []:
+        if (f.get("name") or "").startswith(title) and f.get("id"):
+            return f["id"]
+    return None
+
+
+def find_uploaded_id(filename, folder_id, flags, attempts=5, delay=3):
+    """Look up the Drive ID of a just-uploaded file.
+
+    Drive listings can lag the upload by several seconds, so retry with
+    backoff and fall back from rclone to a direct Drive API query.
+    """
+    title = os.path.splitext(filename)[0]
+    for attempt in range(1, attempts + 1):
+        file_id = _rclone_lookup_id(filename, title, flags) or _api_lookup_id(folder_id, title)
+        if file_id:
+            return file_id
+        if attempt < attempts:
+            wait = delay * 2 ** (attempt - 1)
+            print(
+                f"ID lookup for {filename} attempt {attempt}/{attempts} found nothing; "
+                f"retrying in {wait}s",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+    return None
+
+
+def upload_pptx(local, folder_id):
+    filename = os.path.basename(local)
+    flags = drive_flags(folder_id)
+    copy = rclone("copyto", "-v", local, f":drive:{filename}", *flags, check=False)
+    if copy.returncode != 0:
+        sys.stderr.write(copy.stderr or copy.stdout or "")
+        raise SystemExit(f"rclone copy failed ({copy.returncode})")
+    if copy.stderr:
+        print(copy.stderr, file=sys.stderr)
+
+    file_id = find_uploaded_id(filename, folder_id, flags)
+    if not file_id:
         raise SystemExit(f"rclone uploaded but could not find an ID for {filename}")
-    file_id = entries[0]["ID"]
     return file_id, slides_url(file_id)
 
 

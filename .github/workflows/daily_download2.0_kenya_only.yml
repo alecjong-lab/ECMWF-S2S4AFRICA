@@ -1068,7 +1068,10 @@ jobs:
             "${src[@]}" \
             --emails "${{ matrix.emails }}"
 
+      # Hold the email back rather than sending recipients "(upload failed)"
+      # in place of the deck link; the step after this turns the run red.
       - name: Email Kenya briefing
+        if: needs.preview.outputs.drive_url != '' || steps.drive.outputs.drive_url != ''
         uses: dawidd6/action-send-mail@v16
         with:
           server_address: smtp.resend.com
@@ -1080,7 +1083,7 @@ jobs:
           from: "Kenya Data Share <info@dashboards.rhizaresearch.org>"
           body: |
             Today's Kenya S2S briefing is a shared Google Slides deck:
-            ${{ needs.preview.outputs.drive_url || steps.drive.outputs.drive_url || '(upload failed)' }}
+            ${{ needs.preview.outputs.drive_url || steps.drive.outputs.drive_url }}
             Please comment on that deck rather than a local copy.
             Latest expert analysis deck:
             ${{ needs.preview.outputs.deck_url || '(none found)' }}
@@ -1088,3 +1091,9 @@ jobs:
             https://console.cloud.google.com/storage/browser/africa-forecasting-data .
           reply_to: genevieve@rhizaresearch.org
           attachments: ${{ needs.preview.outputs.attachments }}
+
+      - name: Fail if Kenya briefing email was held back
+        if: needs.preview.outputs.drive_url == '' && steps.drive.outputs.drive_url == ''
+        run: |
+          echo "::error::Kenya briefing Drive upload returned no link (step outcome: ${{ steps.drive.outcome }}); the Kenya email was NOT sent. See the 'Share Kenya briefing on Drive' step log."
+          exit 1

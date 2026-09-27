@@ -775,8 +775,10 @@ jobs:
           python -u repo_scripts/find_latest_manual_analysis.py \
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"
 
+      # Hold the email back rather than sending recipients "(upload failed)"
+      # in place of the deck link; the step after this turns the run red.
       - name: Email Kenya briefing
-        if: matrix.country == 'Kenya' && steps.check_plots.outputs.plots_ok == 'true'
+        if: matrix.country == 'Kenya' && steps.check_plots.outputs.plots_ok == 'true' && steps.drive.outputs.drive_url != ''
         uses: dawidd6/action-send-mail@v16
         with:
           server_address: smtp.resend.com
@@ -788,7 +790,7 @@ jobs:
           from: "${{ matrix.country }} Data Share <info@dashboards.rhizaresearch.org>"
           body: |
             Your Kenya S2S briefing for ${{ steps.ecmwf_date.outputs.date }} is available here:
-            ${{ steps.drive.outputs.drive_url || '(upload failed)' }}
+            ${{ steps.drive.outputs.drive_url }}
             The latest expert analysis deck is available here:
             ${{ steps.manual_deck.outputs.deck_url || '(none found)' }}
             These are shared Google Slide Decks; you are welcome to leave comments.
@@ -797,6 +799,12 @@ jobs:
             Deck highlights are also included as direct attachments: ${{ steps.attachments.outputs.list }}
           reply_to: genevieve@rhizaresearch.org
           attachments: ${{ steps.attachments.outputs.list }}
+
+      - name: Fail if Kenya briefing email was held back
+        if: matrix.country == 'Kenya' && steps.check_plots.outputs.plots_ok == 'true' && steps.drive.outputs.drive_url == ''
+        run: |
+          echo "::error::Kenya briefing Drive upload returned no link (step outcome: ${{ steps.drive.outcome }}); the Kenya email was NOT sent. See the 'Upload Kenya briefing to Drive and share' step log."
+          exit 1
 
       - name: Email out generated plots for ${{ matrix.country }}
         if: matrix.country != 'Kenya' && steps.check_plots.outputs.plots_ok == 'true'
