@@ -213,6 +213,33 @@ jobs:
           AZURE_STORAGE_SAS_TOKEN: ${{ secrets.AZURE_STORAGE_SAS_TOKEN }}
         run: bash last_weeks_forecast_verification.sh
 
+      # TEST ONLY: same Cumulus chain as last_weeks_forecast_verification.sh
+      # (dev fetch -> old-dev processing) on an init that exists.
+      - name: Cumulus dev-fetch chain smoke test
+        if: ${{ inputs.run_last_weeks_forecast_verification == true }}
+        continue-on-error: true
+        working-directory: ws_scripts
+        env:
+          AZURE_STORAGE_SAS_TOKEN: ${{ secrets.AZURE_STORAGE_SAS_TOKEN }}
+        run: |
+          set -eo pipefail
+          WS="uvx --from git+https://github.com/rhiza-research/weather-skills@old-dev forecasting-skills"
+          CUMULUS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
+          BBOX="5.506/33.893569/-4.67677/41.855083"
+          init=2026-09-21; p=smoke_cumulus
+          mkdir -p smoke && cd smoke
+          $CUMULUS cumulus-fetch --date "$init" -v tp --bbox "$BBOX" --output ${p}_raw.zarr
+          $WS inspect-zarr ${p}_raw.zarr
+          $WS aggregate-temporal --period weekly --method mean --align left --input ${p}_raw.zarr --output ${p}_wk.zarr
+          $WS summarize-dim --dim number --method mean --input ${p}_wk.zarr --output ${p}_mean.zarr
+          $WS step-to-time --input ${p}_mean.zarr --output ${p}_time.zarr
+          $WS select --dim time --value "$init" --input ${p}_time.zarr --output ${p}_sel.zarr
+          $WS convert-to-totals --min-coverage 1.0 --input ${p}_sel.zarr --output ${p}_mm.zarr
+          $WS rename --variable tp --to-name precip --input ${p}_mm.zarr --output ${p}_plot.zarr
+          $WS inspect-zarr ${p}_plot.zarr
+          $WS plot --input ${p}_plot.zarr --variable precip --output ../smoke_cumulus_chirps_week1.png
+          echo "SMOKE TEST OK"
+
       - name: Upload verification plots
         if: ${{ always() && (inputs.run_all == true || inputs.run_last_weeks_forecast_verification == true) }}
         uses: actions/upload-artifact@v4
