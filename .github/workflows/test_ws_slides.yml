@@ -103,6 +103,13 @@ jobs:
       - name: Install briefing dependencies
         run: pip install -r requirements.txt
 
+      # requirements.txt pip-installs a newer uv that shadows the pinned one
+      # above; re-pin after it, as dev_briefing_generation_pipeline.yml does.
+      - name: Install uv for ws_scripts
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.20"
+
       - name: Compute DATE_STR
         id: date
         run: |
