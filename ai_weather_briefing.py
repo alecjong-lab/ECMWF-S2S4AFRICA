@@ -476,12 +476,12 @@ downscaled_picture_paths = {
     "downscaled_onset_icpac": f"{kenya_path}/monthly/onset_downscaled.png",
     "downscaled_onset_icpac10mm": f"{kenya_path}/monthly/onset_downscaled_icpac10mm.png",
     "downscaled_onset_accum": f"{kenya_path}/monthly/onset_downscaled_accum.png",
-    "dwn_wet_5": f"{kenya_path}/monthly/prob_wetspell_5days_downscaled.png",
-    "dwn_wet_7": f"{kenya_path}/monthly/prob_wetspell_7days_downscaled.png",
-    "dwn_wet_median": f"{kenya_path}/monthly/median_wetspell_length_downscaled.png",
-    "dwn_dry_5": f"{kenya_path}/monthly/prob_dryspell_5days_downscaled.png",
-    "dwn_dry_7": f"{kenya_path}/monthly/prob_dryspell_7days_downscaled.png",
-    "dwn_dry_median": f"{kenya_path}/monthly/median_dryspell_length_downscaled.png",
+    "dwn_wet_5": f"{kenya_path}/weekly/prob_wetspell_5days_downscaled.png",
+    "dwn_wet_7": f"{kenya_path}/weekly/prob_wetspell_7days_downscaled.png",
+    "dwn_wet_median": f"{kenya_path}/weekly/median_wetspell_length_downscaled.png",
+    "dwn_dry_5": f"{kenya_path}/weekly/prob_dryspell_5days_downscaled.png",
+    "dwn_dry_7": f"{kenya_path}/weekly/prob_dryspell_7days_downscaled.png",
+    "dwn_dry_median": f"{kenya_path}/weekly/median_dryspell_length_downscaled.png",
     "chance_20mm": f"{kenya_path}/weekly/weekly_chance_higherthan_20mm_downscaled.png",
 }
 

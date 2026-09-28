@@ -572,6 +572,9 @@ def plot_panel_and_save(ds, variable, cmap, fontsize, save_path, vmin=None, vmax
 # where a day's difference matters most.
 PROB_BOUNDS = np.arange(0, 101, 10)
 SPELL_DAY_BOUNDS = [0, 1, 2, 3, 4, 5, 7, 10, 14, 21, 28]
+# the same 10 colours for spells within a single 7-10 day calendar week: one
+# bin per day, the last bin holding the 9-10 day spells only 10-day weeks allow
+WEEK_SPELL_DAY_BOUNDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11]
 # exceedance chances: grays for unlikely (< 30%), blues for a real but
 # uncertain chance (30-60%), yellow -> red for likely (> 60%) -- one colour
 # per PROB_BOUNDS bin
@@ -619,19 +622,23 @@ def discrete_cmap(name, boundaries, start=0.08):
         colors = matplotlib.colormaps[name](np.linspace(start, 1.0, n_bins))
     return mcolors.ListedColormap(colors), mcolors.BoundaryNorm(boundaries, n_bins)
 
-def plot_downscaled_exceedance(rescaled_forecast, threshold, shapefile_path, save_path, fontsize):
+def plot_downscaled_exceedance(week_totals, threshold, shapefile_path, save_path, fontsize):
     """
-    Weekly chance (% of ensemble members) of the downscaled forecast exceeding
-    `threshold` mm -- the downscaled counterpart of plot_s2s.py's
-    weekly_chance_higherthan_20mm.png -- clipped to and outlined with
-    shapefile_path, on the discrete PROB_BOUNDS colour scale. Computed straight
-    from the weekly downscaled totals: the daily disaggregation (and its
-    profile smoothing) only moves rain between days within a week and leaves
-    every weekly total unchanged, so it doesn't come into it.
+    Chance (% of ensemble members) of the downscaled forecast exceeding
+    `threshold` mm per calendar week -- the downscaled counterpart of
+    plot_s2s.py's weekly_chance_higherthan_20mm.png -- clipped to and outlined
+    with shapefile_path, on the discrete PROB_BOUNDS colour scale.
+
+    week_totals : per-member calendar-week totals as returned by
+        plot_downscaled_spell_maps. A calendar week usually straddles two of
+        the downscaled 7-day weeks, so its total depends on how the daily
+        disaggregation splits each downscaled week over its days (the raw
+        1.5deg member's timing) -- reusing the spell maps' daily field keeps
+        both plots on the same split.
     """
-    prob = get_exceedance_percentage(rescaled_forecast, 'tp', threshold, comparison='greater')
+    prob = get_exceedance_percentage(week_totals, 'tp', threshold, comparison='greater')
     prob['tp'].attrs['GRIB_name'] = f'chance of more than {threshold:g} mm in the week'
-    prob = prob.assign_coords(time=rescaled_forecast.time).rio.write_crs("EPSG:4326")
+    prob = prob.assign_coords(time=week_totals.time).rio.write_crs("EPSG:4326")
     prob = clip_to_shapefile(prob, shapefile_path, transpose=True)
 
     outline = gpd.read_file(shapefile_path).set_crs("EPSG:4326", allow_override=True).dissolve()
@@ -641,14 +648,18 @@ def plot_downscaled_exceedance(rescaled_forecast, threshold, shapefile_path, sav
                             boundary_gdf=outline, boundary_axes=slice(0, prob.sizes['step']))
     plt.close()
 
-def plot_downscaled_spell_maps(rescaled_forecast, data, shapefile_path, save_dir, fontsize,
-                               profile_sigma=None, spell_days=28, threshold=1.0, suffix='_downscaled'):
+def plot_downscaled_spell_maps(rescaled_forecast, data, shapefile_path, save_dir, fontsize, windows,
+                               profile_sigma=None, threshold=1.0, suffix='_downscaled'):
     """
-    Dry/wet spell maps from the per-member daily downscaled forecast -- the
-    downscaled counterpart of plot_s2s.py's Kenya spell plots (same 1mm/day
-    threshold and first-28-days window). Writes prob_{dry,wet}spell_{5,7}days
-    and median_{dry,wet}spell_length maps (+ suffix) to save_dir, clipped to
-    and outlined with shapefile_path.
+    Per-calendar-week dry/wet spell maps from the per-member daily downscaled
+    forecast -- one panel per window in `windows` (see calendar_windows), same
+    1mm/day threshold as plot_s2s.py's Kenya spell plots. Writes
+    prob_{dry,wet}spell_{5,7}days and median_{dry,wet}spell_length maps
+    (+ suffix) to save_dir, clipped to and outlined with shapefile_path.
+
+    Spells are counted within each week only: a spell running across a week
+    boundary is cut there, so "longer than 7" in a 7-day week means the whole
+    week is dry/wet.
 
     rescaled_forecast : weekly downscaled Dataset with a 'number' dim
     data : raw daily accumulated ECMWF ensemble Dataset (same 'number' values)
@@ -656,28 +667,41 @@ def plot_downscaled_spell_maps(rescaled_forecast, data, shapefile_path, save_dir
         daily timing profile so the maps don't show blocky coarse-cell edges)
 
     Each member is split into days with its own ECMWF member's daily profile
-    and reduced to its longest dry/wet spell before moving on, so the full
-    (member, day, fine grid) array is never held in memory at once. Uses the
-    module-level lat1/lat2/lon1/lon2 extent like panel_plot_variable.
+    and reduced to its per-week spell lengths and rainfall totals before moving
+    on, so the full (member, day, fine grid) array is never held in memory at
+    once. Uses the module-level lat1/lat2/lon1/lon2 extent like
+    panel_plot_variable.
+
+    Returns the per-member calendar-week rainfall totals ('tp' Dataset, dims
+    number/step/lat/lon, step and window coords from window_coords) for
+    plot_downscaled_exceedance, so it reuses this same daily split.
     """
-    dry_lengths, wet_lengths = [], []
+    init = data.time.values
+    coords = window_coords(windows, init)
+    dry_lengths, wet_lengths, week_totals = [], [], []
     for n in rescaled_forecast.number.values:
         daily_member = disaggregate_weekly_to_daily(
             rescaled_forecast.tp.sel(number=n), data.tp.sel(number=n), profile_sigma=profile_sigma
-        ).tp.isel(step=slice(None, spell_days))
-        dry_lengths.append(dry_spell_length(daily_member, threshold=threshold))
-        wet_lengths.append(wet_spell_length(daily_member, threshold=threshold))
-    last_step = daily_member.step.values[-1]
-    dry_lengths = xr.concat(dry_lengths, dim='number')
-    wet_lengths = xr.concat(wet_lengths, dim='number')
+        ).tp
+        weeks = [select_window_days(daily_member, init, w.start, w.end) for w in windows.itertuples()]
+        for week, w in zip(weeks, windows.itertuples()):
+            if week.sizes['step'] != w.n_days:
+                raise ValueError(f"daily downscaled forecast covers {week.sizes['step']} of "
+                                 f"{w.n_days} days of {w.label}")
+        dry_lengths.append(xr.concat([dry_spell_length(week, threshold=threshold) for week in weeks], dim='step'))
+        wet_lengths.append(xr.concat([wet_spell_length(week, threshold=threshold) for week in weeks], dim='step'))
+        week_totals.append(xr.concat([week.sum('step', keep_attrs=True) for week in weeks], dim='step'))
+    dry_lengths = xr.concat(dry_lengths, dim='number').assign_coords(coords)
+    wet_lengths = xr.concat(wet_lengths, dim='number').assign_coords(coords)
+    week_totals = xr.concat(week_totals, dim='number').assign_coords(coords).assign_coords(time=data.time).to_dataset(name='tp')
 
     outline = gpd.read_file(shapefile_path).set_crs("EPSG:4326", allow_override=True).dissolve()
     os.makedirs(save_dir, exist_ok=True)
+    n_panels = len(windows)
 
     def to_plot(da, name, units):
-        # same shape plot_s2s.py hands panel_plot_variable: a 'tp' dataset
-        # with a single step coord, clipped to the shapefile
-        da = da.assign_coords(step=last_step, time=data.time)
+        # a 'tp' dataset with one step per calendar week, clipped to the shapefile
+        da = da.assign_coords(time=data.time)
         da.attrs['GRIB_name'] = name
         da.attrs['units'] = units
         ds = da.to_dataset(name='tp').rio.write_crs("EPSG:4326")
@@ -688,25 +712,27 @@ def plot_downscaled_spell_maps(rescaled_forecast, data, shapefile_path, save_dir
         prob_cmap, prob_norm = discrete_cmap(SPELL_LENGTH_COLORS, PROB_BOUNDS)
         for min_len in (5, 7):
             prob = (lengths >= min_len).mean('number') * 100
-            ds = to_plot(prob, f'chance of {spell_name} spell longer than {min_len}', '%')
+            ds = to_plot(prob, f'chance of {spell_name} spell of at least {min_len} days in the week', '%')
             with extent_of(ds):  # map ends at the shapefile's edges, not the country bbox
                 plot_panel_and_save(ds, 'tp', prob_cmap, fontsize,
                                     f'{save_dir}/prob_{spell_name}spell_{min_len}days{suffix}.png',
-                                    norm=prob_norm, cbar_ticks=PROB_BOUNDS, boundary_gdf=outline, boundary_axes=slice(0, 1))
+                                    norm=prob_norm, cbar_ticks=PROB_BOUNDS, boundary_gdf=outline, boundary_axes=slice(0, n_panels))
             plt.close()
 
         # median spell length, same definition as plot_s2s.py: the longest
         # spell length at least half the members reach
-        probs = xr.concat([(lengths >= i).mean('number') * 100 for i in range(spell_days)], dim='spell_length')
+        probs = xr.concat([(lengths >= i).mean('number') * 100 for i in range(windows.n_days.max() + 1)], dim='spell_length')
         count_above = (probs >= 50).sum('spell_length')
         median_length = (count_above - 1).where(count_above > 0)
-        ds = to_plot(median_length, f'Median {spell_name} spell length', 'days')
-        days_cmap, days_norm = discrete_cmap(SPELL_LENGTH_COLORS, SPELL_DAY_BOUNDS)
+        ds = to_plot(median_length, f'Median {spell_name} spell length in the week', 'days')
+        days_cmap, days_norm = discrete_cmap(SPELL_LENGTH_COLORS, WEEK_SPELL_DAY_BOUNDS)
         with extent_of(ds):
             plot_panel_and_save(ds, 'tp', days_cmap, fontsize,
                                 f'{save_dir}/median_{spell_name}spell_length{suffix}.png',
-                                norm=days_norm, cbar_ticks=SPELL_DAY_BOUNDS, boundary_gdf=outline, boundary_axes=slice(0, 1))
+                                norm=days_norm, cbar_ticks=WEEK_SPELL_DAY_BOUNDS, boundary_gdf=outline, boundary_axes=slice(0, n_panels))
         plt.close()
+
+    return week_totals
 
 def run_in_processes(fn, arg_tuples, max_workers=None):
     """
@@ -1091,6 +1117,235 @@ def week_sum(ds):
     new_times = w_sum.step + pd.Timedelta(days=6)
     w_sum = w_sum.assign_coords(step=new_times)
     return w_sum
+
+def calendar_windows(init_time, n_windows=4, boundaries=(1, 8, 15, 22), max_lead_days=42):
+    """
+    The next n_windows fixed calendar windows starting on or after init_time's
+    day: by default calendar weeks starting on the 1st, 8th, 15th and 22nd of
+    each month, the last running to the month's end (so 7-10 days long).
+    The window already under way at init is skipped, so every window lies
+    fully inside the forecast.
+
+    Returns a DataFrame with one row per window: start, end (exclusive, 00Z
+    of the day after the window's last day), label (e.g. 'Oct wk1'), n_days.
+    Raises if the last window ends past max_lead_days from init.
+    """
+    init = pd.Timestamp(init_time).normalize()
+    starts = []
+    month = init.replace(day=1)
+    # one start more than needed: each window ends where the next one starts
+    while len(starts) < n_windows + 1:
+        starts += [month.replace(day=d) for d in boundaries if month.replace(day=d) >= init]
+        month = month + pd.offsets.MonthBegin(1)
+    starts = starts[:n_windows + 1]
+
+    windows = pd.DataFrame({'start': starts[:-1], 'end': starts[1:]})
+    windows['label'] = [f"{s:%b} wk{boundaries.index(s.day) + 1}" for s in windows.start]
+    windows['n_days'] = (windows.end - windows.start).dt.days
+
+    lead_days = (windows.end.iloc[-1] - init).days
+    if lead_days > max_lead_days:
+        raise ValueError(f"{n_windows} calendar windows from {init:%Y-%m-%d} need {lead_days} "
+                         f"lead days, forecast only covers {max_lead_days}")
+    return windows
+
+def window_coords(windows, init_time):
+    """
+    Coords for stacking one field per calendar window along 'step', in the
+    same convention as the rolling weekly data (step = window end - init),
+    plus window_start/window_end along step so plot titles can show the
+    actual calendar dates (see plot_variable).
+    """
+    init = pd.Timestamp(init_time)
+    return {
+        'step': ('step', (windows.end - init).values.astype('timedelta64[ns]')),
+        'window_start': ('step', windows.start.values.astype('datetime64[ns]')),
+        'window_end': ('step', windows.end.values.astype('datetime64[ns]')),
+        'window_label': ('step', windows.label.values.astype(str)),
+    }
+
+def week_panel_title(week, i):
+    """
+    Panel title for one entry of a weekly field: its calendar window's label
+    and first/last day (see window_coords), or, for rolling weeks, 'Week i'
+    with step labelling the week's last day (as gef.week_mean relabels it).
+    """
+    if 'window_start' in week.coords:
+        last_day = pd.Timestamp(week.window_end.values) - pd.Timedelta(days=1)
+        return f"{week.window_label.values}: {pd.Timestamp(week.window_start.values):%Y-%m-%d} to {last_day:%Y-%m-%d}"
+    week_end = pd.Timestamp(week.time.values) + pd.to_timedelta(week.step.values)
+    week_start = week_end - pd.Timedelta(days=6)
+    return f'Week {i + 1}: {week_start:%Y-%m-%d} to {week_end:%Y-%m-%d}'
+
+def select_window_days(daily, init_time, start, end):
+    """
+    The days of a daily series inside the calendar window [start, end).
+    daily's step marks the END of each day (step=1 day is lead day 1), as
+    produced by disaggregate_weekly_to_daily or diff('step') of accumulated data.
+    """
+    init = pd.Timestamp(init_time)
+    lo = (pd.Timestamp(start) - init).to_timedelta64()
+    hi = (pd.Timestamp(end) - init).to_timedelta64()
+    return daily.sel(step=(daily.step > lo) & (daily.step <= hi))
+
+def window_daily(daily, windows, init_time, how='sum'):
+    """
+    Total (how='sum') or mean (how='mean') of a daily series (step = end of
+    each day, see select_window_days) over each calendar window, stacked
+    along 'step' with window_coords' coords. Raises if the series doesn't
+    cover every day of a window.
+    """
+    parts = []
+    for w in windows.itertuples():
+        days = select_window_days(daily, init_time, w.start, w.end)
+        if days.sizes['step'] != w.n_days:
+            raise ValueError(f"daily series covers {days.sizes['step']} of {w.n_days} days of {w.label}")
+        parts.append(getattr(days, how)('step', keep_attrs=True))
+    return xr.concat(parts, dim='step').assign_coords(window_coords(windows, init_time))
+
+def window_mean(ds, windows, init_time):
+    """
+    Mean over each calendar window of an instantaneous field valid at
+    init+step (e.g. the daily 00Z 10m wind and q/u snapshots): the samples
+    valid in [start, end), stacked along 'step' with window_coords' coords. A
+    window may miss one sample (a store starting at step 24h has no 00Z value
+    on the init day); more missing raises. For fields that are already means
+    over the 24 hours ending at each step (SST, TCW), use window_daily.
+    """
+    init = pd.Timestamp(init_time)
+    valid = init + pd.to_timedelta(ds.step.values)
+    parts = []
+    for w in windows.itertuples():
+        idx = np.where((valid >= w.start) & (valid < w.end))[0]
+        if len(idx) < w.n_days - 1:
+            raise ValueError(f"only {len(idx)} samples fall inside {w.label} ({w.n_days} days)")
+        parts.append(ds.isel(step=idx).mean('step', keep_attrs=True))
+    return xr.concat(parts, dim='step').assign_coords(window_coords(windows, init))
+
+# pressure levels (hPa) the forecast q/u download and the reforecast pull share,
+# used for zonal IVT and the total column water estimate below
+MOISTURE_LEVELS = [300, 500, 700, 850, 925, 1000]
+
+def column_integral(field, level_dim):
+    """(1/g) * integral over pressure of field on MOISTURE_LEVELS (hPa), trapezoid rule."""
+    field = field.sel({level_dim: MOISTURE_LEVELS}).sortby(level_dim)
+    return field.integrate(level_dim) * 100.0 / 9.80665  # hPa -> Pa
+
+def tcw_from_q(q, level_dim):
+    """
+    Total column water estimated from specific humidity on MOISTURE_LEVELS
+    (1000-300 hPa). Over the ocean it runs ~4% below the model's own TCW;
+    over high ground it runs high, since the 1000/925 hPa levels there lie
+    below the surface. Anomalies are fine as long as forecast and
+    climatology both use it (checked against m-climate/tcw_global and the
+    forecast's own TCW: weekly anomaly pattern correlation 0.94-0.98).
+    """
+    tcw = column_integral(q, level_dim)
+    tcw.name = 'tcw'
+    tcw.attrs = {'units': 'kg m-2', 'long_name': 'Total column water (1000-300 hPa, from q)'}
+    return tcw
+
+def zonal_ivt(q, u, level_dim):
+    """Vertically integrated zonal moisture transport on MOISTURE_LEVELS."""
+    ivt_u = column_integral(q * u, level_dim)
+    ivt_u.name = 'ivt_u'
+    ivt_u.attrs = {'units': 'kg m-1 s-1', 'long_name': 'Vertically integrated zonal moisture transport'}
+    return ivt_u
+
+def calendar_window_reforecast_mclimate(windows, init_time, cache_var, load, reduce_year,
+                                        folder_path=f'{os.getcwd()}/m-climate/'):
+    """
+    Model-climatology median (<var>) and spread (<var>_std) per calendar
+    window from the reforecast archive (every member and every 2006-2024
+    year), over members and years together.
+
+    Every forecast init whose first window starts on the same day needs the
+    same windows, so the result is cached under m-climate/<cache_var>/ named
+    after that first window start, and one reforecast pull serves them all
+    -- e.g. forecasts from 24 Sep to 1 Oct all use the reforecasts started
+    just before 1 Oct, so the climatology's lead time can be up to a week
+    shorter than the forecast's. Reforecasts start on odd days (and the
+    1st), so the one nearest the day before the first window always starts
+    on or before it and covers every window. A year whose reforecast doesn't
+    (the nearest init can differ by a day between years) is left out rather
+    than failing.
+
+    load(day) : reforecast Dataset for 'YYYY-MM-DD', all years (see
+        load_reforecast), daily values with step = end of each day
+    reduce_year(ds, year_windows, init) : per-member Dataset with one entry
+        per window along 'step', for one reforecast year
+
+    Returns the climatology with window_coords' coords for init_time.
+    """
+    first_start = windows.start.iloc[0]
+    path = find_cached_mclimate(f"{first_start:%Y-%m-%d}", cache_var, folder_path=folder_path, max_gap_days=0)
+    if path:
+        print(f"Using cached calendar-week climatology: {path}")
+        mclim = xr.open_dataset(path, engine="netcdf4", decode_timedelta=True)
+        return mclim.sortby('latitude', ascending=False).assign_coords(window_coords(windows, init_time))
+
+    ref_day = first_start - pd.Timedelta(days=1)
+    reforecasts = load(f"{ref_day:%Y-%m-%d}")
+    per_year = []
+    for init in reforecasts.init_time.values:
+        # the same calendar windows in this reforecast's year
+        years = pd.Timestamp(init).year - ref_day.year
+        year_windows = windows.assign(start=windows.start + pd.DateOffset(years=years),
+                                      end=windows.end + pd.DateOffset(years=years))
+        try:
+            per_year.append(reduce_year(reforecasts.sel(init_time=init), year_windows, init)
+                            .drop_vars(['window_start', 'window_end', 'window_label', 'step']))
+        except ValueError as e:
+            print(f"Leaving reforecast {str(init)[:10]} out of the {cache_var} climatology: {e}")
+    if len(per_year) < 10:
+        raise ValueError(f"only {len(per_year)} reforecast years cover the calendar windows")
+    per_year = xr.concat(per_year, dim='init_time')
+
+    median = per_year.quantile(0.5, ['number', 'init_time']).drop_vars('quantile')
+    std = per_year.std(['number', 'init_time'])
+    mclim = xr.merge([median, std.rename({v: f'{v}_std' for v in std.data_vars})])
+    mclim = mclim.drop_vars([c for c in mclim.coords if c not in mclim.dims]).sortby('latitude', ascending=False)
+    save_mclimate(mclim, f"{first_start:%Y-%m-%d}", cache_var, folder_path=folder_path)
+    return mclim.assign_coords(window_coords(windows, init_time))
+
+def calendar_window_reforecast_single(windows, init_time, bbox, cache_var='IO_calweek_single',
+                                      folder_path=f'{os.getcwd()}/m-climate/'):
+    """
+    Calendar-window reforecast climatology (see
+    calendar_window_reforecast_mclimate) of precipitation totals (tp, mm)
+    and mean 10m wind (u10, v10) and SST (sst, K), named like the forecast
+    stores. One pull of ~2.5 min per new first window.
+    """
+    def load(day):
+        rf = load_reforecast(day, 'single', ['pr', 'u10m', 'v10m', 'sst'], bbox=bbox,
+                             time_range=slice(0, 46), all_years=True)
+        rf['pr'] = rf.pr * 60 * 60 * 24  # kg m-2 s-1 daily mean rate -> mm per day
+        return rf.rename({'pr': 'tp', 'u10m': 'u10', 'v10m': 'v10'})
+
+    def reduce_year(ds, year_windows, init):
+        return xr.merge([window_daily(ds[['tp']], year_windows, init, how='sum'),
+                         window_daily(ds[['u10', 'v10', 'sst']], year_windows, init, how='mean')])
+
+    return calendar_window_reforecast_mclimate(windows, init_time, cache_var, load, reduce_year, folder_path)
+
+def calendar_window_reforecast_moisture(windows, init_time, bbox, cache_var='IO_calweek_moisture',
+                                        folder_path=f'{os.getcwd()}/m-climate/'):
+    """
+    Calendar-window reforecast climatology (see
+    calendar_window_reforecast_mclimate) of total column water estimated
+    from q (tcw, see tcw_from_q) and zonal IVT (ivt_u), both from window-mean
+    q and u on MOISTURE_LEVELS -- the same way IndianOceanState.py computes
+    them from the forecast. One pull of ~7 min per new first window.
+    """
+    def load(day):
+        return load_reforecast(day, 'pressure', ['q', 'u'], levels=MOISTURE_LEVELS, bbox=bbox,
+                               time_range=slice(0, 46), all_years=True)
+
+    def reduce_year(ds, year_windows, init):
+        mean = window_daily(ds, year_windows, init, how='mean')
+        return xr.merge([tcw_from_q(mean.q, 'pressure_level'), zonal_ivt(mean.q, mean.u, 'pressure_level')])
+
+    return calendar_window_reforecast_mclimate(windows, init_time, cache_var, load, reduce_year, folder_path)
 
 def lon_convert(ds,cut=True):
     #"Convert from 0-360 to -180-180"
@@ -1737,7 +1992,12 @@ def plot_variable(ds,variable,forecast_timestep,vmax,vmin,cmap,cities=cities,ax=
     plt.rcParams.update({'font.size': int(fontsize*0.7)})
 
     #get start and end time
-    if forecast_timestep == np.atleast_1d(ds.step)[0]:
+    if 'window_start' in ds.coords and 'step' in ds['window_start'].dims:
+        # calendar windows (see window_coords): uneven lengths, so the step spacing
+        # below can't give the start -- show the window's own first and last day
+        start_time=ds.window_start.sel(step=forecast_timestep)
+        end_time=ds.window_end.sel(step=forecast_timestep)-np.timedelta64(1,'D')
+    elif forecast_timestep == np.atleast_1d(ds.step)[0]:
         start_time=ds.time
         end_time=(ds.time+forecast_timestep)
     else:
@@ -3045,7 +3305,7 @@ def plot_wind_and_sst_anomaly_weekly(ds_wind, ds_sst, title, out_path, u_var='u1
                                       sst_cmap='RdBu_r', sst_vmin=-2, sst_vmax=2, panel_height=7):
     """4-panel (2x2) weekly version of plot_wind_and_sst_anomaly: one wind vector / SST anomaly
     panel per week, sharing a single color scale and colorbar. ds_wind/ds_sst must carry a
-    'step' dim (one entry per week)."""
+    'step' dim (one entry per week); titles follow week_panel_title (calendar or rolling weeks)."""
     lon_min, lon_max, lat_min, lat_max = extent
     aspect = (lon_max - lon_min) / (lat_max - lat_min)
     figsize = (2 * panel_height * aspect, 2 * panel_height)
@@ -3090,11 +3350,7 @@ def plot_wind_and_sst_anomaly_weekly(ds_wind, ds_sst, title, out_path, u_var='u1
                             shading='auto')
         ax.quiver(LON_sub, LAT_sub, U_sub, V_sub, transform=ccrs.PlateCarree(), scale=quiver_scale)
 
-        # step already labels the true last calendar day of the week (gef.week_mean
-        # relabels its 7-day resample bins onto that day), so no further shift is needed
-        week_end = pd.Timestamp(wind_week.time.values) + pd.to_timedelta(wind_week.step.values)
-        week_start = week_end - pd.Timedelta(days=6)
-        ax.set_title(f'Week {i + 1}: {week_start:%Y-%m-%d} to {week_end:%Y-%m-%d}')
+        ax.set_title(week_panel_title(wind_week, i))
 
     fig.suptitle(title)
     cbar = fig.colorbar(cf, ax=axes, orientation='horizontal', shrink=0.5, aspect=50)

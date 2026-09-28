@@ -402,22 +402,30 @@ for country in countries_to_downscale:
         )
 
         tick('weekly Kenya: daily downscaled GeoTIFF')
-        # Dry/wet spell maps from the per-member daily downscaled forecast (the
-        # downscaled counterpart of plot_s2s.py's Kenya spell plots)
+        # Dry/wet spell maps per calendar week (1st/8th/15th/22nd of the month, see
+        # gef.calendar_windows) from the per-member daily downscaled forecast (the
+        # downscaled counterpart of plot_s2s.py's Kenya spell plots). Also returns
+        # the per-member calendar-week totals the >20mm map below is built from.
+        cal_week_totals = None
         try:
-            gef.plot_downscaled_spell_maps(
+            cal_windows = gef.calendar_windows(
+                data.time.values, max_lead_days=int(rescaled_forecast.step.values[-1] / np.timedelta64(1, 'D'))
+            )
+            cal_week_totals = gef.plot_downscaled_spell_maps(
                 rescaled_forecast, data, kenya_counties_shp,
-                f'plots/{country}/{date_str}/monthly', fs, profile_sigma=SPELL_PROFILE_SIGMA,
+                f'plots/{country}/{date_str}/weekly', fs, cal_windows, profile_sigma=SPELL_PROFILE_SIGMA,
             )
         except Exception as e:
             print(f"Downscaled dry/wet spell plots failed ({e}), skipping")
         tick('weekly Kenya: dry/wet spell maps')
 
-        # weekly chance of > 20mm (downscaled counterpart of plot_s2s.py's
+        # calendar-week chance of > 20mm (downscaled counterpart of plot_s2s.py's
         # weekly_chance_higherthan_20mm.png)
         try:
+            if cal_week_totals is None:
+                raise ValueError("no calendar-week totals, the spell maps step failed")
             gef.plot_downscaled_exceedance(
-                rescaled_forecast, 20, kenya_counties_shp,
+                cal_week_totals, 20, kenya_counties_shp,
                 f'plots/{country}/{date_str}/weekly/weekly_chance_higherthan_20mm_downscaled.png', fs,
             )
         except Exception as e:
