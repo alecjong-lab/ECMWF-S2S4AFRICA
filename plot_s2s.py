@@ -199,12 +199,12 @@ for country in countries:
         plt.close()
 
         exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot,'tp',20,comparison='greater')
-        fig=gef.panel_plot_variable(exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='jet',fontsize=fs,vmax=100,vmin=0)   
+        fig=gef.panel_plot_variable(exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='jet_r',fontsize=fs,vmax=100,vmin=0)   
         plt.savefig(f'{weekly_path}/chance_higherthan_20mm.png',bbox_inches='tight')
         plt.close() 
 
         weekly_exceedance_percentage=gef.get_exceedance_percentage(ds_to_plot,'tp',20,comparison='greater')
-        fig=gef.panel_plot_variable(weekly_exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='jet',fontsize=fs,vmax=100,vmin=0)
+        fig=gef.panel_plot_variable(weekly_exceedance_percentage,variable='tp',forecast_timestep=ds_to_plot.step.values,cmap='jet_r',fontsize=fs,vmax=100,vmin=0)
         plt.savefig(f'{weekly_path}/weekly_chance_higherthan_20mm.png',bbox_inches='tight')
         plt.close()
 
@@ -242,9 +242,10 @@ for country in countries:
         plt.close()
 
         #---dry/wet spell probability and median spell length maps---
-        for spell_ds, spell_name in [(dry_spell5,'dryspell_5days'),(dry_spell7,'dryspell_7days'),
-                                      (wet_spell5,'wetspell_5days'),(wet_spell7,'wetspell_7days')]:
-            fig=gef.panel_plot_variable(spell_ds,variable='tp',forecast_timestep=spell_ds.step.values,cmap='jet',fontsize=fs,vmin=0,vmax=100)
+        # dry signals top out in red ('jet'), wet signals in blue ('jet_r')
+        for spell_ds, spell_name, spell_cmap in [(dry_spell5,'dryspell_5days','jet'),(dry_spell7,'dryspell_7days','jet'),
+                                                  (wet_spell5,'wetspell_5days','jet_r'),(wet_spell7,'wetspell_7days','jet_r')]:
+            fig=gef.panel_plot_variable(spell_ds,variable='tp',forecast_timestep=spell_ds.step.values,cmap=spell_cmap,fontsize=fs,vmin=0,vmax=100)
             plt.savefig(f'{monthly_path}/prob_{spell_name}.png',bbox_inches='tight')
             plt.close()
 
@@ -286,18 +287,18 @@ for country in countries:
             median_wet_length_climatology=xr.concat(hold_median_wet_length_clim,dim='time').mean('time').assign_coords({'step':last_step_reforecast,'time':data.time})
 
         for clim_ds, clim_name in [(wet_spell5_climatology,'wetspell_5days'),(wet_spell7_climatology,'wetspell_7days')]:
-            fig=gef.panel_plot_variable(clim_ds,variable='tp',forecast_timestep=clim_ds.step.values,cmap='jet',fontsize=fs,vmin=0,vmax=100)
+            fig=gef.panel_plot_variable(clim_ds,variable='tp',forecast_timestep=clim_ds.step.values,cmap='jet_r',fontsize=fs,vmin=0,vmax=100)
             plt.savefig(f'{monthly_path}/climatology_prob_{clim_name}.png',bbox_inches='tight')
             plt.close()
 
         # shared vmax so the forecast and climatological median wetspell length maps are on the same colorscale
         median_wetspell_vmax=float(np.nanmax([np.nanmax(median_wet_length.tp.values),np.nanmax(median_wet_length_climatology.tp.values)]))
 
-        fig=gef.panel_plot_variable(median_wet_length,variable='tp',forecast_timestep=median_wet_length.step.values,cmap='jet',fontsize=fs,vmin=0,vmax=median_wetspell_vmax)
+        fig=gef.panel_plot_variable(median_wet_length,variable='tp',forecast_timestep=median_wet_length.step.values,cmap='jet_r',fontsize=fs,vmin=0,vmax=median_wetspell_vmax)
         plt.savefig(f'{monthly_path}/median_wetspell_length.png',bbox_inches='tight')
         plt.close()
 
-        fig=gef.panel_plot_variable(median_wet_length_climatology,variable='tp',forecast_timestep=median_wet_length_climatology.step.values,cmap='jet',fontsize=fs,vmin=0,vmax=median_wetspell_vmax)
+        fig=gef.panel_plot_variable(median_wet_length_climatology,variable='tp',forecast_timestep=median_wet_length_climatology.step.values,cmap='jet_r',fontsize=fs,vmin=0,vmax=median_wetspell_vmax)
         plt.savefig(f'{monthly_path}/climatology_median_wetspell_length.png',bbox_inches='tight')
         plt.close()
 

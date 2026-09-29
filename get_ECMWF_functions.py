@@ -575,20 +575,21 @@ SPELL_DAY_BOUNDS = [0, 1, 2, 3, 4, 5, 7, 10, 14, 21, 28]
 # the same 10 colours for spells within a single 7-10 day calendar week: one
 # bin per day, the last bin holding the 9-10 day spells only 10-day weeks allow
 WEEK_SPELL_DAY_BOUNDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11]
-# exceedance chances: grays for unlikely (< 30%), blues for a real but
-# uncertain chance (30-60%), yellow -> red for likely (> 60%) -- one colour
-# per PROB_BOUNDS bin
+# exceedance chances (a wet signal, so the top end is blue, not red): grays
+# for unlikely (< 30%), yellow -> green for a real but uncertain chance
+# (30-60%), light -> dark blue for likely (> 60%) -- one colour per
+# PROB_BOUNDS bin
 EXCEEDANCE_COLORS = [
     '#e6e6e6',  #  0-10% light gray
     '#c4c4c4',  # 10-20% darker gray
     '#9e9e9e',  # 20-30% gray
-    '#a6d8f0',  # 30-40% light blue
-    '#3a8fd9',  # 40-50% blue
-    '#2bb3a0',  # 50-60% blue-green
-    '#fff3a0',  # 60-70% light yellow
-    '#ffd21f',  # 70-80% yellow
-    '#fb8c1e',  # 80-90% orange
-    '#d7191c',  # 90-100% red
+    '#fff3a0',  # 30-40% light yellow
+    '#ffd21f',  # 40-50% yellow
+    '#a5d68a',  # 50-60% light green
+    '#2bb3a0',  # 60-70% blue-green
+    '#a6d8f0',  # 70-80% light blue
+    '#3a8fd9',  # 80-90% blue
+    '#08306b',  # 90-100% dark blue
 ]
 # median spell length: blues for short spells, greens for about a week,
 # yellow -> dark red for long ones -- one colour per SPELL_DAY_BOUNDS bin
@@ -603,6 +604,20 @@ SPELL_LENGTH_COLORS = [
     '#fb8c1e',  # 10-14 days orange
     '#e31a1c',  # 14-21 days red
     '#8b0000',  # 21-28 days dark red
+]
+# wet spells are a wet signal, so the same colours run the other way:
+# dark red for short/unlikely wet spells up to dark blue for long/likely ones
+WET_SPELL_COLORS = [
+    '#8b0000',  # dark red
+    '#e31a1c',  # red
+    '#fb8c1e',  # orange
+    '#ffe135',  # yellow
+    '#a5d68a',  # light green
+    '#43a047',  # green
+    '#26a69a',  # blue-green
+    '#b3dcf5',  # light blue
+    '#5aa7e0',  # blue
+    '#1f5fb4',  # dark blue
 ]
 
 def discrete_cmap(name, boundaries, start=0.08):
@@ -707,9 +722,10 @@ def plot_downscaled_spell_maps(rescaled_forecast, data, shapefile_path, save_dir
         ds = da.to_dataset(name='tp').rio.write_crs("EPSG:4326")
         return clip_to_shapefile(ds, shapefile_path, transpose=True)
 
-    for spell_name, lengths in [('dry', dry_lengths), ('wet', wet_lengths)]:
+    for spell_name, lengths, spell_colors in [('dry', dry_lengths, SPELL_LENGTH_COLORS),
+                                              ('wet', wet_lengths, WET_SPELL_COLORS)]:
         # same 10 colours as the median spell length maps, here one per 10% bin
-        prob_cmap, prob_norm = discrete_cmap(SPELL_LENGTH_COLORS, PROB_BOUNDS)
+        prob_cmap, prob_norm = discrete_cmap(spell_colors, PROB_BOUNDS)
         for min_len in (5, 7):
             prob = (lengths >= min_len).mean('number') * 100
             ds = to_plot(prob, f'chance of {spell_name} spell of at least {min_len} days in the week', '%')
@@ -725,7 +741,7 @@ def plot_downscaled_spell_maps(rescaled_forecast, data, shapefile_path, save_dir
         count_above = (probs >= 50).sum('spell_length')
         median_length = (count_above - 1).where(count_above > 0)
         ds = to_plot(median_length, f'Median {spell_name} spell length in the week', 'days')
-        days_cmap, days_norm = discrete_cmap(SPELL_LENGTH_COLORS, WEEK_SPELL_DAY_BOUNDS)
+        days_cmap, days_norm = discrete_cmap(spell_colors, WEEK_SPELL_DAY_BOUNDS)
         with extent_of(ds):
             plot_panel_and_save(ds, 'tp', days_cmap, fontsize,
                                 f'{save_dir}/median_{spell_name}spell_length{suffix}.png',
