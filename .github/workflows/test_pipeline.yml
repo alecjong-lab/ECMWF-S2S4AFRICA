@@ -25,7 +25,7 @@ name: Test Pipeline (manual)
 # have something to work with. One
 # known gap, harmless (continue-on-error is set throughout so nothing
 # blocks the run):
-#   - run_rainfall_onset.py's data/<date>/rainfall_onset_s2s_Kenya.nc is never
+#   - run_rainfall_onset.py's data/<date>/rainfall_onset_downscaled_Kenya.nc is never
 #     uploaded to GCS either. Skip rainfall_onset and ai_briefing's Kenya
 #     onset write-up will just be missing from the digest.
 #

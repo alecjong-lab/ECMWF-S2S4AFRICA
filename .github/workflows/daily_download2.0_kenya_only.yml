@@ -195,9 +195,8 @@ jobs:
           echo "run_rainfall_onset.py:"
           onset_ok=false
           complete \
-            "${K}/monthly/onset_s2s.png" \
-            "${K}/monthly/onset_gefs.png" \
-            "${K}/monthly/onset_s2s_climatology.png" && onset_ok=true
+            "${K}/monthly/onset_chirps_observed.png" \
+            "${K}/monthly/onset_downscaled.png" && onset_ok=true
 
           {
             echo "### Stages detected for ${DATE_STR}"
