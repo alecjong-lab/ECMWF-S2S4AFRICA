@@ -93,7 +93,8 @@ promt_unformat3=_load_or_empty(f"{prefix}/promt_unformat3.json")
 try:
     promt_unformat1 = gef.add_onset_from_netcdf(
         promt_unformat1,
-        f"{prefix}/data/{ecmwf_date_str}/rainfall_onset_s2s_Kenya.nc",
+        # observed CHIRPS onset continued with the downscaled forecast (run_rainfall_onset.py)
+        f"{prefix}/data/{ecmwf_date_str}/rainfall_onset_downscaled_Kenya.nc",
     )
     gef.save_dict(promt_unformat1, f"{prefix}/promt_unformat1.json")
 except Exception as exc:
@@ -426,7 +427,8 @@ IO_TCWV_anom_path = f"{diagnostics_path}/ECMWF_s2s_tcw_anomaly_{ecmwf_date_str}.
 IO_precip_anom_path = f"{diagnostics_path}/ECMWF_s2s_precip_anomaly_{ecmwf_date_str}.png"
 IO_precip_anom_std_path = f"{diagnostics_path}/ECMWF_s2s_precip_std_anomaly_{ecmwf_date_str}.png"
 
-# rainy season onset maps (see run_rainfall_onset.py) -- wet-spell/no-dry-spell
+# rainy season onset maps (see run_rainfall_onset_legacy.py, no longer run by
+# the workflows -- kept so older GCS dates still fill in) -- wet-spell/no-dry-spell
 # definition, the ICPAC 10 mm wet-spell variant, and the two-stage
 # cumulative-rainfall ("accum") definition. Generator stems use icpac10mm,
 # not _10mm.
@@ -445,7 +447,7 @@ onsetecmwf_10mm_path = f"{kenya_path}/monthly/onset_s2s_icpac10mm.png"
 onsetgefs_10mm_path = f"{kenya_path}/monthly/onset_gefs_icpac10mm.png"
 
 # reforecast-archive climatology counterparts of the ECMWF onset maps above
-# (see the "S2S reforecast climatology" block in run_rainfall_onset.py)
+# (see the "S2S reforecast climatology" block in run_rainfall_onset_legacy.py)
 onsetecmwf_climatology_path = f"{kenya_path}/monthly/onset_s2s_climatology.png"
 onsetecmwf_accum_climatology_path = f"{kenya_path}/monthly/onset_s2s_climatology_accum.png"
 onsetecmwf_climatology_10mm_path = f"{kenya_path}/monthly/onset_s2s_climatology_icpac10mm.png"
@@ -467,8 +469,8 @@ wet7_climatology_path = f"{kenya_path}/monthly/climatology_prob_wetspell_7days.p
 
 exceed20mm_path = f"{kenya_path}/weekly/chance_higherthan_20mm.png"
 
-# downscaled counterparts (Kenya only): onset maps from the per-member daily
-# downscaled forecast (downscaled block in run_rainfall_onset.py), and dry/wet
+# downscaled counterparts (Kenya only): onset maps from observed CHIRPS
+# continued with the per-member daily downscaled forecast (run_rainfall_onset.py), and dry/wet
 # spell + weekly >20mm chance maps (gef.plot_downscaled_spell_maps /
 # gef.plot_downscaled_exceedance, called from dowscale_dekade.py).
 # downscaled_onset_icpac is the default 20mm wet-spell definition.
@@ -669,6 +671,13 @@ optional_onset_names = {
     "Onset_ECMWF_accum_climatology",
 }
 optional_picture_names = set(briefing_plot_names) | optional_onset_names
+
+# The S2S/GEFS forecast-only onset maps came from run_rainfall_onset_legacy.py,
+# which the workflows no longer run (run_rainfall_onset.py only makes the
+# CHIRPS + downscaled onset maps), so they're only present on older dates.
+optional_picture_names |= {
+    "Onset_ECMWF", "Onset_GEFS", "Onset_ECMWF_accum", "Onset_GEFS_accum",
+}
 
 # Reforecast-archive climatology plots are new and depend on an extra network
 # fetch (Planette's reforecast archive) on top of the core pipeline, so a
