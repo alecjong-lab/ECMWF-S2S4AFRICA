@@ -594,9 +594,9 @@ EXCEEDANCE_COLORS = [
 # median spell length: blues for short spells, greens for about a week,
 # yellow -> dark red for long ones -- one colour per SPELL_DAY_BOUNDS bin
 SPELL_LENGTH_COLORS = [
-    '#b3dcf5',  #  0-1 days light blue
-    '#5aa7e0',  #  1-2 days blue
     '#1f5fb4',  #  2-3 days darker blue
+    '#5aa7e0',  #  1-2 days blue
+    '#b3dcf5',  #  0-1 days light blue
     '#26a69a',  #  3-4 days blue-green
     '#a5d68a',  #  4-5 days light green
     '#43a047',  #  5-7 days green

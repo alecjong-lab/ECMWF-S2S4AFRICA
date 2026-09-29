@@ -262,7 +262,7 @@ jobs:
             for sub in weekly dekadal monthly; do
               src="plots/$country/$DATE_STR/$sub"
               mkdir -p "$src"
-              gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
+              gcloud storage rsync -r --no-clobber "gs://${BUCKET}/$src" "$src" || true
             done
           done
 
@@ -282,7 +282,7 @@ jobs:
         working-directory: main_repo
         run: |
           mkdir -p "plots/diagnostics/${DATE_STR}"
-          gcloud storage rsync -r "gs://${BUCKET}/plots/diagnostics/${DATE_STR}" "plots/diagnostics/${DATE_STR}"
+          gcloud storage rsync -r --no-clobber "gs://${BUCKET}/plots/diagnostics/${DATE_STR}" "plots/diagnostics/${DATE_STR}"
 
       # ── Stage: climate_indices_timeseries ───────────────────────────
       - name: Generate climate indices timeseries
@@ -322,7 +322,7 @@ jobs:
             for sub in weekly dekadal monthly; do
               src="plots/$country/$DATE_STR/$sub"
               mkdir -p "$src"
-              gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
+              gcloud storage rsync -r --no-clobber "gs://${BUCKET}/$src" "$src" || true
             done
           done
 
@@ -350,7 +350,7 @@ jobs:
             for sub in weekly dekadal; do
               src="plots/$country/$DATE_STR/$sub"
               mkdir -p "$src"
-              gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
+              gcloud storage rsync -r --no-clobber "gs://${BUCKET}/$src" "$src" || true
             done
           done
 
@@ -387,7 +387,7 @@ jobs:
           for country in "${countries[@]}"; do
             src="plots/$country/$DATE_STR/monthly"
             mkdir -p "$src"
-            gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
+            gcloud storage rsync -r --no-clobber "gs://${BUCKET}/$src" "$src" || true
           done
 
       # ── Stage: briefing_slides (ws_scripts/*.sh, Kenya-hardcoded) ──
@@ -596,7 +596,8 @@ jobs:
             "plots/diagnostics/${DATE_STR}"
           do
             mkdir -p "$rel"
-            gcloud storage rsync -r "gs://${BUCKET}/${rel}" "$rel" || true
+            # --no-clobber: only fill gaps, never overwrite plots this run just regenerated
+            gcloud storage rsync -r --no-clobber "gs://${BUCKET}/${rel}" "$rel" || true
           done
 
       # BRIEFING_TEMPLATE_ID picks which Google Slides deck
