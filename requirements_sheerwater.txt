@@ -4,6 +4,8 @@ xarray
 matplotlib
 cartopy
 cfgrib
+eccodeslib==2.48.2.27
+eckitlib==2.2.0.27
 pandas
 netCDF4
 scipy
