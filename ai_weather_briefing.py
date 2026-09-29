@@ -473,11 +473,15 @@ exceed20mm_path = f"{kenya_path}/weekly/chance_higherthan_20mm.png"
 # continued with the per-member daily downscaled forecast (run_rainfall_onset.py), and dry/wet
 # spell + weekly >20mm chance maps (gef.plot_downscaled_spell_maps /
 # gef.plot_downscaled_exceedance, called from dowscale_dekade.py).
-# downscaled_onset_icpac is the default 20mm wet-spell definition.
+# downscaled_onset_icpac is the default 20mm wet-spell definition. The _obs
+# keys are the observed-only CHIRPS met/pending/not-met maps from the same script.
 downscaled_picture_paths = {
     "downscaled_onset_icpac": f"{kenya_path}/monthly/onset_downscaled.png",
     "downscaled_onset_icpac10mm": f"{kenya_path}/monthly/onset_downscaled_icpac10mm.png",
     "downscaled_onset_accum": f"{kenya_path}/monthly/onset_downscaled_accum.png",
+    "downscaled_onset_icpac_obs": f"{kenya_path}/monthly/onset_chirps_observed.png",
+    "downscaled_onset_icpac10mm_obs": f"{kenya_path}/monthly/onset_chirps_observed_icpac10mm.png",
+    "downscaled_onset_accum_obs": f"{kenya_path}/monthly/onset_chirps_observed_accum.png",
     "dwn_wet_5": f"{kenya_path}/weekly/prob_wetspell_5days_downscaled.png",
     "dwn_wet_7": f"{kenya_path}/weekly/prob_wetspell_7days_downscaled.png",
     "dwn_wet_median": f"{kenya_path}/weekly/median_wetspell_length_downscaled.png",
