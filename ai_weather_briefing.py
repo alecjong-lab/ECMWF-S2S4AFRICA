@@ -564,6 +564,9 @@ briefing_plot_names = [
     "kenya_daily_downscaled_precip_anomaly",
     "kenya_aifs_daily_precip_anomaly",
     "kenya_gefs_daily_precip_anomaly",
+    "kenya_kmsa_prob_above",
+    "kenya_aifs_prob_above",
+    "kenya_gefs_prob_above",
 ]
 for name in briefing_plot_names:
     picture_paths[name] = f"{briefing_plots_path}/{name}.png"
