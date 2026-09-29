@@ -696,7 +696,7 @@ jobs:
           mapfile -t files < <(
             {
               find main_repo/plots/briefing -type f -name '*.png' 2>/dev/null
-              find main_repo/plots main_repo/private_plots main_repo/ws_scripts \
+              find main_repo/plots main_repo/ws_scripts \
                 -type f -name '*.png' 2>/dev/null | grep -v '/plots/briefing/' || true
             } | sort -u
           )
