@@ -241,6 +241,12 @@ jobs:
             "${K}/monthly/onset_chirps_observed.png" \
             "${K}/monthly/onset_downscaled.png" && onset_ok=true
 
+          echo "chirps_agro_climatology.py:"
+          chirps_clim_ok=false
+          complete \
+            "${K}/monthly/onset_chirps_climatology.png" \
+            "${K}/weekly/median_dryspell_length_chirps_clim.png" && chirps_clim_ok=true
+
           {
             echo "### Stages detected for ${DATE_STR}"
             echo
@@ -261,6 +267,7 @@ jobs:
           emit run_plot_gefs      "$gefsplot_ok"  "plot_gefs.py"
           emit run_downscale      "$dwn_ok"       "dowscale_dekade.py"
           emit run_rainfall_onset "$onset_ok"     "run_rainfall_onset.py"
+          emit run_chirps_climatology "$chirps_clim_ok" "chirps_agro_climatology.py"
 
       - name: Restore completed stages from GCS
         if: ${{ steps.run_inputs.outputs.force_all != 'true' }}
@@ -387,6 +394,40 @@ jobs:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           COUNTRIES: "Kenya"
           DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
+      # CHIRPS climatology counterparts of the downscaled onset/spell maps
+      # (the briefing's "_clim" pictures, Kenya-only). Only the small derived
+      # results are cached (chirps_clim_cache/: per calendar week and per
+      # season), in the Actions cache since this workflow can't commit to main --
+      # a cache key can't be overwritten, so restore the newest one by prefix and
+      # save under a hash of the contents, which only adds an entry when this run
+      # added a week or season.
+      - name: Restore CHIRPS climatology cache
+        if: ${{ steps.detect.outputs.run_chirps_climatology != 'false' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: main_repo/chirps_clim_cache
+          key: chirps-clim-Kenya-${{ github.run_id }}
+          restore-keys: chirps-clim-Kenya-
+
+      - name: Run CHIRPS climatology
+        if: ${{ steps.detect.outputs.run_chirps_climatology != 'false' }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          COUNTRY=Kenya python chirps_agro_climatology.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
+      - name: Save CHIRPS climatology cache
+        if: ${{ steps.detect.outputs.run_chirps_climatology != 'false' && hashFiles('main_repo/chirps_clim_cache/**/*.nc') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: main_repo/chirps_clim_cache
+          key: chirps-clim-Kenya-${{ hashFiles('main_repo/chirps_clim_cache/**/*.nc') }}
 
       - name: Replot precip with shared color scale
         continue-on-error: true

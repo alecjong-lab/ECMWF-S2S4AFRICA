@@ -135,6 +135,38 @@ jobs:
           DATE_STR: "${{ inputs.date_str }}"
           COUNTRY: Kenya
 
+      # CHIRPS climatology counterparts of the downscaled onset/spell maps
+      # (the briefing's "_clim" pictures, Kenya-only). Only the small derived
+      # results are cached (chirps_clim_cache/: per calendar week and per
+      # season), in the Actions cache since this workflow can't commit to main --
+      # a cache key can't be overwritten, so restore the newest one by prefix and
+      # save under a hash of the contents, which only adds an entry when this run
+      # added a week or season.
+      - name: Restore CHIRPS climatology cache
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: main_repo/chirps_clim_cache
+          key: chirps-clim-Kenya-${{ github.run_id }}
+          restore-keys: chirps-clim-Kenya-
+
+      - name: Run CHIRPS climatology
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          COUNTRY=Kenya python chirps_agro_climatology.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: "${{ inputs.date_str }}"
+
+      - name: Save CHIRPS climatology cache
+        if: ${{ hashFiles('main_repo/chirps_clim_cache/**/*.nc') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: main_repo/chirps_clim_cache
+          key: chirps-clim-Kenya-${{ hashFiles('main_repo/chirps_clim_cache/**/*.nc') }}
+
       - name: Generate AI weather briefing
         continue-on-error: true
         working-directory: main_repo
