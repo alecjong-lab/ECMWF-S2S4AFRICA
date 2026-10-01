@@ -8,7 +8,7 @@ name: Test Pipeline (manual)
 #
 # Each stage can be turned off. Tick skills_only to skip every non-ws_scripts
 # stage (download, plot_s2s, Indian Ocean, climate indices, GEFS, downscale,
-# rainfall onset) in one go; those still restore from GCS. Fill ws_scripts
+# rainfall onset, CHIRPS climatology) in one go; those still restore from GCS. Fill ws_scripts
 # with comma-separated stems to rebuild only those briefing plots (blank
 # keeps the current "all except timeseries_verification" set).
 # use_dev_template is ON by default here, so ai_weather_briefing.py builds from
@@ -49,7 +49,7 @@ on:
         required: false
         default: "genevieve@rhizaresearch.org"
       skills_only:
-        description: "Skip all non-weather-skills stages (download / plot_s2s / GEFS / downscale / onset / Indian Ocean / climate indices). Overrides the per-stage boxes below — they stay ticked in this form but are not honoured. Still runs ws_scripts + AI briefing; skipped stages restore from GCS."
+        description: "Skip all non-weather-skills stages (download / plot_s2s / GEFS / downscale / onset / CHIRPS climatology / Indian Ocean / climate indices). Overrides the per-stage boxes below — they stay ticked in this form but are not honoured. Still runs ws_scripts + AI briefing; skipped stages restore from GCS."
         type: boolean
         default: false
       run_download:
@@ -78,6 +78,10 @@ on:
         default: true
       run_rainfall_onset:
         description: "Run rainfall onset"
+        type: boolean
+        default: true
+      run_chirps_climatology:
+        description: "Run CHIRPS onset/spell climatology (Kenya-only)"
         type: boolean
         default: true
       run_briefing_slides:
@@ -163,6 +167,7 @@ jobs:
             stage plot_gefs           "${{ inputs.run_plot_gefs }}"
             stage downscale_dekade    "${{ inputs.run_downscale_dekade }}"
             stage rainfall_onset      "${{ inputs.run_rainfall_onset }}"
+            stage chirps_climatology  "${{ inputs.run_chirps_climatology }}"
             echo
             echo "briefing_slides=${{ inputs.run_briefing_slides }}, ai_briefing=${{ inputs.run_ai_briefing }} (both unaffected by skills_only)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
@@ -389,6 +394,41 @@ jobs:
             mkdir -p "$src"
             gcloud storage rsync -r --no-clobber "gs://${BUCKET}/$src" "$src" || true
           done
+
+      # ── Stage: chirps_climatology (Kenya-only) ───────────────────────
+      # CHIRPS climatology counterparts of the downscaled onset/spell maps
+      # (the briefing's "_clim" pictures). Only the small derived results are
+      # cached (chirps_clim_cache/: per calendar week and per season), kept in
+      # the Actions cache rather than committed -- a cache key can't be
+      # overwritten, so restore the newest one by prefix and save under a
+      # hash of the contents, which only creates a new entry when this run
+      # added a week or season. Skipped: the plots come from GCS with the rest
+      # of plots/Kenya in "Restore Kenya plots" before the briefing.
+      - name: Restore CHIRPS climatology cache
+        if: ${{ inputs.run_chirps_climatology && !inputs.skills_only && contains(inputs.countries, 'Kenya') }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: main_repo/chirps_clim_cache
+          key: chirps-clim-Kenya-${{ github.run_id }}
+          restore-keys: chirps-clim-Kenya-
+
+      - name: Run CHIRPS climatology
+        if: ${{ inputs.run_chirps_climatology && !inputs.skills_only && contains(inputs.countries, 'Kenya') }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          COUNTRY=Kenya python chirps_agro_climatology.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+
+      - name: Save CHIRPS climatology cache
+        if: ${{ inputs.run_chirps_climatology && !inputs.skills_only && contains(inputs.countries, 'Kenya') && hashFiles('main_repo/chirps_clim_cache/**/*.nc') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: main_repo/chirps_clim_cache
+          key: chirps-clim-Kenya-${{ hashFiles('main_repo/chirps_clim_cache/**/*.nc') }}
 
       # ── Stage: briefing_slides (ws_scripts/*.sh, Kenya-hardcoded) ──
       - name: Resolve ws_scripts selection

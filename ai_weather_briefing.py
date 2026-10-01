@@ -489,6 +489,17 @@ downscaled_picture_paths = {
     "dwn_dry_7": f"{kenya_path}/weekly/prob_dryspell_7days_downscaled.png",
     "dwn_dry_median": f"{kenya_path}/weekly/median_dryspell_length_downscaled.png",
     "chance_20mm": f"{kenya_path}/weekly/weekly_chance_higherthan_20mm_downscaled.png",
+    # CHIRPS climatology counterparts (chirps_agro_climatology.py): the
+    # forecast key + "_clim"
+    "downscaled_onset_icpac_clim": f"{kenya_path}/monthly/onset_chirps_climatology.png",
+    "downscaled_onset_icpac10mm_clim": f"{kenya_path}/monthly/onset_chirps_climatology_icpac10mm.png",
+    "downscaled_onset_accum_clim": f"{kenya_path}/monthly/onset_chirps_climatology_accum.png",
+    "dwn_wet_5_clim": f"{kenya_path}/weekly/prob_wetspell_5days_chirps_clim.png",
+    "dwn_wet_7_clim": f"{kenya_path}/weekly/prob_wetspell_7days_chirps_clim.png",
+    "dwn_wet_median_clim": f"{kenya_path}/weekly/median_wetspell_length_chirps_clim.png",
+    "dwn_dry_5_clim": f"{kenya_path}/weekly/prob_dryspell_5days_chirps_clim.png",
+    "dwn_dry_7_clim": f"{kenya_path}/weekly/prob_dryspell_7days_chirps_clim.png",
+    "dwn_dry_median_clim": f"{kenya_path}/weekly/median_dryspell_length_chirps_clim.png",
 }
 
 # Great Horn tercile plot (regional counterpart to the Kenya-only ECMWF_tercile_plot)

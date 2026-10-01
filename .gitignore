@@ -15,3 +15,5 @@ WeatherbriefingKenya_template_with_alt.pptx
 kenya_bucket_staging/
 docs/superpowers/
 onset_forecast_cache/
+chirps_clim_cache/
+test_chirps_agro_climatology.py

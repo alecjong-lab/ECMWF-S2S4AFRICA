@@ -30,6 +30,7 @@ STAGES = [
     "plot_gefs",
     "dowscale_dekade",
     "run_rainfall_onset",
+    "chirps_agro_climatology",
     "replot_precip_shared_colorscale",
     "ai_weather_briefing",
 ]
