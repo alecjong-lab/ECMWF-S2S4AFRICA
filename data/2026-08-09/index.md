@@ -1,6 +1,5 @@
 # Domain-wide — 2026-08-09
 
-- [daily_downscaled_kenya.tif](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-09/daily_downscaled_kenya.tif)
 - **ECMWF_s2s_10wind_2026-08-09.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-09/ECMWF_s2s_10wind_2026-08-09.zarr) · `gs://africa-forecasting-data/data/2026-08-09/ECMWF_s2s_10wind_2026-08-09.zarr`
 - **ECMWF_s2s_500wind_2026-08-09.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-09/ECMWF_s2s_500wind_2026-08-09.zarr) · `gs://africa-forecasting-data/data/2026-08-09/ECMWF_s2s_500wind_2026-08-09.zarr`
 - **ECMWF_s2s_700wind_2026-08-09.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-09/ECMWF_s2s_700wind_2026-08-09.zarr) · `gs://africa-forecasting-data/data/2026-08-09/ECMWF_s2s_700wind_2026-08-09.zarr`
