@@ -16,8 +16,8 @@ under data/<date>/ locally. Derived files the pipeline writes for itself as it r
 they get regenerated fresh each run.
 
 Usage:
-    python pull_kenya_test_data.py --date 2026-09-01
-    python pull_kenya_test_data.py --date 2026-09-01 --force   # overwrite existing fixture
+    python pull_test_data.py --date 2026-09-01
+    python pull_test_data.py --date 2026-09-01 --force   # overwrite existing fixture
 """
 import argparse
 import shutil
