@@ -72,9 +72,10 @@ def zero_centered_diverging_cmap(vmin, vmax, neg_colors, pos_colors, white='#fff
 
 
 def plot_moisture_anomaly_map(field, var, title, cbar_label, out_path, neg_colors, pos_colors,
-                               extent=INDIAN_OCEAN_EXTENT, figsize=(20, 20)):
-    """Zero-centered diverging map (TCW / IVT anomalies) over the Indian Ocean, saved to out_path."""
-    vmin, vmax = gef.symmetric_vmin_vmax(field, var=var)
+                               extent=INDIAN_OCEAN_EXTENT, figsize=(20, 20), limit=None):
+    """Zero-centered diverging map (TCW / IVT anomalies) over the Indian Ocean, saved to out_path.
+    limit fixes the color range to +/-limit instead of sizing it to the data."""
+    vmin, vmax = (-limit, limit) if limit else gef.symmetric_vmin_vmax(field, var=var)
     cmap, norm, levels = zero_centered_diverging_cmap(vmin, vmax, neg_colors, pos_colors)
 
     fig, ax = plt.subplots(1, figsize=figsize, subplot_kw={'projection': ccrs.PlateCarree()})
@@ -93,10 +94,11 @@ def plot_moisture_anomaly_map(field, var, title, cbar_label, out_path, neg_color
 
 
 def plot_moisture_anomaly_weekly_map(field, var, title, cbar_label, out_path, neg_colors, pos_colors,
-                                      extent=INDIAN_OCEAN_EXTENT, panel_height=7):
+                                      extent=INDIAN_OCEAN_EXTENT, panel_height=7, limit=None):
     """4-panel (2x2) zero-centered diverging map of a weekly-resolved anomaly field (TCW / IVT /
-    precip), one panel per calendar week, sharing a single color scale and colorbar."""
-    vmin, vmax = gef.symmetric_vmin_vmax(field, var=var)
+    precip), one panel per calendar week, sharing a single color scale and colorbar.
+    limit fixes the color range to +/-limit instead of sizing it to the data."""
+    vmin, vmax = (-limit, limit) if limit else gef.symmetric_vmin_vmax(field, var=var)
     cmap, norm, levels = zero_centered_diverging_cmap(vmin, vmax, neg_colors, pos_colors)
 
     # size the figure to the extent's aspect ratio so maps fill their panels
@@ -354,14 +356,25 @@ ivt_weekly = zonal_ivt(IO_plev_calweek)
 
 # model climatology (median) to compare against - the monthly reference has no
 # 'step' dim; the weekly one is the reforecast climatology of the same calendar weeks
-ivt_mclimate_monthly = gef.open_mclimate(ivt_monthly, folder_path=f'{prefix}/m-climate/', var='ivt_month').sel(quantile=0.5)
+ivt_mclimate_monthly_q = gef.open_mclimate(ivt_monthly, folder_path=f'{prefix}/m-climate/', var='ivt_month')
+ivt_mclimate_monthly = ivt_mclimate_monthly_q.sel(quantile=0.5)
+# ivt_month only stores quantiles, so the monthly spread is estimated from the
+# interquartile range (IQR / 1.349 = std-dev for a normal distribution)
+std_ivt_monthly = ((ivt_mclimate_monthly_q.ivt_u.sel(quantile=0.75)
+                    - ivt_mclimate_monthly_q.ivt_u.sel(quantile=0.25)) / 1.349)
 
 anom_ivt_monthly = ivt_monthly - ivt_mclimate_monthly
 anom_ivt_weekly = ivt_weekly - io_calweek_moisture[['ivt_u']]
 
+# anomaly in std-dev units, like the standardized precipitation maps above
+std_anom_ivt_monthly = anom_ivt_monthly / std_ivt_monthly
+std_anom_ivt_weekly = anom_ivt_weekly / io_calweek_moisture.ivt_u_std
+
 period_end = str(anom_ivt_monthly.time.values + pd.Timedelta("28d"))[:10]
 ivt_title = f'Indian Ocean Monthly Eastward Moisture Transport Anomaly {str(anom_ivt_monthly.time.values)[:10]} until {period_end}'
 ivt_weekly_title = f'Indian Ocean Weekly Eastward Moisture Transport Anomaly | {cal_period}'
+std_ivt_title = f'Indian Ocean Monthly Standardized Eastward Moisture Transport Anomaly {str(anom_ivt_monthly.time.values)[:10]} until {period_end}'
+std_ivt_weekly_title = f'Indian Ocean Weekly Standardized Eastward Moisture Transport Anomaly | {cal_period}'
 
 ivt_colors = dict(
     neg_colors=["#8a29e1", "#0000fc", "#008b88", "#01fefd", "#afecee"],
@@ -379,4 +392,16 @@ plot_moisture_anomaly_weekly_map(
     'Zonal Moisture Transport Anomaly [kg m$^{-1}$ s$^{-1}$]',
     weekly_save_path+f'ECMWF_s2s_ivt_u_{date_str}.png',
     **ivt_colors,
+)
+plot_moisture_anomaly_map(
+    std_anom_ivt_monthly, 'ivt_u', std_ivt_title,
+    'Standardized Zonal Moisture Transport Anomaly',
+    monthly_save_path+f'ECMWF_s2s_ivt_u_std_anomaly_{date_str}.png',
+    **ivt_colors, limit=3,  # fixed +/-3 std-dev so days are comparable
+)
+plot_moisture_anomaly_weekly_map(
+    std_anom_ivt_weekly, 'ivt_u', std_ivt_weekly_title,
+    'Standardized Zonal Moisture Transport Anomaly',
+    weekly_save_path+f'ECMWF_s2s_ivt_u_std_anomaly_{date_str}.png',
+    **ivt_colors, limit=3,  # fixed +/-3 std-dev so days are comparable
 )

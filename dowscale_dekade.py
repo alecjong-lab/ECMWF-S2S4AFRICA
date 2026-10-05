@@ -419,19 +419,20 @@ for country in countries_to_downscale:
             print(f"Downscaled dry/wet spell plots failed ({e}), skipping")
         tick('weekly Kenya: dry/wet spell maps')
 
-        # calendar-week chance of > 20mm (downscaled counterpart of plot_s2s.py's
-        # weekly_chance_higherthan_20mm.png)
-        try:
-            if cal_week_totals is None:
-                raise ValueError("no calendar-week totals, the spell maps step failed")
-            gef.plot_downscaled_exceedance(
-                cal_week_totals, 20, kenya_counties_shp,
-                f'plots/{country}/{date_str}/weekly/weekly_chance_higherthan_20mm_downscaled.png', fs,
-            )
-        except Exception as e:
-            print(f"Downscaled 20mm exceedance plot failed ({e}), skipping")
+        # calendar-week chance of > 20mm / > 50mm (the 20mm map is the downscaled
+        # counterpart of plot_s2s.py's weekly_chance_higherthan_20mm.png)
+        for threshold in (20, 50):
+            try:
+                if cal_week_totals is None:
+                    raise ValueError("no calendar-week totals, the spell maps step failed")
+                gef.plot_downscaled_exceedance(
+                    cal_week_totals, threshold, kenya_counties_shp,
+                    f'plots/{country}/{date_str}/weekly/weekly_chance_higherthan_{threshold}mm_downscaled.png', fs,
+                )
+            except Exception as e:
+                print(f"Downscaled {threshold}mm exceedance plot failed ({e}), skipping")
 
-        tick('weekly Kenya: 20mm exceedance plot')
+        tick('weekly Kenya: 20mm/50mm exceedance plots')
         rescaled_forecast = rescaled_forecast.rio.write_crs("EPSG:4326")
         ds_to_plot = gef.clip_to_shapefile(rescaled_forecast, kenya_counties_shp, transpose=True)
         # map ends at the shapefile's edges, not the country bbox
