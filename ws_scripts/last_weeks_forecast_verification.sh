@@ -7,6 +7,8 @@ set -eo pipefail
 
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@old-dev forecasting-skills"
 run() { $WS "$@"; }
+# cumulus-fetch tracks current dev; everything else stays on old-dev.
+CUMULUS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
 
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
@@ -139,7 +141,7 @@ prepare_forecast() {
         --input "${p}_mm.zarr" --output "${p}_plot.zarr"
       ;;
     cumulus)
-      run cumulus-fetch --date "$init" -v tp \
+      $CUMULUS cumulus-fetch --date "$init" -v tp \
         --bbox "$BBOX" --output "${p}_raw.zarr"
       run aggregate-temporal --period weekly --method mean --align left \
         --input "${p}_raw.zarr" --output "${p}_wk.zarr"
