@@ -17,3 +17,5 @@ docs/superpowers/
 onset_forecast_cache/
 chirps_clim_cache/
 test_chirps_agro_climatology.py
+olr_obs/
+data/**/*.zarr/
