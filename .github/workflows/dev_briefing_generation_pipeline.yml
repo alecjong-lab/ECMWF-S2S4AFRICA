@@ -266,9 +266,14 @@ jobs:
           echo "run_rainfall_onset.py:"
           onset_ok=false
           complete \
-            "${K}/monthly/onset_s2s.png" \
-            "${K}/monthly/onset_gefs.png" \
-            "${K}/monthly/onset_s2s_climatology.png" && onset_ok=true
+            "${K}/monthly/onset_chirps_observed.png" \
+            "${K}/monthly/onset_downscaled.png" && onset_ok=true
+
+          echo "chirps_agro_climatology.py:"
+          chirps_clim_ok=false
+          complete \
+            "${K}/monthly/onset_chirps_climatology.png" \
+            "${K}/weekly/median_dryspell_length_chirps_clim.png" && chirps_clim_ok=true
 
           {
             echo "### Stages detected for ${DATE_STR}"
@@ -290,6 +295,7 @@ jobs:
           emit run_plot_gefs      "$gefsplot_ok"  "plot_gefs.py"
           emit run_downscale      "$dwn_ok"       "dowscale_dekade.py"
           emit run_rainfall_onset "$onset_ok"     "run_rainfall_onset.py"
+          emit run_chirps_climatology "$chirps_clim_ok" "chirps_agro_climatology.py"
 
       - name: Restore completed stages from GCS
         if: ${{ steps.run_inputs.outputs.force_all != 'true' }}
@@ -417,6 +423,40 @@ jobs:
           COUNTRIES: "Kenya"
           DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
 
+      # CHIRPS climatology counterparts of the downscaled onset/spell maps
+      # (the briefing's "_clim" pictures, Kenya-only). Only the small derived
+      # results are cached (chirps_clim_cache/: per calendar week and per
+      # season), in the Actions cache since this workflow can't commit to main --
+      # a cache key can't be overwritten, so restore the newest one by prefix and
+      # save under a hash of the contents, which only adds an entry when this run
+      # added a week or season.
+      - name: Restore CHIRPS climatology cache
+        if: ${{ steps.detect.outputs.run_chirps_climatology != 'false' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: main_repo/chirps_clim_cache
+          key: chirps-clim-Kenya-${{ github.run_id }}
+          restore-keys: chirps-clim-Kenya-
+
+      - name: Run CHIRPS climatology
+        if: ${{ steps.detect.outputs.run_chirps_climatology != 'false' }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          COUNTRY=Kenya python chirps_agro_climatology.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
+      - name: Save CHIRPS climatology cache
+        if: ${{ steps.detect.outputs.run_chirps_climatology != 'false' && hashFiles('main_repo/chirps_clim_cache/**/*.nc') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: main_repo/chirps_clim_cache
+          key: chirps-clim-Kenya-${{ hashFiles('main_repo/chirps_clim_cache/**/*.nc') }}
+
       - name: Replot precip with shared color scale
         continue-on-error: true
         working-directory: main_repo
@@ -439,7 +479,7 @@ jobs:
         run: |
           mkdir -p "plots/Great_Horn/${DATE_STR}" "plots/briefing/${BRIEFING_DATE}"
           gcloud storage rsync -r "gs://${BUCKET}/plots/Great_Horn/${DATE_STR}" "plots/Great_Horn/${DATE_STR}" || true
-          gcloud storage rsync -r "gs://${BUCKET}/plots/briefing/${BRIEFING_DATE}" "plots/briefing/${BRIEFING_DATE}" || true
+          # dont sync all plots so failures are clearly visible
 
       # ── Weather-skills briefing plots (ws_scripts/*.sh) ──────
       - name: Install uv for ws_scripts
@@ -611,12 +651,6 @@ jobs:
         run: |
           pip install -r requirements_sheerwater.txt
 
-      - name: Cache nuthatch data
-        uses: actions/cache/restore@v4
-        with:
-          path: main_repo/.nuthatch/caches
-          key: nuthatch-
-
       - name: Restore Kenya TAHMO data
         id: tahmo_cache
         if: ${{ steps.run_inputs.outputs.force_all != 'true' }}
@@ -644,38 +678,6 @@ jobs:
           path: main_repo/private_data/station_data/Kenya/${{ steps.briefing_date.outputs.date }}
           key: tahmo-Kenya-${{ steps.briefing_date.outputs.date }}
 
-      - name: Download IMERG satellite data
-        uses: nick-fields/retry@v3
-        continue-on-error: true
-        with:
-          timeout_minutes: 20
-          max_attempts: 2
-          command: |
-            cd main_repo
-            yes | python get_sat_data.py --country Kenya --satellite imerg
-
-      - name: Download CHIRPS satellite data
-        uses: nick-fields/retry@v3
-        continue-on-error: true
-        with:
-          timeout_minutes: 20
-          max_attempts: 2
-          command: |
-            cd main_repo
-            yes | python get_sat_data.py --country Kenya --satellite chirps
-
-      - name: Cache nuthatch data
-        uses: actions/cache/save@v4
-        with:
-          path: main_repo/.nuthatch/caches
-          key: nuthatch-${{ github.run_id }}
-
-      - name: Generate satellite vs station plots
-        working-directory: main_repo
-        continue-on-error: true
-        run: |
-          yes | python plot_sat_vs_stations.py --country Kenya
-
       - name: Upload files as artifact
         uses: actions/upload-artifact@v4
         with:
@@ -686,7 +688,6 @@ jobs:
             main_repo/plots/Kenya/*/weekly/weekly_precip_downscaled_clipped.png
             main_repo/plots/Kenya/*/weekly/weekly_medium_range_precip.png
             main_repo/plots/briefing/**/*.png
-            main_repo/private_plots/**/*.png
             main_repo/private_data/**/*.csv
             main_repo/prompts/*.txt
             main_repo/s2s_briefing_*.pptx
@@ -793,6 +794,7 @@ jobs:
 
       - name: Auth to Google Cloud
         if: steps.check_plots.outputs.plots_ok == 'true'
+        id: gcp_auth
         uses: google-github-actions/auth@v2
         with:
           create_credentials_file: true
@@ -816,6 +818,8 @@ jobs:
         if: steps.check_plots.outputs.plots_ok == 'true'
         id: drive
         continue-on-error: true
+        env:
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.gcp_auth.outputs.access_token }}
         run: |
           python -u repo_scripts/publish_briefing_to_drive.py \
             --file "${{ steps.check_plots.outputs.briefing }}" \
@@ -827,6 +831,8 @@ jobs:
         if: steps.check_plots.outputs.plots_ok == 'true'
         id: manual_deck
         continue-on-error: true
+        env:
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.gcp_auth.outputs.access_token }}
         run: |
           python -u repo_scripts/find_latest_manual_analysis.py \
             --folder-id "1YE-91Uhx1E8Nx3aSk1CU1SS-B2dD-3ho"

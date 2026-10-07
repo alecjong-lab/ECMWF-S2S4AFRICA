@@ -1,18 +1,61 @@
+"""
+Rainy season onset from observed CHIRPS rainfall, continued with the daily
+downscaled forecast (Kenya). Replaces the S2S/GEFS/downscaled forecast-only
+onset maps of run_rainfall_onset_legacy.py.
+
+1. Observed: CHIRPS from ONSET_SEARCH_START (default September 1, MM-DD or
+   YYYY-MM-DD) up to DATE_STR (or the latest CHIRPS day, if earlier), from
+   dynamical.org's public icechunk stores -- the final product, topped up with
+   the preliminary product for the most recent ~month the final product
+   doesn't cover yet. Each grid cell gets a status:
+     - met     : onset fully confirmed within the observed window
+     - pending : the triggering rain was observed, but the confirmation window
+                 (dry-spell search / second accumulation period) runs past the
+                 last observed day and hasn't been violated so far
+     - not met : neither
+   -> plots/<country>/<date>/monthly/onset_chirps_observed{,_icpac10mm,_accum}.png
+      data/<date>/rainfall_onset_{,icpac10mm_,accum_}chirps_<country>.nc
+
+2. Observed + forecast (Kenya only -- the downscaled forecast is Kenya-only):
+   the same CHIRPS series continued, per ensemble member, with the daily
+   downscaled forecast that starts the day after the last CHIRPS day (see
+   resolve_forecast), and the onset search rerun over the joined series.
+   -> plots/<country>/<date>/monthly/onset_downscaled{,_icpac10mm,_accum}.png
+      data/<date>/rainfall_onset_{,icpac10mm_,accum_}downscaled_<country>.nc
+      (rainfall_onset_downscaled_<country>.nc feeds ai_weather_briefing.py)
+
+Onset definitions (same as the legacy script, from get_ECMWF_functions):
+  - standard  : gef.rainfall_onset_date (3-day >20mm, no 7-day dry spell in 21 days)
+  - icpac10mm : same, but a 10mm 3-day wet-spell total
+  - accum     : gef.rainfall_onset_date_accum (10 days >=20mm, then 20 days >20mm)
+
+Because the search start is fixed, every later run re-scans the same season
+from the same day with more observed days appended -- cells only move from
+'not met' -> 'pending' -> 'met' (or back from 'pending' to 'not met' if a dry
+spell breaks the confirmation window), and an onset date, once met, stays put.
+
+Usage (from the repo root):
+    python run_rainfall_onset.py
+    COUNTRY=Zambia ONSET_SEARCH_START=10-01 DATE_STR=2026-11-20 python run_rainfall_onset.py
+"""
 import os
+import shutil
 from datetime import datetime, timedelta
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import gcsfs
+import geopandas as gpd
+import icechunk
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import matplotlib.patheffects as pe
-import matplotlib.patches
 from matplotlib.colors import ListedColormap, BoundaryNorm, LinearSegmentedColormap
-import geopandas as gpd
+import matplotlib.lines
+import matplotlib.patches
 import numpy as np
 import pandas as pd
-import rioxarray
+import rioxarray  # noqa: F401  (registers .rio for clipping)
 import xarray as xr
 
 import get_ECMWF_functions as gef
@@ -28,8 +71,42 @@ prefix = os.environ.get("MAIN_PATH", os.getcwd())
 data_path = f'{prefix}/data/{date_str}'
 
 country = os.environ.get("COUNTRY", "Kenya")
+plot_dir = f'plots/{country}/{date_str}/monthly'
+os.makedirs(plot_dir, exist_ok=True)
+os.makedirs(data_path, exist_ok=True)
+# fixed start of the onset search window; MM-DD resolves to the most recent
+# such day on or before DATE_STR (so a Sep 1 start in March means last September)
+search_start = os.environ.get("ONSET_SEARCH_START", "09-01")
+if len(search_start) == 5:
+    start_this_year = pd.Timestamp(f"{pd.Timestamp(date_str).year}-{search_start}")
+    search_start = (start_this_year if start_this_year <= pd.Timestamp(date_str)
+                    else start_this_year - pd.DateOffset(years=1))
+search_start = pd.Timestamp(search_start)
+# 'combined' (final + preliminary top-up), 'final' or 'preliminary'
+chirps_source = os.environ.get("CHIRPS_SOURCE", "combined")
 
-# same bbox convention (and duplication) as plot_s2s.py / plot_gefs.py / fetch_dynamical.py
+# ---- combined observed + forecast (Kenya only: the downscaled forecast is Kenya-only)
+# By default the forecast is picked to start the day right after the last
+# CHIRPS day (see resolve_forecast): CHIRPS lags ~4-5 days, the forecast ~2,
+# so the newest forecast would leave a 1-2 day hole between the two. The
+# matching (older) forecast is taken from data/<date>/ if it's there locally,
+# otherwise downloaded (anonymously -- the bucket is public) from the Kenya
+# bucket into FORECAST_CACHE. The cache deliberately lives outside data/: the
+# daily workflow uploads every .zarr under data/ to the main bucket, which would
+# overwrite that date's full precip zarr with the Kenya-cropped copy.
+# FORECAST_DATE / FORECAST_DATA_PATH pin a forecast by hand instead (the
+# folder must hold data_weekly_Kenya_downscaled.nc + ECMWF_s2s_precip_<date>.zarr,
+# e.g. a test/<date>/ fixture folder).
+forecast_date_override = os.environ.get("FORECAST_DATE")
+forecast_path_override = os.environ.get("FORECAST_DATA_PATH")
+FORECAST_BUCKET = "kenya-forecasting-data"
+forecast_cache = os.environ.get("FORECAST_CACHE", f"{prefix}/onset_forecast_cache")
+# how many days further back than the ideal init to look if it's missing
+FORECAST_MAX_LOOKBACK = int(os.environ.get("FORECAST_MAX_LOOKBACK", 7))
+# same knobs (and defaults) as run_rainfall_onset_legacy.py
+ONSET_AGREEMENT_THRESH = float(os.environ.get("ONSET_AGREEMENT_THRESH", 66))
+ONSET_PROFILE_SIGMA = float(os.environ.get("ONSET_PROFILE_SIGMA", 10))
+
 bboxes = {
     "Namibia":    {"lat1": -16.5, "lon1": 11.5, "lat2": -30,   "lon2": 25.5},
     "Botswana":   {"lat1": -17.5, "lon1": 19.5, "lat2": -27,   "lon2": 30},
@@ -44,72 +121,110 @@ bboxes = {
     "Zimbabwe":   {"lat1": -15,   "lon1": 25,   "lat2": -22.5, "lon2": 33.5},
     "Malawi":     {"lat1": -9,    "lon1": 31.5, "lat2": -18,   "lon2": 37.5},
 }
-bbox = bboxes[country]
+gef.lat1 = bboxes[country]['lat1']
+gef.lat2 = bboxes[country]['lat2']
+gef.lon1 = bboxes[country]['lon1']
+gef.lon2 = bboxes[country]['lon2']
 
-# same Kenya county shapefile dowscale_dekade.py clips the downscaled forecast to
 kenya_shapefile = "downscale_data/Kenya_Counties_KNSDI.shp"
 
-plot_dir = f'plots/{country}/{date_str}/monthly'
 
-# minimum % of ensemble members that must find an onset for a cell to get an
-# onset-date color; cells below it are hatched out instead (see plot_onset_map)
-ONSET_AGREEMENT_THRESH = float(os.environ.get("ONSET_AGREEMENT_THRESH", 66))
+def open_chirps(product):
+    storage = icechunk.s3_storage(
+        bucket="dynamical-ucsb-chc-chirps",
+        prefix=f"ucsb-chc-chirps-analysis-{product}/v0.1.0.icechunk",
+        region="us-west-2",
+        anonymous=True,
+    )
+    session = icechunk.Repository.open(storage).readonly_session("main")
+    return xr.open_zarr(session.store, chunks=None).precipitation_surface
 
-# gaussian sigma (in 0.05deg fine-grid cells) for smoothing the 1.5deg daily
-# timing profile the downscaled forecast is disaggregated with -- see
-# gef.disaggregate_weekly_to_daily's profile_sigma (0 = no smoothing)
-ONSET_PROFILE_SIGMA = float(os.environ.get("ONSET_PROFILE_SIGMA", 10))
-os.makedirs(plot_dir, exist_ok=True)
+
+def load_chirps_window(start, end_date):
+    """Daily CHIRPS (mm/day) from start up to and including end_date (or the
+    latest available day, if that's earlier), cut to the country bbox.
+    CHIRPS latitude is stored north->south, so slice(lat1, lat2) with lat1 > lat2
+    is the right order."""
+    latest = open_chirps("final" if chirps_source == "final" else "preliminary").time.values[-1]
+    end = min(pd.Timestamp(end_date), pd.Timestamp(latest))
+
+    def cut(da):
+        return da.sel(time=slice(start, end),
+                      longitude=slice(gef.lon1, gef.lon2), latitude=slice(gef.lat1, gef.lat2))
+
+    if chirps_source in ("final", "preliminary"):
+        da = cut(open_chirps(chirps_source)).compute()
+    else:
+        final = cut(open_chirps("final")).compute()
+        prelim = cut(open_chirps("preliminary"))
+        if final.sizes['time']:
+            prelim = prelim.sel(time=slice(final.time.values[-1] + np.timedelta64(1, 'D'), None))
+        da = xr.concat([final, prelim.compute()], dim='time') if prelim.sizes['time'] else final
+        print(f"CHIRPS: {final.sizes['time']} days final + {prelim.sizes['time']} days preliminary")
+
+    # dynamical.org stores CHIRPS as a rate in kg m-2 s-1 (== mm/s) -- onset
+    # thresholds are in mm/day
+    da = da * 86400
+    da.attrs['units'] = 'mm day-1'
+    # rebuild coords without their dynamical.org attrs (dict-valued
+    # 'statistics_approximate' can't be written to netCDF)
+    return da.drop_vars('spatial_ref', errors='ignore').assign_coords(
+        {d: da[d].values for d in ('time', 'latitude', 'longitude')})
 
 
-def clip_to_kenya(ds):
+def onset_status(da, onset_fn, fully_observed_days, pad_days, **kwargs):
     """
-    Clip to Kenya's actual land shape (union of counties), not just its bbox.
-    all_touched=True keeps every cell the shape touches rather than only cells
-    whose center falls inside it -- on the coarse S2S 1.5deg grid, center-only
-    clipping drops most border/coastal cells to NaN.
+    Returns (onset_date, status) where status is 2 = met, 1 = pending, 0 = not met,
+    NaN over ocean/no-data.
+
+    'pending' is found by appending pad_days of very wet synthetic days after
+    the last observation and re-running the onset search: a cell whose onset
+    only appears once the confirmation window is allowed to extend into the
+    (unknown) future hasn't failed yet. Onsets whose *first* part (the wet
+    spell / first accumulation period, fully_observed_days long) would itself
+    rely on padded days are discarded, so pending always means the triggering
+    rain was actually observed.
     """
-    return gef.clip_to_shapefile(ds.rio.write_crs("EPSG:4326"), kenya_shapefile, all_touched=True)
+    n_obs = da.sizes['time']
+    onset = onset_fn(da, time_dim='time', **kwargs)
+
+    pad_time = pd.date_range(pd.Timestamp(da.time.values[-1]) + pd.Timedelta(days=1), periods=pad_days)
+    last = da.isel(time=-1, drop=True)
+    pad = xr.full_like(last, 1000.0).where(last.notnull())  # keep ocean NaN
+    padded = xr.concat([da, pad.expand_dims(time=pad_time)], dim='time')
+    onset_padded = onset_fn(padded, time_dim='time', **kwargs)
+
+    last_trigger_day = pd.Timestamp(da.time.values[n_obs - fully_observed_days])
+    pending = onset.isnull() & onset_padded.notnull() & (onset_padded <= np.datetime64(last_trigger_day))
+
+    has_data = da.notnull().any('time')
+    status = xr.where(onset.notnull(), 2, xr.where(pending, 1, 0)).where(has_data)
+    return onset, status
 
 
-def summarize(name, onset):
-    found = onset.notnull()
-    n_found, n_total = int(found.sum()), int(found.size)
-    print(f"{name}: onset found for {n_found}/{n_total} points/members")
-    if n_found:
-        print(f"{name}: earliest onset {onset.min(skipna=True).values}, latest onset {onset.max(skipna=True).values}")
+def clip(da):
+    if country != 'Kenya':
+        return da
+    return gef.clip_to_shapefile(da.rio.write_crs("EPSG:4326"), kenya_shapefile)
 
 
-def clean_for_netcdf(da):
-    """Strip attrs netCDF can't serialize (e.g. dict-valued 'statistics_approximate'
-    on dynamical.org catalog coords) so .to_netcdf() doesn't blow up."""
-    def safe(attrs):
-        return {k: v for k, v in attrs.items()
-                 if isinstance(v, (str, bytes, int, float, np.integer, np.floating, np.ndarray, list, tuple))}
-
-    da = da.copy()
-    da.attrs = safe(da.attrs)
-    for name in da.coords:
-        da.coords[name].attrs = safe(da.coords[name].attrs)
-    return da
-
-
-def stack_reforecast_years(onset_per_year):
-    """Combine a list of per-year onset DataArrays (each dims: number, latitude,
-    longitude) into one DataArray with a single 'number' dim covering every
-    (year, ensemble member) combination -- so plot_onset_map's existing
-    mean/'% of members found an onset' logic (which reduces over 'number')
-    doubles as an average over the reforecast climatology without changes."""
-    onset = xr.concat(onset_per_year, dim='year').rename({'number': 'member'})
-    if 'init_time' in onset.coords:
-        onset = onset.drop_vars('init_time')
-    return onset.stack(number=('year', 'member')).reset_index('number', drop=True)
+def add_outline(ax):
+    if country == 'Kenya':
+        outline = gpd.read_file(kenya_shapefile).set_crs("EPSG:4326", allow_override=True).dissolve()
+        ax.add_geometries(outline.geometry, crs=ccrs.PlateCarree(),
+                          facecolor='none', edgecolor='black', linewidth=1.0, zorder=3)
+    else:
+        ax.coastlines(resolution='10m', linewidth=0.8)
+        ax.add_feature(cfeature.BORDERS, linewidth=0.6)
+    gl = ax.gridlines(draw_labels=True, linewidth=0.3, color='gray', alpha=0.5, linestyle='--')
+    gl.top_labels = False
+    gl.right_labels = False
 
 
 def build_discrete_cmap(vmin, vmax, n_shades=4):
-    """Discrete colormap: 5 main color bands (sand, green, cyan, pink-purple, gray),
-    each split into n_shades discrete light->dark steps.
-    Returns (cmap, norm, boundaries, segment_edges)."""
+    """Same colorbar as run_rainfall_onset_legacy.py's onset maps:
+    5 main color bands (sand, green, cyan, pink-purple, gray), each split into
+    n_shades discrete light->dark steps. Returns (cmap, norm, boundaries, segment_edges)."""
     segments = [
         ("#EFDFC0", "#8B5A2B"),  # sand
         ("#B9E3A8", "#1B5E20"),  # green
@@ -117,19 +232,14 @@ def build_discrete_cmap(vmin, vmax, n_shades=4):
         ("#F3BEDE", "#7B2D8E"),  # pink-purple
         ("#E3E3E3", "#4D4D4D"),  # gray
     ]
-
-    # 6 edges marking where one main color band switches to the next
     segment_edges = np.linspace(vmin, vmax, len(segments) + 1)
 
     colors = []
     boundaries = [segment_edges[0]]
     for i, (c_light, c_dark) in enumerate(segments):
         seg_cmap = LinearSegmentedColormap.from_list("", [c_light, c_dark])
-        # discrete shades within this band, sampled at bin centers for even spacing
         shade_positions = (np.arange(n_shades) + 0.5) / n_shades
         colors.extend(seg_cmap(shade_positions))
-
-        # sub-boundaries within this band
         sub_edges = np.linspace(segment_edges[i], segment_edges[i + 1], n_shades + 1)[1:]
         boundaries.extend(sub_edges)
 
@@ -138,363 +248,305 @@ def build_discrete_cmap(vmin, vmax, n_shades=4):
     return cmap, norm, np.array(boundaries), segment_edges
 
 
-def plot_onset_map(onset, bbox, year, title, save_path, forecast_start, n_time, search_days=21,
-                   agreement_thresh=None):
-    """
-    Map of ensemble-mean onset day-of-year (deterministic sources plot their
-    single onset field directly). Where an ensemble dimension is present,
-    cells where fewer than agreement_thresh % of members found an onset are
-    not colored but hatched instead, so only onsets a large enough share of
-    the ensemble agrees on get a date color. Cells where no member at all
-    found an onset stay blank. On a coarse grid (e.g. S2S) the % of members
-    is also written in each cell.
-
-    The color scale runs from the forecast's first day (forecast_start) to
-    the last day that still leaves a full search_days window for the
-    dry-spell check (see _rainfall_onset_nd's t_max) -- i.e. the actual
-    achievable onset range for this forecast, not just whichever onset dates
-    happened to occur. Fixing it to the forecast window (rather than the
-    data's own min/max) puts every source on a comparable "days since
-    forecast start" scale regardless of which onsets it actually found.
-    """
-    if agreement_thresh is None:
-        agreement_thresh = ONSET_AGREEMENT_THRESH
-    onset_doy = onset.dt.dayofyear  # NaT -> NaN
-
-    has_ensemble = 'number' in onset_doy.dims
-    if has_ensemble:
-        mean_doy = onset_doy.mean(dim='number', skipna=True)
-        pct_valid = onset_doy.notnull().mean(dim='number') * 100
-    else:
-        mean_doy = onset_doy
-        pct_valid = None
-
-    mean_doy = mean_doy.sel(longitude=slice(bbox['lon1'], bbox['lon2']), latitude=slice(bbox['lat1'], bbox['lat2']))
-    # per-cell "% of members" text only stays legible on a coarse grid (e.g. S2S)
-    show_text = False
-    if pct_valid is not None:
-        pct_valid = pct_valid.sel(longitude=slice(bbox['lon1'], bbox['lon2']), latitude=slice(bbox['lat1'], bbox['lat2']))
-        show_text = pct_valid.sizes['latitude'] * pct_valid.sizes['longitude'] <= 200
-
-    if bool(mean_doy.isnull().all()):
-        print(f"{title}: no onset found anywhere, skipping plot")
-        return
-
-    vmin = float(forecast_start.dayofyear)
-    vmax = float((forecast_start + pd.Timedelta(days=n_time - search_days)).dayofyear)
+def draw_onset_dates(fig, ax, doy, first_day, last_day, low_agreement=None):
+    """Onset day-of-year map with the legacy script's discrete colorbar,
+    scaled from first_day to last_day. low_agreement cells are hatched instead
+    of colored (same styling as plot_onset_map)."""
+    vmin, vmax = float(first_day.dayofyear), float(last_day.dayofyear)
     if vmin == vmax:
-        vmax = vmin + 1  # BoundaryNorm needs a non-degenerate range
-    onset_cmap, onset_norm, boundaries, segment_edges = build_discrete_cmap(vmin, vmax, n_shades=4)
+        vmax = vmin + 1
+    cmap, norm, boundaries, segment_edges = build_discrete_cmap(vmin, vmax, n_shades=4)
 
-    fig, ax = plt.subplots(figsize=(9, 7), subplot_kw={'projection': ccrs.PlateCarree()})
-
-    low_agreement = None
-    if pct_valid is not None:
-        low_agreement = (pct_valid < agreement_thresh) & mean_doy.notnull()
-        colored_doy = mean_doy.where(~low_agreement)
-    else:
-        colored_doy = mean_doy
-
-    mesh = colored_doy.plot.pcolormesh(
-        x='longitude', y='latitude', ax=ax, cmap=onset_cmap, norm=onset_norm,
-        transform=ccrs.PlateCarree(), add_colorbar=False,
-    )
+    colored = doy.where(~low_agreement) if low_agreement is not None else doy
+    mesh = colored.plot.pcolormesh(x='longitude', y='latitude', ax=ax, cmap=cmap, norm=norm,
+                                   transform=ccrs.PlateCarree(), add_colorbar=False)
 
     if low_agreement is not None and bool(low_agreement.any()):
-        # pcolor (not pcolormesh) so masked cells are left out of the collection
-        # entirely -- only the low-agreement cells get the hatch. Hatching is a
-        # texture rather than a fill color, so it can't be mistaken for any band
-        # of the onset colorscale (which already uses gray).
         hatch_field = low_agreement.where(low_agreement).transpose('latitude', 'longitude')
-        lon_c, lat_c = hatch_field.longitude.values, hatch_field.latitude.values
         hatch = ax.pcolor(
-            lon_c, lat_c, np.ma.masked_invalid(hatch_field.values.astype(float)),
+            hatch_field.longitude.values, hatch_field.latitude.values,
+            np.ma.masked_invalid(hatch_field.values.astype(float)),
             cmap=ListedColormap(['white']), transform=ccrs.PlateCarree(),
             shading='nearest', edgecolor='#555555', linewidth=0, hatch='////',
         )
         hatch.set_zorder(mesh.get_zorder() + 0.1)
-        ax.legend(
-            handles=[matplotlib.patches.Patch(facecolor='white', edgecolor='#555555', hatch='////',
-                                              label=f'< {agreement_thresh:g}% of members find an onset')],
-            loc='lower left', fontsize=10, framealpha=0.9,
-        )
 
-    if country == 'Kenya':
-        # outline the KMD county shapefile the data is clipped to, instead of
-        # cartopy's Natural Earth coastline/borders -- the two don't quite line
-        # up, so drawing both makes the clipped data look offset from the border
-        kenya_outline = gpd.read_file(kenya_shapefile).set_crs("EPSG:4326", allow_override=True).dissolve()
-        ax.add_geometries(kenya_outline.geometry, crs=ccrs.PlateCarree(),
-                          facecolor='none', edgecolor='black', linewidth=1.0, zorder=3)
-    else:
-        ax.coastlines(resolution='10m', linewidth=0.8)
-        ax.add_feature(cfeature.BORDERS, linewidth=0.6)
-    gl = ax.gridlines(draw_labels=True, linewidth=0.3, color='gray', alpha=0.5, linestyle='--')
-    gl.top_labels = False
-    gl.right_labels = False
-    gl.xlabel_style = {'size': 11}
-    gl.ylabel_style = {'size': 11}
-    ax.set_title(title, fontsize=15, fontweight='bold', pad=10)
+    cbar = fig.colorbar(mesh, ax=ax, orientation='vertical', pad=0.03, shrink=0.85, aspect=25,
+                        boundaries=boundaries, ticks=segment_edges)
+    cbar.set_ticklabels([(pd.Timestamp(year=first_day.year, month=1, day=1)
+                          + pd.Timedelta(days=t - 1)).strftime('%b %d') for t in segment_edges])
+    cbar.set_label('Onset date', fontsize=12)
+    return mesh
 
-    if show_text:
-        lon2d, lat2d = np.meshgrid(pct_valid.longitude.values, pct_valid.latitude.values)
-        pct_vals = pct_valid.transpose('latitude', 'longitude').values
-        for i in range(lat2d.shape[0]):
-            for j in range(lat2d.shape[1]):
-                val = pct_vals[i, j]
-                if not np.isnan(val):
-                    ax.text(
-                        lon2d[i, j], lat2d[i, j], f'{val:.0f}%',
-                        transform=ccrs.PlateCarree(), ha='center', va='center',
-                        fontsize=18, color='black',
-                        path_effects=[pe.withStroke(linewidth=2, foreground='white')],
-                    )
 
-    cbar = fig.colorbar(
-        mesh, ax=ax, orientation='vertical', pad=0.03, shrink=0.85, aspect=25,
-        boundaries=boundaries, ticks=segment_edges,
-    )
+def plot_status(onset, status, window_start, window_end, label, save_path):
+    fig, axes = plt.subplots(1, 2, figsize=(16, 7), subplot_kw={'projection': ccrs.PlateCarree()})
 
-    # day-of-year has no year attached, so pick the year the forecast was issued in
-    labels = [
-        (pd.Timestamp(year=year, month=1, day=1) + pd.Timedelta(days=t - 1)).strftime('%b %d')
-        for t in segment_edges
-    ]
-    cbar.set_ticklabels(labels)
-    cbar.set_label('Onset date', fontsize=13)
-    cbar.ax.tick_params(labelsize=11)
+    # left: met / pending / not met
+    ax = axes[0]
+    status_cmap = ListedColormap(['#E3E3E3', '#F2C14E', '#1B7F3B'])
+    status.plot.pcolormesh(x='longitude', y='latitude', ax=ax, cmap=status_cmap,
+                           norm=BoundaryNorm([-0.5, 0.5, 1.5, 2.5], 3),
+                           transform=ccrs.PlateCarree(), add_colorbar=False)
+    counts = {k: int((status == v).sum()) for k, v in [('not met', 0), ('pending', 1), ('met', 2)]}
+    total = max(sum(counts.values()), 1)
+    ax.legend(handles=[
+        matplotlib.patches.Patch(color='#1B7F3B', label=f"met ({100 * counts['met'] / total:.0f}%)"),
+        matplotlib.patches.Patch(color='#F2C14E', label=f"pending ({100 * counts['pending'] / total:.0f}%)"),
+        matplotlib.patches.Patch(color='#E3E3E3', label=f"not met ({100 * counts['not met'] / total:.0f}%)"),
+    ], loc='lower left', fontsize=10, framealpha=0.9)
+    add_outline(ax)
+    ax.set_title('Onset criterion status', fontsize=13, fontweight='bold')
 
+    # right: observed onset date where met
+    ax = axes[1]
+    draw_onset_dates(fig, ax, onset.dt.dayofyear, window_start, window_end)
+    add_outline(ax)
+    ax.set_title('Observed onset date', fontsize=13, fontweight='bold')
+
+    fig.suptitle(f'CHIRPS observed rainy season onset ({label}) — {country}\n'
+                 f'{window_start:%Y-%m-%d} to {window_end:%Y-%m-%d}', fontsize=15, fontweight='bold')
     fig.tight_layout()
-    plt.savefig(save_path, bbox_inches='tight')
+    plt.savefig(save_path, bbox_inches='tight', dpi=110)
     plt.close(fig)
+    print(f"{label}: met {counts['met']}, pending {counts['pending']}, not met {counts['not met']} cells "
+          f"-> {save_path}")
 
 
-# S2S has the longest forecast window (~46 days) of the three sources, so its
-# window is used as the universal colorbar scale for all three plots -- giving
-# every plot the same length scale instead of each being cut to its own
-# (shorter) forecast horizon. Falls back to a source's own window if the S2S
-# computation itself fails.
-universal_forecast_start = None
-universal_n_time = None
+def forecast_files(init):
+    return ['data_weekly_Kenya_downscaled.nc', f'ECMWF_s2s_precip_{init}.zarr']
 
-# ---- S2S ECMWF forecast ---------------------------------------------------
-s2s_path = f'{data_path}/ECMWF_s2s_precip_{date_str}.zarr'
-try:
-    s2s = xr.open_zarr(s2s_path, consolidated=True).compute()
-    s2s = s2s.sel(latitude=slice(bbox['lat1'], bbox['lat2']), longitude=slice(bbox['lon1'], bbox['lon2']))
-    # left un-clipped: at S2S's coarse 1.5deg resolution, shapefile clipping
-    # is too blocky to be meaningful (a cell easily spans well past the border)
 
-    s2s_daily = s2s.diff('step').tp
-    s2s_daily.attrs = s2s.tp.attrs
-    valid_time = s2s.time + s2s_daily.step
+# When the weekly downscaled forecast is the 4-week 0.4 degree one, downscale_04deg_.py
+# also writes this file: the same weeks followed by the 1.5 degree weeks 5-6, so the
+# onset definitions keep their 6-week look-ahead. Used instead when it is there.
+ONSET_WEEKLY_FILE = 'data_weekly_Kenya_downscaled_onset.nc'
 
-    onset_s2s = gef.rainfall_onset_date(s2s_daily, time_dim='step', valid_time=valid_time)
-    clean_for_netcdf(onset_s2s).to_netcdf(f'{data_path}/rainfall_onset_s2s_{country}.nc')
-    summarize('S2S', onset_s2s)
 
-    title = (
-        f'S2S rainy season onset — {country}\n'
-        f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
-        f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
-    )
-    universal_forecast_start = pd.Timestamp(valid_time.min().values)
-    universal_n_time = s2s_daily.sizes['step']
-    plot_onset_map(onset_s2s, bbox, pd.Timestamp(s2s.time.values).year, title, f'{plot_dir}/onset_s2s.png',
-                   forecast_start=universal_forecast_start, n_time=universal_n_time)
+def downscaled_weekly_path(path):
+    onset_path = f'{path}/{ONSET_WEEKLY_FILE}'
+    return onset_path if os.path.exists(onset_path) else f'{path}/data_weekly_Kenya_downscaled.nc'
 
-    # ICPAC_10mm: same wet-spell definition, but a 10mm (not 20mm) 3-day wet-spell total
-    onset_s2s_icpac10mm = gef.rainfall_onset_date(s2s_daily, wet_spell_thresh=10.0, time_dim='step', valid_time=valid_time)
-    clean_for_netcdf(onset_s2s_icpac10mm).to_netcdf(f'{data_path}/rainfall_onset_icpac10mm_s2s_{country}.nc')
-    summarize('S2S (ICPAC_10mm)', onset_s2s_icpac10mm)
 
-    title_icpac10mm = (
-        f'S2S rainy season onset (ICPAC_10mm) — {country}\n'
-        f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
-        f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
-    )
-    plot_onset_map(onset_s2s_icpac10mm, bbox, pd.Timestamp(s2s.time.values).year, title_icpac10mm,
-                   f'{plot_dir}/onset_s2s_icpac10mm.png',
-                   forecast_start=universal_forecast_start, n_time=universal_n_time)
+def has_forecast(path, init):
+    return all(os.path.exists(f'{path}/{f}') for f in forecast_files(init))
 
-    onset_s2s_accum = gef.rainfall_onset_date_accum(s2s_daily, time_dim='step', valid_time=valid_time)
-    clean_for_netcdf(onset_s2s_accum).to_netcdf(f'{data_path}/rainfall_onset_accum_s2s_{country}.nc')
-    summarize('S2S (accum)', onset_s2s_accum)
 
-    title_accum = (
-        f'S2S start of growing season — {country}\n'
-        f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
-        f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
-    )
-    plot_onset_map(onset_s2s_accum, bbox, pd.Timestamp(s2s.time.values).year, title_accum,
-                   f'{plot_dir}/onset_s2s_accum.png',
-                   forecast_start=universal_forecast_start, n_time=universal_n_time, search_days=30)
-except Exception as e:
-    print(f"S2S: could not compute onset from {s2s_path} ({e}), skipping")
+def fetch_forecast(init):
+    """Download one forecast's files from gs://kenya-forecasting-data/<init>/data/
+    into FORECAST_CACHE/<init>/ (reused on later runs). The bucket is public, so
+    this reads anonymously -- no gcloud auth needed (the daily workflow runs
+    this step before it authenticates). Downloads into a temp folder that's
+    only renamed into place once every file arrived, so a failed or interrupted
+    download never looks like a complete forecast. Returns the folder, or None
+    if the forecast isn't in the bucket."""
+    dest = f'{forecast_cache}/{init}'
+    if has_forecast(dest, init):
+        return dest
 
-# ---- S2S reforecast climatology (ECMWF only -- GEFS/downscaled have no public
-# reforecast archive to build a climatology from) -----------------------------
-try:
-    # full 46-day horizon like the operational S2S branch above (not truncated to
-    # 28 days), since the accum definition needs the full search window near the
-    # end of the horizon
-    reforecast_pr = gef.load_reforecast(date_str, 'single', 'pr', bbox=bbox, time_range=slice(0, 46), all_years=True)
-    reforecast_daily = reforecast_pr * 86400
-    reforecast_daily.attrs = dict(reforecast_pr.attrs)
-    reforecast_daily.attrs['units'] = 'mm day-1'
-
-    # onset has to be computed one reforecast year at a time: rainfall_onset_date's
-    # absolute-date lookup assumes valid_time varies only along time_dim ("step"), so
-    # passing one valid_time covering every year at once (each with its own calendar
-    # dates) would misalign the lookup -- looping keeps each year's own 1-D valid_time
-    # correct, and the results are combined into a climatology afterward
-    hold_onset_clim, hold_onset_clim_icpac10mm, hold_onset_clim_accum = [], [], []
-    for y in range(len(reforecast_daily.init_time.values)):
-        year_da = reforecast_daily.isel(init_time=y)
-        valid_time_year = year_da.init_time + year_da.step
-
-        hold_onset_clim.append(gef.rainfall_onset_date(year_da, time_dim='step', valid_time=valid_time_year))
-        hold_onset_clim_icpac10mm.append(gef.rainfall_onset_date(year_da, wet_spell_thresh=10.0, time_dim='step', valid_time=valid_time_year))
-        hold_onset_clim_accum.append(gef.rainfall_onset_date_accum(year_da, time_dim='step', valid_time=valid_time_year))
-
-    onset_s2s_clim = stack_reforecast_years(hold_onset_clim)
-    clean_for_netcdf(onset_s2s_clim).to_netcdf(f'{data_path}/rainfall_onset_s2s_climatology_{country}.nc')
-    summarize('S2S climatology', onset_s2s_clim)
-
-    title = f'S2S climatological rainy season onset — {country} ({pd.Timestamp(date_str):%b %d})'
-    plot_onset_map(onset_s2s_clim, bbox, pd.Timestamp(date_str).year, title, f'{plot_dir}/onset_s2s_climatology.png',
-                   forecast_start=universal_forecast_start or pd.Timestamp(valid_time_year.min().values),
-                   n_time=universal_n_time or reforecast_daily.sizes['step'])
-
-    onset_s2s_clim_icpac10mm = stack_reforecast_years(hold_onset_clim_icpac10mm)
-    clean_for_netcdf(onset_s2s_clim_icpac10mm).to_netcdf(f'{data_path}/rainfall_onset_icpac10mm_s2s_climatology_{country}.nc')
-    summarize('S2S climatology (ICPAC_10mm)', onset_s2s_clim_icpac10mm)
-
-    title_icpac10mm = f'S2S climatological rainy season onset (ICPAC_10mm) — {country} ({pd.Timestamp(date_str):%b %d})'
-    plot_onset_map(onset_s2s_clim_icpac10mm, bbox, pd.Timestamp(date_str).year, title_icpac10mm,
-                   f'{plot_dir}/onset_s2s_climatology_icpac10mm.png',
-                   forecast_start=universal_forecast_start or pd.Timestamp(valid_time_year.min().values),
-                   n_time=universal_n_time or reforecast_daily.sizes['step'])
-
-    onset_s2s_clim_accum = stack_reforecast_years(hold_onset_clim_accum)
-    clean_for_netcdf(onset_s2s_clim_accum).to_netcdf(f'{data_path}/rainfall_onset_accum_s2s_climatology_{country}.nc')
-    summarize('S2S climatology (accum)', onset_s2s_clim_accum)
-
-    title_accum = f'S2S climatological start of growing season — {country} ({pd.Timestamp(date_str):%b %d})'
-    plot_onset_map(onset_s2s_clim_accum, bbox, pd.Timestamp(date_str).year, title_accum,
-                   f'{plot_dir}/onset_s2s_climatology_accum.png',
-                   forecast_start=universal_forecast_start or pd.Timestamp(valid_time_year.min().values),
-                   n_time=universal_n_time or reforecast_daily.sizes['step'], search_days=30)
-except Exception as e:
-    print(f"S2S climatology: could not compute onset from reforecast archive ({e}), skipping")
-
-# ---- GEFS forecast ----------------------------------------------------------
-gefs_path = f'{data_path}/gefs/gefs_{country.lower()}.zarr'
-try:
-    gefs = xr.open_zarr(gefs_path).compute()
-    if country == 'Kenya':
-        gefs = clip_to_kenya(gefs)
-    valid_time = gefs.time + gefs.step
-
-    onset_gefs = gef.rainfall_onset_date(gefs.tp, time_dim='step', valid_time=valid_time)
-    clean_for_netcdf(onset_gefs).to_netcdf(f'{data_path}/rainfall_onset_gefs_{country}.nc')
-    summarize('GEFS', onset_gefs)
-
-    title = (
-        f'GEFS rainy season onset — {country}\n'
-        f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
-        f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
-    )
-    plot_onset_map(onset_gefs, bbox, pd.Timestamp(gefs.time.values).year, title, f'{plot_dir}/onset_gefs.png',
-                   forecast_start=universal_forecast_start or pd.Timestamp(valid_time.min().values),
-                   n_time=universal_n_time or gefs.tp.sizes['step'])
-
-    # ICPAC_10mm: same wet-spell definition, but a 10mm (not 20mm) 3-day wet-spell total
-    onset_gefs_icpac10mm = gef.rainfall_onset_date(gefs.tp, wet_spell_thresh=10.0, time_dim='step', valid_time=valid_time)
-    clean_for_netcdf(onset_gefs_icpac10mm).to_netcdf(f'{data_path}/rainfall_onset_icpac10mm_gefs_{country}.nc')
-    summarize('GEFS (ICPAC_10mm)', onset_gefs_icpac10mm)
-
-    title_icpac10mm = (
-        f'GEFS rainy season onset (ICPAC_10mm) — {country}\n'
-        f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
-        f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
-    )
-    plot_onset_map(onset_gefs_icpac10mm, bbox, pd.Timestamp(gefs.time.values).year, title_icpac10mm,
-                   f'{plot_dir}/onset_gefs_icpac10mm.png',
-                   forecast_start=universal_forecast_start or pd.Timestamp(valid_time.min().values),
-                   n_time=universal_n_time or gefs.tp.sizes['step'])
-
-    onset_gefs_accum = gef.rainfall_onset_date_accum(gefs.tp, time_dim='step', valid_time=valid_time)
-    clean_for_netcdf(onset_gefs_accum).to_netcdf(f'{data_path}/rainfall_onset_accum_gefs_{country}.nc')
-    summarize('GEFS (accum)', onset_gefs_accum)
-
-    title_accum = (
-        f'GEFS start of growing season — {country}\n'
-        f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
-        f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
-    )
-    plot_onset_map(onset_gefs_accum, bbox, pd.Timestamp(gefs.time.values).year, title_accum,
-                   f'{plot_dir}/onset_gefs_accum.png',
-                   forecast_start=universal_forecast_start or pd.Timestamp(valid_time.min().values),
-                   n_time=universal_n_time or gefs.tp.sizes['step'], search_days=30)
-except Exception as e:
-    print(f"GEFS: could not compute onset from {gefs_path} ({e}), skipping")
-
-# ---- daily disaggregated downscaled forecast, per ensemble member (Kenya only)
-if country == 'Kenya':
-    downscaled_path = f'{data_path}/data_weekly_Kenya_downscaled.nc'
+    fs = gcsfs.GCSFileSystem(token='anon')
+    remote = f'{FORECAST_BUCKET}/{init}/data'
+    tmp = f'{dest}.partial'
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.makedirs(tmp)
     try:
-        rescaled_forecast = xr.open_dataset(downscaled_path).load()
-        rescaled_forecast = clip_to_kenya(rescaled_forecast)
-        # raw daily ECMWF ensemble (accumulated since init) -- per member, so each
-        # downscaled member is split into days with its own member's daily profile
-        data = xr.open_zarr(s2s_path, consolidated=True).compute()
-
-        # disaggregate one member at a time: doing all 101 members at once
-        # broadcasts the 1.5deg daily profile onto the fine grid for every member
-        # (several GB); onset is per-member anyway, so nothing is lost
-        daily_members = [
-            gef.disaggregate_weekly_to_daily(rescaled_forecast.tp.sel(number=n), data.tp.sel(number=n),
-                                             profile_sigma=ONSET_PROFILE_SIGMA or None).tp
-            for n in rescaled_forecast.number.values
-        ]
-        daily_downscaled = xr.concat(daily_members, dim='number').transpose('number', 'step', 'latitude', 'longitude')
-        daily_downscaled.attrs['units'] = 'mm day-1'
-        valid_time = data.time + daily_downscaled.step
-
-        title_period = (
-            f'forecast {pd.Timestamp(valid_time.min().values) - pd.Timedelta(days=1):%Y-%m-%d} to '
-            f'{pd.Timestamp(valid_time.max().values) - pd.Timedelta(days=1):%Y-%m-%d}'
-        )
-        year = pd.Timestamp(data.time.values).year
-        forecast_start = universal_forecast_start or pd.Timestamp(valid_time.min().values)
-        n_time = universal_n_time or daily_downscaled.sizes['step']
-
-        onset_downscaled = gef.rainfall_onset_date(daily_downscaled, time_dim='step', valid_time=valid_time)
-        clean_for_netcdf(onset_downscaled).to_netcdf(f'{data_path}/rainfall_onset_downscaled_{country}.nc')
-        summarize('downscaled', onset_downscaled)
-        plot_onset_map(onset_downscaled, bbox, year,
-                       f'Downscaled rainy season onset — {country}\n{title_period}',
-                       f'{plot_dir}/onset_downscaled.png',
-                       forecast_start=forecast_start, n_time=n_time)
-
-        # ICPAC_10mm: same wet-spell definition, but a 10mm (not 20mm) 3-day wet-spell total
-        onset_downscaled_icpac10mm = gef.rainfall_onset_date(daily_downscaled, wet_spell_thresh=10.0, time_dim='step', valid_time=valid_time)
-        clean_for_netcdf(onset_downscaled_icpac10mm).to_netcdf(f'{data_path}/rainfall_onset_icpac10mm_downscaled_{country}.nc')
-        summarize('downscaled (ICPAC_10mm)', onset_downscaled_icpac10mm)
-        plot_onset_map(onset_downscaled_icpac10mm, bbox, year,
-                       f'Downscaled rainy season onset (ICPAC_10mm) — {country}\n{title_period}',
-                       f'{plot_dir}/onset_downscaled_icpac10mm.png',
-                       forecast_start=forecast_start, n_time=n_time)
-
-        onset_downscaled_accum = gef.rainfall_onset_date_accum(daily_downscaled, time_dim='step', valid_time=valid_time)
-        clean_for_netcdf(onset_downscaled_accum).to_netcdf(f'{data_path}/rainfall_onset_accum_downscaled_{country}.nc')
-        summarize('downscaled (accum)', onset_downscaled_accum)
-        plot_onset_map(onset_downscaled_accum, bbox, year,
-                       f'Downscaled start of growing season — {country}\n{title_period}',
-                       f'{plot_dir}/onset_downscaled_accum.png',
-                       forecast_start=forecast_start, n_time=n_time, search_days=30)
+        for f in forecast_files(init):
+            if not fs.exists(f'{remote}/{f}'):
+                raise FileNotFoundError(f'gs://{remote}/{f}')
+            fs.get(f'{remote}/{f}', f'{tmp}/{f}', recursive=True)
+        if fs.exists(f'{remote}/{ONSET_WEEKLY_FILE}'):
+            fs.get(f'{remote}/{ONSET_WEEKLY_FILE}', f'{tmp}/{ONSET_WEEKLY_FILE}')
     except Exception as e:
-        print(f"downscaled: could not compute onset from {downscaled_path} ({e}), skipping")
+        print(f"forecast: {init} not available from the bucket ({e})")
+        shutil.rmtree(tmp, ignore_errors=True)
+        return None
+    shutil.rmtree(dest, ignore_errors=True)
+    os.replace(tmp, dest)
+    return dest
+
+
+def resolve_forecast(obs_end):
+    """
+    (init date string, folder) of the forecast to continue CHIRPS with.
+
+    The ideal forecast is initialized the day after the last CHIRPS day, so its
+    first forecast day (init + 1 step -> rain on the init date itself) follows
+    straight on from the observations. If that one isn't available locally or
+    in the bucket (e.g. a failed daily run), step back one day at a time: an
+    older forecast just overlaps CHIRPS for a few days (CHIRPS wins there, see
+    combine_obs_forecast) rather than leaving a gap. A forecast *newer* than the
+    ideal one is never used, as that always leaves missing days.
+    """
+    if forecast_date_override or forecast_path_override:
+        init = forecast_date_override or date_str
+        return init, forecast_path_override or f'{prefix}/data/{init}'
+
+    ideal = obs_end + pd.Timedelta(days=1)
+    for back in range(FORECAST_MAX_LOOKBACK + 1):
+        init = (ideal - pd.Timedelta(days=back)).strftime('%Y-%m-%d')
+        local = f'{prefix}/data/{init}'
+        path = local if has_forecast(local, init) else fetch_forecast(init)
+        if path:
+            note = "" if back == 0 else f" (ideal init {ideal:%Y-%m-%d} not available, {back} day(s) older)"
+            print(f"forecast: using init {init} from {path}{note}")
+            return init, path
+    print(f"forecast: no forecast found between {ideal - pd.Timedelta(days=FORECAST_MAX_LOOKBACK):%Y-%m-%d} "
+          f"and {ideal:%Y-%m-%d}")
+    return None, None
+
+
+def load_daily_downscaled_forecast(chirps, forecast_date, forecast_path):
+    """
+    Generator over ensemble members of the daily downscaled forecast, on the
+    CHIRPS grid, with a real `time` dim (the date each day's rain falls on).
+
+    Same recipe as run_rainfall_onset_legacy.py's downscaled branch: the weekly
+    downscaled forecast is split into days with each member's own raw S2S
+    daily profile (gef.disaggregate_weekly_to_daily), one member at a time to
+    keep memory down. The downscaled grid is offset half a cell (0.025deg) in
+    longitude from CHIRPS, so it's linearly interpolated onto the CHIRPS grid
+    first.
+
+    Forecast step s covers the 24h ending at init + s, i.e. the rain that falls
+    on date init + s - 1 day -- matching CHIRPS's "24h starting at time" label.
+    """
+    weekly_path = downscaled_weekly_path(forecast_path)
+    rescaled = xr.open_dataset(weekly_path).load()
+    print(f"forecast: {rescaled.sizes['step']} weeks from {os.path.basename(weekly_path)}"
+          + (f" ({rescaled.attrs['forecast_resolution']})" if 'forecast_resolution' in rescaled.attrs else ""))
+    rescaled = rescaled.interp(latitude=chirps.latitude, longitude=chirps.longitude)
+    s2s = xr.open_zarr(f'{forecast_path}/ECMWF_s2s_precip_{forecast_date}.zarr', consolidated=True).compute()
+    init = pd.Timestamp(s2s.time.values)
+    land = chirps.notnull().any('time')
+
+    for n in rescaled.number.values:
+        daily = gef.disaggregate_weekly_to_daily(rescaled.tp.sel(number=n), s2s.tp.sel(number=n),
+                                                 profile_sigma=ONSET_PROFILE_SIGMA or None).tp
+        dates = init + pd.to_timedelta(daily.step.values) - pd.Timedelta(days=1)
+        daily = daily.assign_coords(time=('step', dates)).swap_dims(step='time')
+        daily = daily.drop_vars(['step', 'valid_time', 'number', 'surface', 'year', 'spatial_ref'], errors='ignore')
+        yield n, daily.transpose('time', 'latitude', 'longitude').where(land)
+
+
+def combine_obs_forecast(chirps, forecast_daily):
+    """CHIRPS up to its last day, then forecast days after it. Observations win
+    where both exist; a gap between the two (forecast initialized after the
+    day following the last CHIRPS day) is left NaN, which blocks any onset whose
+    windows touch the gap."""
+    obs_end = chirps.time.values[-1]
+    fc = forecast_daily.sel(time=slice(obs_end + np.timedelta64(1, 'D'), None))
+    series = xr.concat([chirps.drop_vars('spatial_ref', errors='ignore'), fc], dim='time')
+    return series.reindex(time=pd.date_range(series.time.values[0], series.time.values[-1]))
+
+
+def plot_combined(onset, obs_met, first_day, last_day, obs_end, forecast_date, label, save_path):
+    """Left: ensemble-mean onset date (obs + forecast), hatched where fewer than
+    ONSET_AGREEMENT_THRESH % of members find an onset, with cells already met in
+    CHIRPS outlined in black. Right: % of members with an onset by the end of
+    the searchable window (100% wherever CHIRPS already met it)."""
+    doy = onset.dt.dayofyear
+    mean_doy = doy.mean('number', skipna=True)
+    pct = (doy.notnull().mean('number') * 100).where(obs_met.notnull())
+    low_agreement = (pct < ONSET_AGREEMENT_THRESH) & mean_doy.notnull()
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 7), subplot_kw={'projection': ccrs.PlateCarree()})
+
+    ax = axes[0]
+    draw_onset_dates(fig, ax, mean_doy, first_day, last_day, low_agreement=low_agreement)
+    met = obs_met.fillna(0).transpose('latitude', 'longitude')
+    ax.contour(met.longitude, met.latitude, met, levels=[0.5],
+               colors='black', linewidths=1.2, transform=ccrs.PlateCarree(), zorder=4)
+    ax.legend(handles=[
+        matplotlib.patches.Patch(facecolor='white', edgecolor='#555555', hatch='////',
+                                 label=f'< {ONSET_AGREEMENT_THRESH:g}% of members find an onset'),
+        matplotlib.lines.Line2D([], [], color='black', linewidth=1.2, label='already met in CHIRPS'),
+    ], loc='lower left', fontsize=10, framealpha=0.9)
+    add_outline(ax)
+    ax.set_title('Onset date (ensemble mean)', fontsize=13, fontweight='bold')
+
+    ax = axes[1]
+    # same bins/colours as the pipeline's exceedance-chance maps
+    pct_cmap, pct_norm = gef.discrete_cmap(gef.EXCEEDANCE_COLORS, gef.PROB_BOUNDS)
+    mesh = pct.plot.pcolormesh(x='longitude', y='latitude', ax=ax, cmap=pct_cmap, norm=pct_norm,
+                               transform=ccrs.PlateCarree(), add_colorbar=False)
+    cbar = fig.colorbar(mesh, ax=ax, pad=0.03, shrink=0.85, aspect=25, ticks=gef.PROB_BOUNDS)
+    cbar.set_label('% of members with onset', fontsize=12)
+    add_outline(ax)
+    ax.set_title(f'Chance onset has happened by {last_day:%b %d}', fontsize=13, fontweight='bold')
+
+    fig.suptitle(f'Rainy season onset, CHIRPS + downscaled forecast ({label}) — {country}\n'
+                 f'observed {first_day:%Y-%m-%d} to {obs_end:%Y-%m-%d}, forecast init {forecast_date}',
+                 fontsize=15, fontweight='bold')
+    fig.tight_layout()
+    plt.savefig(save_path, bbox_inches='tight', dpi=110)
+    plt.close(fig)
+    print(f"{label} (combined): {float(pct.mean()):.0f}% of members with onset on average -> {save_path}")
+
+
+chirps = load_chirps_window(search_start, date_str)
+window_start = pd.Timestamp(chirps.time.values[0])
+window_end = pd.Timestamp(chirps.time.values[-1])
+print(f"CHIRPS window: {window_start:%Y-%m-%d} to {window_end:%Y-%m-%d} "
+      f"({chirps.sizes['time']} days, {chirps.sizes['latitude']}x{chirps.sizes['longitude']} grid)")
+if window_end < pd.Timestamp(date_str):
+    print(f"note: CHIRPS only available up to {window_end:%Y-%m-%d}, not {date_str}")
+
+chirps = clip(chirps)
+
+# label: (onset function, its kwargs, days in the triggering part, confirmation window days)
+definitions = {
+    'standard': (gef.rainfall_onset_date, {}, 3, 21),
+    'icpac10mm': (gef.rainfall_onset_date, {'wet_spell_thresh': 10.0}, 3, 21),
+    'accum': (gef.rainfall_onset_date_accum, {}, 10, 30),
+}
+
+# output file name pieces per definition, matching the legacy script's
+# naming (standard has no suffix): onset_downscaled{png_suffix}.png and
+# rainfall_onset_{nc_prefix}downscaled_<country>.nc
+png_suffix = {'standard': '', 'icpac10mm': '_icpac10mm', 'accum': '_accum'}
+nc_prefix = {'standard': '', 'icpac10mm': 'icpac10mm_', 'accum': 'accum_'}
+
+obs_status = {}
+for label, (onset_fn, kwargs, fully_observed_days, pad_days) in definitions.items():
+    onset, status = onset_status(chirps, onset_fn, fully_observed_days, pad_days, **kwargs)
+    obs_status[label] = status
+    xr.Dataset({'onset_date': onset, 'status': status}).drop_vars('spatial_ref', errors='ignore') \
+        .to_netcdf(f'{data_path}/rainfall_onset_{nc_prefix[label]}chirps_{country}.nc')
+    plot_status(onset, status, window_start, window_end, label,
+                f'{plot_dir}/onset_chirps_observed{png_suffix[label]}.png')
+
+# ---- CHIRPS continued with the daily downscaled forecast --------------------
+forecast_date, forecast_path = None, None
+if country != 'Kenya':
+    print("combined: downscaled forecast only available for Kenya, skipping")
 else:
-    print("downscaled: only available for Kenya, skipping")
+    forecast_date, forecast_path = resolve_forecast(window_end)
+    if forecast_path and not has_forecast(forecast_path, forecast_date):
+        print(f"combined: no downscaled forecast for {forecast_date} in {forecast_path}, skipping")
+        forecast_path = None
+
+if forecast_path:
+    onsets = {label: [] for label in definitions}
+    series = None
+    for n, forecast_daily in load_daily_downscaled_forecast(chirps, forecast_date, forecast_path):
+        series = combine_obs_forecast(chirps, forecast_daily)
+        for label, (onset_fn, kwargs, _, _) in definitions.items():
+            onsets[label].append(onset_fn(series, time_dim='time', **kwargs).expand_dims(number=[n]))
+
+    series_start, series_end = pd.Timestamp(series.time.values[0]), pd.Timestamp(series.time.values[-1])
+    n_obs = chirps.sizes['time']
+    n_gap = int(series.isel(time=slice(n_obs, None)).isnull().all(['latitude', 'longitude']).sum())
+    print(f"combined series: {series_start:%Y-%m-%d} to {series_end:%Y-%m-%d} "
+          f"({n_obs} days CHIRPS + {series.sizes['time'] - n_obs} days forecast"
+          + (f", {n_gap} of them missing: gap between CHIRPS and forecast init" if n_gap else "") + ")")
+
+    for label, (_, _, _, pad_days) in definitions.items():
+        onset = xr.concat(onsets[label], dim='number')
+        onset.to_dataset(name='onset_date').to_netcdf(
+            f'{data_path}/rainfall_onset_{nc_prefix[label]}downscaled_{country}.nc')
+        # colorbar runs to the last day that still leaves a full confirmation
+        # window, like the legacy script's forecast plots
+        last_day = series_end - pd.Timedelta(days=pad_days - 1)
+        obs_met = (obs_status[label] == 2).astype(float).where(obs_status[label].notnull())
+        plot_combined(onset, obs_met, series_start, last_day, window_end, forecast_date, label,
+                      f'{plot_dir}/onset_downscaled{png_suffix[label]}.png')

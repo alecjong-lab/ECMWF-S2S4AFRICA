@@ -349,6 +349,7 @@ for country in countries_to_downscale:
             latitude=slice(weekly_bboxes['Kenya']['lat1'], weekly_bboxes['Kenya']['lat2']),
         )
         kenya_weekly.to_netcdf(f'data/{date_str}/data_weekly_Kenya_downscaled.nc')
+        gef.save_downscaled_zarr(kenya_weekly, f'data/{date_str}/data_weekly_Kenya_downscaled.zarr')
 
     tick(f'weekly {country}: concat members + save nc')
     rescaled_forecast_month = rescaled_forecast.isel(step=slice(0,4)).sum('step',keep_attrs=True).assign_coords(step=rescaled_forecast.isel(step=3).step).expand_dims('step')
@@ -400,30 +401,41 @@ for country in countries_to_downscale:
             f'{data_path}/daily_downscaled_kenya.tif',
             tags={"band_dim_name": "day"},
         )
+        # the same ensemble-mean daily field as a zarr store
+        gef.save_downscaled_zarr(daily_downscaled.tp.astype('float32').transpose('step','latitude','longitude'), f'{data_path}/daily_downscaled_kenya.zarr')
 
         tick('weekly Kenya: daily downscaled GeoTIFF')
-        # Dry/wet spell maps from the per-member daily downscaled forecast (the
-        # downscaled counterpart of plot_s2s.py's Kenya spell plots)
+        # Dry/wet spell maps per calendar week (1st/8th/15th/22nd of the month, see
+        # gef.calendar_windows) from the per-member daily downscaled forecast (the
+        # downscaled counterpart of plot_s2s.py's Kenya spell plots). Also returns
+        # the per-member calendar-week totals the >20mm map below is built from.
+        cal_week_totals = None
         try:
-            gef.plot_downscaled_spell_maps(
+            cal_windows = gef.calendar_windows(
+                data.time.values, max_lead_days=int(rescaled_forecast.step.values[-1] / np.timedelta64(1, 'D'))
+            )
+            cal_week_totals = gef.plot_downscaled_spell_maps(
                 rescaled_forecast, data, kenya_counties_shp,
-                f'plots/{country}/{date_str}/monthly', fs, profile_sigma=SPELL_PROFILE_SIGMA,
+                f'plots/{country}/{date_str}/weekly', fs, cal_windows, profile_sigma=SPELL_PROFILE_SIGMA,
             )
         except Exception as e:
             print(f"Downscaled dry/wet spell plots failed ({e}), skipping")
         tick('weekly Kenya: dry/wet spell maps')
 
-        # weekly chance of > 20mm (downscaled counterpart of plot_s2s.py's
-        # weekly_chance_higherthan_20mm.png)
-        try:
-            gef.plot_downscaled_exceedance(
-                rescaled_forecast, 20, kenya_counties_shp,
-                f'plots/{country}/{date_str}/weekly/weekly_chance_higherthan_20mm_downscaled.png', fs,
-            )
-        except Exception as e:
-            print(f"Downscaled 20mm exceedance plot failed ({e}), skipping")
+        # calendar-week chance of > 20mm / > 50mm (the 20mm map is the downscaled
+        # counterpart of plot_s2s.py's weekly_chance_higherthan_20mm.png)
+        for threshold in (20, 50):
+            try:
+                if cal_week_totals is None:
+                    raise ValueError("no calendar-week totals, the spell maps step failed")
+                gef.plot_downscaled_exceedance(
+                    cal_week_totals, threshold, kenya_counties_shp,
+                    f'plots/{country}/{date_str}/weekly/weekly_chance_higherthan_{threshold}mm_downscaled.png', fs,
+                )
+            except Exception as e:
+                print(f"Downscaled {threshold}mm exceedance plot failed ({e}), skipping")
 
-        tick('weekly Kenya: 20mm exceedance plot')
+        tick('weekly Kenya: 20mm/50mm exceedance plots')
         rescaled_forecast = rescaled_forecast.rio.write_crs("EPSG:4326")
         ds_to_plot = gef.clip_to_shapefile(rescaled_forecast, kenya_counties_shp, transpose=True)
         # map ends at the shapefile's edges, not the country bbox

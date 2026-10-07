@@ -195,9 +195,14 @@ jobs:
           echo "run_rainfall_onset.py:"
           onset_ok=false
           complete \
-            "${K}/monthly/onset_s2s.png" \
-            "${K}/monthly/onset_gefs.png" \
-            "${K}/monthly/onset_s2s_climatology.png" && onset_ok=true
+            "${K}/monthly/onset_chirps_observed.png" \
+            "${K}/monthly/onset_downscaled.png" && onset_ok=true
+
+          echo "chirps_agro_climatology.py:"
+          chirps_clim_ok=false
+          complete \
+            "${K}/monthly/onset_chirps_climatology.png" \
+            "${K}/weekly/median_dryspell_length_chirps_clim.png" && chirps_clim_ok=true
 
           {
             echo "### Stages detected for ${DATE_STR}"
@@ -219,6 +224,7 @@ jobs:
           emit run_plot_gefs      "$gefsplot_ok"  "plot_gefs.py"
           emit run_downscale      "$dwn_ok"       "dowscale_dekade.py"
           emit run_rainfall_onset "$onset_ok"     "run_rainfall_onset.py"
+          emit run_chirps_climatology "$chirps_clim_ok" "chirps_agro_climatology.py"
 
       # ── Put the skipped stages' outputs back on disk ──────────────
       # Restores the whole published plot tree, not just the detected stages, so
@@ -364,6 +370,41 @@ jobs:
           WEEK_COUNTRIES: "Kenya"
           DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
 
+      # ── 0.4 degree precipitation ────────────────────────────────────
+      # plot_s2s_04deg_.py downloads the CHC forecast from the address in the
+      # FORECAST_04DEG_URL secret. The forecast itself is not public: it is kept
+      # as private_data/forecast_04deg/<date>/ECMWF_s2s_precip_04deg_<init>.zarr
+      # and its plots as private_plots/<country>/<date>/04deg/, outside data/
+      # and plots/, so no step that publishes or emails those picks them up --
+      # keep it that way. downscale_04deg_.py then overwrites the Kenya weekly
+      # downscaled outputs of the step above under their normal names -- but
+      # only when the forecast for DATE_STR and a hindcast close to that date
+      # are there; otherwise it exits and the 1.5 degree outputs stay. The
+      # hindcasts are read from the private gs://sheerwater-datalake/ecmwf-0_4
+      # store with the credentials of "Auth to Google Cloud" above, so the
+      # service account needs read access to that bucket.
+      - name: Generate 0.4 degree precip plots
+        if: ${{ steps.detect.outputs.run_downscale != 'false' }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python plot_s2s_04deg_.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          COUNTRIES: "Kenya"
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+          FORECAST_04DEG_URL: ${{ secrets.FORECAST_04DEG_URL }}
+
+      - name: Perform 0.4 degree downscaling
+        if: ${{ steps.detect.outputs.run_downscale != 'false' }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python downscale_04deg_.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
       - name: Run rainfall onset
         if: ${{ steps.detect.outputs.run_rainfall_onset != 'false' }}
         continue-on-error: true
@@ -378,6 +419,40 @@ jobs:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           COUNTRIES: "Kenya"
           DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
+      # CHIRPS climatology counterparts of the downscaled onset/spell maps
+      # (the briefing's "_clim" pictures, Kenya-only). Only the small derived
+      # results are cached (chirps_clim_cache/: per calendar week and per
+      # season), in the Actions cache since this workflow can't commit to main --
+      # a cache key can't be overwritten, so restore the newest one by prefix and
+      # save under a hash of the contents, which only adds an entry when this run
+      # added a week or season.
+      - name: Restore CHIRPS climatology cache
+        if: ${{ steps.detect.outputs.run_chirps_climatology != 'false' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: main_repo/chirps_clim_cache
+          key: chirps-clim-Kenya-${{ github.run_id }}
+          restore-keys: chirps-clim-Kenya-
+
+      - name: Run CHIRPS climatology
+        if: ${{ steps.detect.outputs.run_chirps_climatology != 'false' }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          COUNTRY=Kenya python chirps_agro_climatology.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
+      - name: Save CHIRPS climatology cache
+        if: ${{ steps.detect.outputs.run_chirps_climatology != 'false' && hashFiles('main_repo/chirps_clim_cache/**/*.nc') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: main_repo/chirps_clim_cache
+          key: chirps-clim-Kenya-${{ hashFiles('main_repo/chirps_clim_cache/**/*.nc') }}
 
       - name: Replot precip with shared color scale
         continue-on-error: true
@@ -748,12 +823,6 @@ jobs:
         run: |
           pip install -r requirements_sheerwater.txt
 
-      - name: Cache nuthatch data
-        uses: actions/cache/restore@v4
-        with:
-          path: main_repo/.nuthatch/caches
-          key: nuthatch-
-
       # Reuse today's Kenya TAHMO CSV if the daily run (on main) or an earlier
       # run on this branch already downloaded it. get_tahmo_data.py's window
       # ends on the run day, so only a same-day entry is valid (exact key).
@@ -784,38 +853,6 @@ jobs:
           path: main_repo/private_data/station_data/Kenya/${{ steps.briefing_date.outputs.date }}
           key: tahmo-Kenya-${{ steps.briefing_date.outputs.date }}
 
-      - name: Download IMERG satellite data
-        uses: nick-fields/retry@v3
-        continue-on-error: true
-        with:
-          timeout_minutes: 20
-          max_attempts: 2
-          command: |
-            cd main_repo
-            yes | python get_sat_data.py --country Kenya --satellite imerg
-
-      - name: Download CHIRPS satellite data
-        uses: nick-fields/retry@v3
-        continue-on-error: true
-        with:
-          timeout_minutes: 20
-          max_attempts: 2
-          command: |
-            cd main_repo
-            yes | python get_sat_data.py --country Kenya --satellite chirps
-
-      - name: Cache nuthatch data
-        uses: actions/cache/save@v4
-        with:
-          path: main_repo/.nuthatch/caches
-          key: nuthatch-${{ github.run_id }}
-
-      - name: Generate satellite vs station plots
-        working-directory: main_repo
-        continue-on-error: true
-        run: |
-          yes | python plot_sat_vs_stations.py --country Kenya
-
       - name: Upload files as artifact
         uses: actions/upload-artifact@v4
         with:
@@ -826,7 +863,6 @@ jobs:
             main_repo/plots/Kenya/*/weekly/weekly_precip_downscaled_clipped.png
             main_repo/plots/Kenya/*/weekly/weekly_medium_range_precip.png
             main_repo/plots/briefing/**/*.png
-            main_repo/private_plots/**/*.png
             main_repo/private_data/**/*.csv
             main_repo/prompts/*.txt
             main_repo/s2s_briefing_*.pptx

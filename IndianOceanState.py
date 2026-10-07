@@ -72,9 +72,10 @@ def zero_centered_diverging_cmap(vmin, vmax, neg_colors, pos_colors, white='#fff
 
 
 def plot_moisture_anomaly_map(field, var, title, cbar_label, out_path, neg_colors, pos_colors,
-                               extent=INDIAN_OCEAN_EXTENT, figsize=(20, 20)):
-    """Zero-centered diverging map (TCW / IVT anomalies) over the Indian Ocean, saved to out_path."""
-    vmin, vmax = gef.symmetric_vmin_vmax(field, var=var)
+                               extent=INDIAN_OCEAN_EXTENT, figsize=(20, 20), limit=None):
+    """Zero-centered diverging map (TCW / IVT anomalies) over the Indian Ocean, saved to out_path.
+    limit fixes the color range to +/-limit instead of sizing it to the data."""
+    vmin, vmax = (-limit, limit) if limit else gef.symmetric_vmin_vmax(field, var=var)
     cmap, norm, levels = zero_centered_diverging_cmap(vmin, vmax, neg_colors, pos_colors)
 
     fig, ax = plt.subplots(1, figsize=figsize, subplot_kw={'projection': ccrs.PlateCarree()})
@@ -93,10 +94,11 @@ def plot_moisture_anomaly_map(field, var, title, cbar_label, out_path, neg_color
 
 
 def plot_moisture_anomaly_weekly_map(field, var, title, cbar_label, out_path, neg_colors, pos_colors,
-                                      extent=INDIAN_OCEAN_EXTENT, panel_height=7):
-    """4-panel (2x2) zero-centered diverging map of a weekly-resolved anomaly field (TCW / IVT),
-    one panel per week, sharing a single color scale and colorbar."""
-    vmin, vmax = gef.symmetric_vmin_vmax(field, var=var)
+                                      extent=INDIAN_OCEAN_EXTENT, panel_height=7, limit=None):
+    """4-panel (2x2) zero-centered diverging map of a weekly-resolved anomaly field (TCW / IVT /
+    precip), one panel per calendar week, sharing a single color scale and colorbar.
+    limit fixes the color range to +/-limit instead of sizing it to the data."""
+    vmin, vmax = (-limit, limit) if limit else gef.symmetric_vmin_vmax(field, var=var)
     cmap, norm, levels = zero_centered_diverging_cmap(vmin, vmax, neg_colors, pos_colors)
 
     # size the figure to the extent's aspect ratio so maps fill their panels
@@ -123,12 +125,7 @@ def plot_moisture_anomaly_weekly_map(field, var, title, cbar_label, out_path, ne
         indian_ocean_basemap(ax, extent=extent, left_labels=(col == 0), bottom_labels=(row == 1))
         cf = ax.pcolormesh(week['longitude'], week['latitude'], week[var],
                             transform=ccrs.PlateCarree(), cmap=cmap, norm=norm, shading='auto')
-
-        # step is expected to already label the true last calendar day of the week
-        # (see the step-relabeling done where each caller's field is built)
-        week_end = pd.Timestamp(week.time.values) + pd.to_timedelta(week.step.values)
-        week_start = week_end - pd.Timedelta(days=6)
-        ax.set_title(f'Week {i + 1}: {week_start:%Y-%m-%d} to {week_end:%Y-%m-%d}')
+        ax.set_title(gef.week_panel_title(week, i))
 
     fig.suptitle(title)
     cbar = fig.colorbar(cf, ax=axes, orientation='horizontal', shrink=0.5, aspect=50, ticks=levels)
@@ -176,23 +173,27 @@ fig, axes = gef.plot_wind_and_sst_anomaly(ds_to_plot_winds, ds_to_plot_sst)
 plt.savefig(monthly_save_path+f'ECMWF_s2s_10wind_sst_anomaly_{date_str}.png', bbox_inches='tight')
 plt.close(fig)
 
-# --- weekly (4-panel) version, per-week mean field vs. a per-week climatology
-# when available (positionally aligned onto the forecast's own step labels,
-# since the two step conventions aren't guaranteed to share exact coordinate
-# values), else the same monthly climatology broadcast across every week ---
-def _align_weekly_mclimate(forecast_weekly, mclimate_median):
-    if 'step' not in mclimate_median.dims:
-        return forecast_weekly, mclimate_median
-    n = min(forecast_weekly.sizes['step'], mclimate_median.sizes['step'])
-    forecast_weekly = forecast_weekly.isel(step=slice(0, n))
-    mclimate_aligned = mclimate_median.isel(step=slice(0, n)).assign_coords(step=forecast_weekly.step.values)
-    return forecast_weekly, mclimate_aligned
+# --- weekly (4-panel) versions of every map below: one panel per calendar week
+# (1st/8th/15th/22nd of the month, see gef.calendar_windows) instead of the
+# rolling weeks from init the monthly maps are still built from ---
+init = IO_winds_raw.time.values
+cal_windows = gef.calendar_windows(init, max_lead_days=42)  # SST/TCW stores end at day 42
+cal_period = f"{cal_windows.start.iloc[0]:%Y-%m-%d} until {cal_windows.end.iloc[-1] - pd.Timedelta(days=1):%Y-%m-%d}"
 
-IO_winds_weekly=gef.week_mean(IO_winds_raw).isel(step=slice(None,4))
-IO_sst_weekly=gef.week_mean(IO_sst_raw).isel(step=slice(None,4))
+# reforecast climatologies of the same calendar weeks, cached per first week under
+# m-climate/IO_calweek_single/ (precip, 10m wind, SST) and m-climate/IO_calweek_moisture/
+# (TCW estimate, IVT) -- see gef.calendar_window_reforecast_mclimate
+IO_BBOX = {'lat1': 20, 'lon1': 30, 'lat2': -20, 'lon2': 120}
+io_calweek_single = gef.calendar_window_reforecast_single(cal_windows, init, IO_BBOX, folder_path=f'{prefix}/m-climate/')
+io_calweek_moisture = gef.calendar_window_reforecast_moisture(cal_windows, init, IO_BBOX, folder_path=f'{prefix}/m-climate/')
 
-IO_winds_weekly, winds_mclimate_weekly = _align_weekly_mclimate(IO_winds_weekly, IO_winds_mclimate)
-IO_sst_weekly, sst_mclimate_weekly = _align_weekly_mclimate(IO_sst_weekly, IO_sst_mclimate)
+# 10m wind is a 00Z snapshot per day; SST is already a mean over the 24 hours
+# ending at each step, so it's averaged per day like the reforecast's daily means
+IO_winds_weekly=gef.window_mean(IO_winds_raw, cal_windows, init)
+IO_sst_weekly=gef.window_daily(IO_sst_raw, cal_windows, init, how='mean')
+
+winds_mclimate_weekly=io_calweek_single[['u10', 'v10']]
+sst_mclimate_weekly=io_calweek_single[['sst']]
 
 anom_winds_weekly=IO_winds_weekly-winds_mclimate_weekly
 ds_to_plot_winds_weekly=anom_winds_weekly.mean('number')
@@ -200,8 +201,7 @@ ds_to_plot_winds_weekly=anom_winds_weekly.mean('number')
 anom_sst_weekly=IO_sst_weekly-sst_mclimate_weekly
 ds_to_plot_sst_weekly=anom_sst_weekly.mean('number')
 
-period_end = str(ds_to_plot_winds_weekly.time.values + pd.Timedelta("28d"))[:10]
-wind_sst_title = f'Indian Ocean Weekly 10m Winds and SST Anomaly | {str(ds_to_plot_winds_weekly.time.values)[:10]} until {period_end}'
+wind_sst_title = f'Indian Ocean Weekly 10m Winds and SST Anomaly | {cal_period}'
 
 gef.plot_wind_and_sst_anomaly_weekly(
     ds_to_plot_winds_weekly, ds_to_plot_sst_weekly, wind_sst_title,
@@ -217,10 +217,10 @@ gef.plot_wind_and_sst_anomaly_weekly(
 # rainfall index from it - reconstruct the same weekly-accumulation-mark subset
 # (steps at 7-day multiples) that this plot's numbers have always been built from,
 # the same way plot_s2s.py picks its own weekly steps out of the daily main precip
-IO_precip=xr.open_zarr(f'{data_path}/ECMWF_s2s_precip_alt_{date_str}.zarr',consolidated=True).compute()
-IO_precip_step_hours=(IO_precip.step.values*1e-9/3600).astype('int')
-IO_precip_weekly_marks=IO_precip.step.values[IO_precip_step_hours % 168 == 0]
-IO_precip=IO_precip.sel(step=IO_precip_weekly_marks)
+IO_precip_raw=xr.open_zarr(f'{data_path}/ECMWF_s2s_precip_alt_{date_str}.zarr',consolidated=True).compute()
+IO_precip_step_hours=(IO_precip_raw.step.values*1e-9/3600).astype('int')
+IO_precip_weekly_marks=IO_precip_raw.step.values[IO_precip_step_hours % 168 == 0]
+IO_precip=IO_precip_raw.sel(step=IO_precip_weekly_marks)
 IO_precip_weekly=gef.acum_to_instant(IO_precip).isel(step=slice(None,4)).mean('number')
 # the zarr's native accumulation steps (7, 14, 21, 28) land 1 day past each
 # week's true last day - relabel onto that day to match the convention
@@ -236,8 +236,9 @@ if io_precip_mclimate_path:
     io_precip_mclimate = xr.open_dataset(io_precip_mclimate_path, engine="netcdf4", decode_timedelta=True) \
         .sortby('latitude', ascending=False)
 else:
-    # reforecasts give the model climatology to compare the forecast against, kept
-    # per-week (not summed) so a weekly anomaly can be computed alongside the monthly one
+    # reforecasts give the model climatology to compare the forecast against. Only the
+    # monthly fields are used now (the weekly map uses calendar weeks, see below); the
+    # rolling per-week ones are still kept so existing cache files keep the same layout
     reforecasts = gef.load_reforecast(date_str,'single',var='pr',bbox={'lat1': 20, 'lon1': 30, 'lat2': -20, 'lon2': 120},all_years=True)
     reforecasts_weekly_persist=gef.week_sum(reforecasts.isel(step=slice(0,28))*60*60*24)
     reforecasts_monthly=reforecasts_weekly_persist.sum('step')
@@ -281,22 +282,14 @@ plot_moisture_anomaly_map(
     monthly_save_path+f'ECMWF_s2s_precip_std_anomaly_{date_str}.png', **precip_colors,
 )
 
-# --- weekly: climatological median/spread kept per-week, positionally aligned onto
-# IO_precip_weekly's own step labels since the two step conventions aren't guaranteed
-# to share exact coordinate values ---
-n_precip_weeks = min(len(IO_precip_weekly.step), len(io_precip_mclimate.step))
-IO_precip_weekly = IO_precip_weekly.isel(step=slice(0, n_precip_weeks))
+# --- weekly: calendar-week totals vs. the reforecast climatology of the same calendar weeks ---
+IO_precip_calweek = gef.window_daily(gef.acum_to_instant(IO_precip_raw), cal_windows, init, how='sum').mean('number')
 
-mclimate_IO_weekly_precip = io_precip_mclimate.tp \
-    .isel(step=slice(0, n_precip_weeks)).assign_coords(step=IO_precip_weekly.step.values)
-std_IO_weekly_precip = io_precip_mclimate.tp_std \
-    .isel(step=slice(0, n_precip_weeks)).assign_coords(step=IO_precip_weekly.step.values)
+anom_precip_weekly = IO_precip_calweek - io_calweek_single.tp
+std_anom_precip_weekly = anom_precip_weekly / io_calweek_single.tp_std
 
-anom_precip_weekly = IO_precip_weekly - mclimate_IO_weekly_precip
-std_anom_precip_weekly = anom_precip_weekly / std_IO_weekly_precip
-
-precip_weekly_title = f'Indian Ocean Weekly Precipitation Anomaly | {str(anom_precip_weekly.time.values)[:10]} until {period_end}'
-std_precip_weekly_title = f'Indian Ocean Weekly Standardized Precipitation Anomaly | {str(anom_precip_weekly.time.values)[:10]} until {period_end}'
+precip_weekly_title = f'Indian Ocean Weekly Precipitation Anomaly | {cal_period}'
+std_precip_weekly_title = f'Indian Ocean Weekly Standardized Precipitation Anomaly | {cal_period}'
 
 plot_moisture_anomaly_weekly_map(
     anom_precip_weekly, 'tp', precip_weekly_title, 'Precipitation Anomaly (mm)',
@@ -310,13 +303,22 @@ plot_moisture_anomaly_weekly_map(
 # ========================================================
 # TCW ANOMALY (monthly total and per-week, first 4 weekly steps)
 # ========================================================
-IO_tcw=gef.week_mean(xr.open_zarr(f'{data_path}/ECMWF_s2s_tcw_{date_str}.zarr',consolidated=True).compute())
+IO_tcw_raw=xr.open_zarr(f'{data_path}/ECMWF_s2s_tcw_{date_str}.zarr',consolidated=True).compute()
+IO_tcw=gef.week_mean(IO_tcw_raw)
 m_climate_IO_tcw=gef.open_mclimate(IO_tcw,folder_path=f'{prefix}/m-climate/',var='tcw_global')
 
+# monthly: mean of the first 4 rolling weeks from init
 anom_tcw=(IO_tcw-m_climate_IO_tcw).isel(step=slice(None,4)).mean('number')
 
+# weekly: calendar weeks, with TCW estimated from q on the IVT pressure levels on both
+# sides (the reforecasts have q but no TCW, see gef.tcw_from_q)
+IO_plev_raw=xr.open_zarr(f'{data_path}/ECMWF_s2s_q_u_{date_str}.zarr',consolidated=True).compute()
+IO_plev_calweek=gef.window_mean(IO_plev_raw, cal_windows, init)
+anom_tcw_weekly=(gef.tcw_from_q(IO_plev_calweek.q, 'isobaricInhPa').to_dataset().mean('number')
+                 - io_calweek_moisture[['tcw']])
+
 period_end = str(anom_tcw.time.values + pd.Timedelta("28d"))[:10]
-tcw_weekly_title = f'Indian Ocean Weekly Total Column Water Anomaly | {str(anom_tcw.time.values)[:10]} until {period_end}'
+tcw_weekly_title = f'Indian Ocean Weekly Total Column Water (1000-300 hPa) Anomaly | {cal_period}'
 tcw_monthly_title = f'Indian Ocean Monthly Total Column Water Anomaly | {str(anom_tcw.time.values)[:10]} until {period_end}'
 
 tcw_colors = dict(
@@ -325,7 +327,7 @@ tcw_colors = dict(
 )
 
 plot_moisture_anomaly_weekly_map(
-    anom_tcw, 'tcw', tcw_weekly_title,
+    anom_tcw_weekly, 'tcw', tcw_weekly_title,
     'Total Column Water Anomaly [kg m$^{-2}$]',
     weekly_save_path+f'ECMWF_s2s_tcw_anomaly_{date_str}.png',
     **tcw_colors,
@@ -343,33 +345,36 @@ plot_moisture_anomaly_map(
 # IVT / Q+U WIND (vertically integrated zonal moisture transport,
 # monthly mean and per-week, first 4 weekly steps)
 # ========================================================
-IO_plev=gef.week_mean(xr.open_zarr(f'{data_path}/ECMWF_s2s_q_u_{date_str}.zarr',consolidated=True).compute())
+def zonal_ivt(plev):
+    """Zonal IVT (ensemble mean) from a q/u pressure-level dataset already averaged over its periods."""
+    return gef.zonal_ivt(plev.q, plev.u, 'isobaricInhPa').to_dataset().mean('number')
 
-g = 9.80665  # m/s^2
-flux_u = IO_plev.q * IO_plev.u
-
-ivt_u = flux_u.sortby('isobaricInhPa', ascending=True).sel(isobaricInhPa=slice(300,None)).integrate(coord="isobaricInhPa")
-# pressure_level is in hPa; multiply by 100 to get Pa, then divide by g
-ivt_u = (ivt_u * 100.0 / g)
-ivt_u.name = "ivt_u"
-ivt_u.attrs = {"units": "kg m-1 s-1", "long_name": "Vertically integrated zonal moisture transport"}
-
-ivt_weekly = ivt_u.to_dataset().isel(step=slice(None,4)).mean('number')
-ivt_monthly = ivt_weekly.mean('step')
+# monthly: mean of the first 4 rolling weeks from init
+ivt_monthly = zonal_ivt(gef.week_mean(IO_plev_raw)).isel(step=slice(None,4)).mean('step')
+# weekly: calendar weeks
+ivt_weekly = zonal_ivt(IO_plev_calweek)
 
 # model climatology (median) to compare against - the monthly reference has no
-# 'step' dim; the weekly one carries its native (non-week_mean) step labels, so
-# align it onto ivt_weekly's own step values like the wind/sst climatology above
-ivt_mclimate_monthly = gef.open_mclimate(ivt_monthly, folder_path=f'{prefix}/m-climate/', var='ivt_month').sel(quantile=0.5)
-ivt_mclimate_weekly = gef.open_mclimate(ivt_weekly, folder_path=f'{prefix}/m-climate/', var='ivt_week').sel(quantile=0.5)
-ivt_weekly, ivt_mclimate_weekly = _align_weekly_mclimate(ivt_weekly, ivt_mclimate_weekly)
+# 'step' dim; the weekly one is the reforecast climatology of the same calendar weeks
+ivt_mclimate_monthly_q = gef.open_mclimate(ivt_monthly, folder_path=f'{prefix}/m-climate/', var='ivt_month')
+ivt_mclimate_monthly = ivt_mclimate_monthly_q.sel(quantile=0.5)
+# ivt_month only stores quantiles, so the monthly spread is estimated from the
+# interquartile range (IQR / 1.349 = std-dev for a normal distribution)
+std_ivt_monthly = ((ivt_mclimate_monthly_q.ivt_u.sel(quantile=0.75)
+                    - ivt_mclimate_monthly_q.ivt_u.sel(quantile=0.25)) / 1.349)
 
 anom_ivt_monthly = ivt_monthly - ivt_mclimate_monthly
-anom_ivt_weekly = ivt_weekly - ivt_mclimate_weekly
+anom_ivt_weekly = ivt_weekly - io_calweek_moisture[['ivt_u']]
+
+# anomaly in std-dev units, like the standardized precipitation maps above
+std_anom_ivt_monthly = anom_ivt_monthly / std_ivt_monthly
+std_anom_ivt_weekly = anom_ivt_weekly / io_calweek_moisture.ivt_u_std
 
 period_end = str(anom_ivt_monthly.time.values + pd.Timedelta("28d"))[:10]
 ivt_title = f'Indian Ocean Monthly Eastward Moisture Transport Anomaly {str(anom_ivt_monthly.time.values)[:10]} until {period_end}'
-ivt_weekly_title = f'Indian Ocean Weekly Eastward Moisture Transport Anomaly | {str(anom_ivt_weekly.time.values)[:10]} until {period_end}'
+ivt_weekly_title = f'Indian Ocean Weekly Eastward Moisture Transport Anomaly | {cal_period}'
+std_ivt_title = f'Indian Ocean Monthly Standardized Eastward Moisture Transport Anomaly {str(anom_ivt_monthly.time.values)[:10]} until {period_end}'
+std_ivt_weekly_title = f'Indian Ocean Weekly Standardized Eastward Moisture Transport Anomaly | {cal_period}'
 
 ivt_colors = dict(
     neg_colors=["#8a29e1", "#0000fc", "#008b88", "#01fefd", "#afecee"],
@@ -387,4 +392,16 @@ plot_moisture_anomaly_weekly_map(
     'Zonal Moisture Transport Anomaly [kg m$^{-1}$ s$^{-1}$]',
     weekly_save_path+f'ECMWF_s2s_ivt_u_{date_str}.png',
     **ivt_colors,
+)
+plot_moisture_anomaly_map(
+    std_anom_ivt_monthly, 'ivt_u', std_ivt_title,
+    'Standardized Zonal Moisture Transport Anomaly',
+    monthly_save_path+f'ECMWF_s2s_ivt_u_std_anomaly_{date_str}.png',
+    **ivt_colors, limit=3,  # fixed +/-3 std-dev so days are comparable
+)
+plot_moisture_anomaly_weekly_map(
+    std_anom_ivt_weekly, 'ivt_u', std_ivt_weekly_title,
+    'Standardized Zonal Moisture Transport Anomaly',
+    weekly_save_path+f'ECMWF_s2s_ivt_u_std_anomaly_{date_str}.png',
+    **ivt_colors, limit=3,  # fixed +/-3 std-dev so days are comparable
 )

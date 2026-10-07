@@ -43,7 +43,7 @@ uvx --from "$DEV" forecasting-skills plot \
   --input step4.zarr --output chirps_kenya_weekly_rainfall.png
 
 DEV="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
-CLIM="git+https://github.com/rhiza-research/forecasting-skills@mohini/skills"
+CLIM="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 
 BBOX=5.506/33.893569/-4.67677/41.855083
 
@@ -64,7 +64,7 @@ uvx --from "$DEV" forecasting-skills aggregate-temporal \
   --align left --method mean --period weekly \
   --input step2.zarr --output step3.zarr
 
-# --- climatology branch (mohini/skills) ---
+# --- climatology branch ---
 uvx --from "$CLIM" forecasting-skills clim-fetch \
   --dataset chirps --variable precip \
   --window 7 --align left \

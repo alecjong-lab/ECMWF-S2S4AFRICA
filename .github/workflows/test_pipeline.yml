@@ -8,7 +8,7 @@ name: Test Pipeline (manual)
 #
 # Each stage can be turned off. Tick skills_only to skip every non-ws_scripts
 # stage (download, plot_s2s, Indian Ocean, climate indices, GEFS, downscale,
-# rainfall onset) in one go; those still restore from GCS. Fill ws_scripts
+# 0.4 degree downscale, rainfall onset, CHIRPS climatology) in one go; those still restore from GCS. Fill ws_scripts
 # with comma-separated stems to rebuild only those briefing plots (blank
 # keeps the current "all except timeseries_verification" set).
 # use_dev_template is ON by default here, so ai_weather_briefing.py builds from
@@ -25,7 +25,7 @@ name: Test Pipeline (manual)
 # have something to work with. One
 # known gap, harmless (continue-on-error is set throughout so nothing
 # blocks the run):
-#   - run_rainfall_onset.py's data/<date>/rainfall_onset_s2s_Kenya.nc is never
+#   - run_rainfall_onset.py's data/<date>/rainfall_onset_downscaled_Kenya.nc is never
 #     uploaded to GCS either. Skip rainfall_onset and ai_briefing's Kenya
 #     onset write-up will just be missing from the digest.
 #
@@ -49,7 +49,7 @@ on:
         required: false
         default: "genevieve@rhizaresearch.org"
       skills_only:
-        description: "Skip all non-weather-skills stages (download / plot_s2s / GEFS / downscale / onset / Indian Ocean / climate indices). Overrides the per-stage boxes below — they stay ticked in this form but are not honoured. Still runs ws_scripts + AI briefing; skipped stages restore from GCS."
+        description: "Skip all non-weather-skills stages (download / plot_s2s / GEFS / downscale / onset / CHIRPS climatology / Indian Ocean / climate indices). Overrides the per-stage boxes below — they stay ticked in this form but are not honoured. Still runs ws_scripts + AI briefing; skipped stages restore from GCS."
         type: boolean
         default: false
       run_download:
@@ -76,8 +76,16 @@ on:
         description: "Perform downscaling"
         type: boolean
         default: true
+      run_downscale_04deg:
+        description: "0.4 degree precip plots + Kenya weekly downscaling (replaces the 1.5 degree one when its forecast and hindcast are available)"
+        type: boolean
+        default: true
       run_rainfall_onset:
         description: "Run rainfall onset"
+        type: boolean
+        default: true
+      run_chirps_climatology:
+        description: "Run CHIRPS onset/spell climatology (Kenya-only)"
         type: boolean
         default: true
       run_briefing_slides:
@@ -162,7 +170,9 @@ jobs:
             stage climate_indices     "${{ inputs.run_climate_indices }}"
             stage plot_gefs           "${{ inputs.run_plot_gefs }}"
             stage downscale_dekade    "${{ inputs.run_downscale_dekade }}"
+            stage downscale_04deg     "${{ inputs.run_downscale_04deg }}"
             stage rainfall_onset      "${{ inputs.run_rainfall_onset }}"
+            stage chirps_climatology  "${{ inputs.run_chirps_climatology }}"
             echo
             echo "briefing_slides=${{ inputs.run_briefing_slides }}, ai_briefing=${{ inputs.run_ai_briefing }} (both unaffected by skills_only)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
@@ -262,7 +272,7 @@ jobs:
             for sub in weekly dekadal monthly; do
               src="plots/$country/$DATE_STR/$sub"
               mkdir -p "$src"
-              gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
+              gcloud storage rsync -r --no-clobber "gs://${BUCKET}/$src" "$src" || true
             done
           done
 
@@ -282,7 +292,7 @@ jobs:
         working-directory: main_repo
         run: |
           mkdir -p "plots/diagnostics/${DATE_STR}"
-          gcloud storage rsync -r "gs://${BUCKET}/plots/diagnostics/${DATE_STR}" "plots/diagnostics/${DATE_STR}"
+          gcloud storage rsync -r --no-clobber "gs://${BUCKET}/plots/diagnostics/${DATE_STR}" "plots/diagnostics/${DATE_STR}"
 
       # ── Stage: climate_indices_timeseries ───────────────────────────
       - name: Generate climate indices timeseries
@@ -322,7 +332,7 @@ jobs:
             for sub in weekly dekadal monthly; do
               src="plots/$country/$DATE_STR/$sub"
               mkdir -p "$src"
-              gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
+              gcloud storage rsync -r --no-clobber "gs://${BUCKET}/$src" "$src" || true
             done
           done
 
@@ -350,9 +360,43 @@ jobs:
             for sub in weekly dekadal; do
               src="plots/$country/$DATE_STR/$sub"
               mkdir -p "$src"
-              gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
+              gcloud storage rsync -r --no-clobber "gs://${BUCKET}/$src" "$src" || true
             done
           done
+
+      # ── Stage: downscale_04deg ──────────────────────────────────────
+      # 0.4 degree precipitation. plot_s2s_04deg_.py downloads the CHC forecast
+      # from the address in the FORECAST_04DEG_URL secret. The forecast itself is
+      # not public: it is kept as
+      # private_data/forecast_04deg/<date>/ECMWF_s2s_precip_04deg_<init>.zarr and
+      # its plots as private_plots/<country>/<date>/04deg/, outside data/ and
+      # plots/, so no step that publishes or emails those picks them up -- keep
+      # it that way. downscale_04deg_.py then overwrites the
+      # Kenya weekly downscaled outputs of the step above under their normal
+      # names -- but only when the forecast for DATE_STR and a hindcast close to
+      # that date are there; otherwise it exits and the 1.5 degree outputs stay.
+      # The hindcasts are read from the private gs://sheerwater-datalake/ecmwf-0_4 store
+      # with the credentials of "Auth to Google Cloud" above, so the service
+      # account needs read access to that bucket. Nothing to restore from GCS
+      # when skipped.
+      - name: Generate 0.4 degree precip plots
+        if: ${{ inputs.run_downscale_04deg && !inputs.skills_only }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python plot_s2s_04deg_.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          FORECAST_04DEG_URL: ${{ secrets.FORECAST_04DEG_URL }}
+
+      - name: Perform 0.4 degree downscaling
+        if: ${{ inputs.run_downscale_04deg && !inputs.skills_only && contains(inputs.countries, 'Kenya') }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python downscale_04deg_.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
 
       - name: Install rclone
         continue-on-error: true
@@ -387,8 +431,43 @@ jobs:
           for country in "${countries[@]}"; do
             src="plots/$country/$DATE_STR/monthly"
             mkdir -p "$src"
-            gcloud storage rsync -r "gs://${BUCKET}/$src" "$src" || true
+            gcloud storage rsync -r --no-clobber "gs://${BUCKET}/$src" "$src" || true
           done
+
+      # ── Stage: chirps_climatology (Kenya-only) ───────────────────────
+      # CHIRPS climatology counterparts of the downscaled onset/spell maps
+      # (the briefing's "_clim" pictures). Only the small derived results are
+      # cached (chirps_clim_cache/: per calendar week and per season), kept in
+      # the Actions cache rather than committed -- a cache key can't be
+      # overwritten, so restore the newest one by prefix and save under a
+      # hash of the contents, which only creates a new entry when this run
+      # added a week or season. Skipped: the plots come from GCS with the rest
+      # of plots/Kenya in "Restore Kenya plots" before the briefing.
+      - name: Restore CHIRPS climatology cache
+        if: ${{ inputs.run_chirps_climatology && !inputs.skills_only && contains(inputs.countries, 'Kenya') }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: main_repo/chirps_clim_cache
+          key: chirps-clim-Kenya-${{ github.run_id }}
+          restore-keys: chirps-clim-Kenya-
+
+      - name: Run CHIRPS climatology
+        if: ${{ inputs.run_chirps_climatology && !inputs.skills_only && contains(inputs.countries, 'Kenya') }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          COUNTRY=Kenya python chirps_agro_climatology.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+
+      - name: Save CHIRPS climatology cache
+        if: ${{ inputs.run_chirps_climatology && !inputs.skills_only && contains(inputs.countries, 'Kenya') && hashFiles('main_repo/chirps_clim_cache/**/*.nc') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: main_repo/chirps_clim_cache
+          key: chirps-clim-Kenya-${{ hashFiles('main_repo/chirps_clim_cache/**/*.nc') }}
 
       # ── Stage: briefing_slides (ws_scripts/*.sh, Kenya-hardcoded) ──
       - name: Resolve ws_scripts selection
@@ -596,7 +675,8 @@ jobs:
             "plots/diagnostics/${DATE_STR}"
           do
             mkdir -p "$rel"
-            gcloud storage rsync -r "gs://${BUCKET}/${rel}" "$rel" || true
+            # --no-clobber: only fill gaps, never overwrite plots this run just regenerated
+            gcloud storage rsync -r --no-clobber "gs://${BUCKET}/${rel}" "$rel" || true
           done
 
       # BRIEFING_TEMPLATE_ID picks which Google Slides deck
@@ -696,7 +776,7 @@ jobs:
           mapfile -t files < <(
             {
               find main_repo/plots/briefing -type f -name '*.png' 2>/dev/null
-              find main_repo/plots main_repo/private_plots main_repo/ws_scripts \
+              find main_repo/plots main_repo/ws_scripts \
                 -type f -name '*.png' 2>/dev/null | grep -v '/plots/briefing/' || true
             } | sort -u
           )

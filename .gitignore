@@ -14,3 +14,12 @@ WeatherbriefingKenya_template_with_alt.pptx
 .superpowers/
 kenya_bucket_staging/
 docs/superpowers/
+onset_forecast_cache/
+chirps_clim_cache/
+test_chirps_agro_climatology.py
+olr_obs/
+convert_hindcast_04deg_to_zarr.py
+data/**/*.zarr/
+# licensed ECMWF 0.4 degree data, never public (the forecast cut-outs are under private_data/)
+downscale_data/hindcast_04deg/
+*precip_04deg_*
