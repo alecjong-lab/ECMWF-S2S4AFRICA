@@ -26,7 +26,12 @@ degree weeks 5-6. Only run_rainfall_onset.py and the onset part of
 chirps_agro_climatology.py read it.
 
 Inputs
-    data/<date>/ECMWF_s2s_precip_04deg_<date>.zarr   written by plot_s2s_04deg_.py
+    private_data/forecast_04deg/<date>/ECMWF_s2s_precip_04deg_<date>.zarr
+                                                     written by plot_s2s_04deg_.py. Not
+                                                     public data, which is why it isn't
+                                                     under data/<date>/ (uploaded to the
+                                                     public bucket); only the downscaled
+                                                     outputs of this script go there
     <HINDCAST_04DEG_STORE>                           the hindcast zarr store in the private
                                                      bucket (init, year, number, step,
                                                      latitude, longitude; accumulated tp);
@@ -103,7 +108,7 @@ def keep_1p5deg(reason):
 #-----inputs, all checked before anything is written-------------------------------------------------------------------#
 # plot_s2s_04deg_.py falls back to an init a few days older when DATE_STR's isn't on
 # the server yet; fine for its own maps, not for the dated downscaled product
-precip_zarr=f'{data_path}/ECMWF_s2s_precip_04deg_{date_str}.zarr'
+precip_zarr=f'{prefix}/private_data/forecast_04deg/{date_str}/ECMWF_s2s_precip_04deg_{date_str}.zarr'
 if not os.path.isdir(precip_zarr):
     keep_1p5deg(f"no 0.4 degree forecast initialized on {date_str} ({precip_zarr} not found; "
                 f"plot_s2s_04deg_.py downloads it)")

@@ -3,9 +3,9 @@
 
 Reads the CHC-standardized 0.4 degree daily ensemble straight from CHC's server
 (pr_IFS-SUBS-0.4_<YYYYMMDD>.daily.nc, the init on DATE_STR or the closest one
-before it), and writes the same precip plots as plot_s2s.py, under the same
-filenames, into a 04deg/ subfolder of each country's weekly/, dekadal/ and
-monthly/ folders so the 1.5 degree plots are left alone.
+before it; the server's address comes from FORECAST_04DEG_URL), and writes the
+same precip plots as plot_s2s.py, under the same filenames, into
+private_plots/<country>/<date>/04deg/{weekly,dekadal,monthly}/.
 
 The 0.4 degree precipitation m-climate is made on the fly from the hindcast
 zarr store in the private bucket (needs Google credentials that can read it);
@@ -13,14 +13,24 @@ when that can't be opened, the files build_mclimate_0p4.py wrote to
 m-climate/T_pr_0p4/ are used instead.
 
 The cut-out of the forecast (the Horn of Africa by default) is kept as
-data/<date>/ECMWF_s2s_precip_04deg_<init>.zarr, in the same layout as
-ECMWF_s2s_precip_<date>.zarr, and reused when it is already there: the remote
-file is 1.6 GB and only a recent few are kept on CHC's server.
+private_data/forecast_04deg/<date>/ECMWF_s2s_precip_04deg_<init>.zarr, in the
+same layout as ECMWF_s2s_precip_<date>.zarr, and reused when it is already
+there: the remote file is 1.6 GB and only a recent few are kept on CHC's server.
+The 0.4 degree forecast is not public data. It is kept out of data/<date>/ on
+purpose: the workflows upload every .zarr under data/ to the public bucket,
+while private_data/ is gitignored and never uploaded. Don't write it, or
+anything it can be reconstructed from, under data/. The plots show the raw
+0.4 degree fields, so they stay out of plots/ (synced to the public bucket)
+for the same reason.
 
 Only precipitation exists at 0.4 degrees, so the temperature, wind and moisture
 plots, the website NetCDF export and the AI prompt data all stay in plot_s2s.py.
 
 Env vars: DATE_STR, MAIN_PATH and COUNTRIES as in plot_s2s.py, plus
+    FORECAST_04DEG_URL   address of the folder on CHC's server holding the monthly
+                         folders of forecasts. Not public: a GitHub secret in the
+                         workflows, test/.env locally. Without it only a cut-out
+                         that is already there is plotted.
     BOUNDING_BOX         "N,W,S,E" domain cut out of the global file. Defaults
                          to the Horn of Africa ("25,20,-15,55", what the 0.4
                          degree m-climate covers) rather than the workflows'
@@ -55,7 +65,8 @@ else:
     date_str = two_days_earlier.strftime("%Y-%m-%d")
 
 prefix=os.environ["MAIN_PATH"]
-data_path=f'{prefix}/data/{date_str}'
+# not under data/: see the note on the 0.4 degree forecast in the docstring
+forecast_path=f'{prefix}/private_data/forecast_04deg/{date_str}'
 hindcast_store=os.environ.get("HINDCAST_04DEG_STORE","gs://sheerwater-datalake/ecmwf-0_4/ECMWF_ext_range_hindcast_tp_04deg_2025.zarr")
 mclimate_path=os.environ.get("MCLIMATE_04DEG_PATH",f'{prefix}/m-climate/')
 # hindcast inits pooled into the m-climate: those within this many days of the forecast's
@@ -65,7 +76,8 @@ MCLIMATE_WEEKS=6
 bounding_box=list(map(float,os.environ.get("BOUNDING_BOX","25,20,-15,55").split(',')))
 
 #-----precip extended range, 0.4 degrees----------------------------------------------------------------------------#
-CHC_URL='https://data.chc.ucsb.edu/people/will/Requests/Genevieve/forecasts/pr/daily/IFS-SUBS-0.4'
+# the address is not public, so it is never printed either
+CHC_URL=os.environ.get("FORECAST_04DEG_URL","").strip().rstrip('/')
 # an init older than this many days before DATE_STR is not plotted as DATE_STR's forecast
 MAX_INIT_LAG_DAYS=3
 
@@ -84,7 +96,7 @@ def find_chc_forecast(date_str):
         try:
             html=requests.get(link,timeout=30).text
         except requests.RequestException as e:
-            print(f"Could not list {link} ({e})")
+            print(f"Could not list month {month} on CHC's server ({type(e).__name__})")
             continue
         for f in re.findall(r'href="(pr_IFS-SUBS-0\.4_(\d{8})\.daily\.nc)"',html):
             available[datetime.strptime(f[1],'%Y%m%d')]=link+f[0]
@@ -127,19 +139,22 @@ def download_04deg_precip(url,init_str):
         var.encoding.clear()
     return ds
 
-cached=sorted(glob.glob(f'{data_path}/ECMWF_s2s_precip_04deg_*.zarr'))
+cached=sorted(glob.glob(f'{forecast_path}/ECMWF_s2s_precip_04deg_*.zarr'))
 if cached:
     print(f"Using {cached[-1]}")
     data=xr.open_zarr(cached[-1],consolidated=True).compute()
 else:
+    if not CHC_URL:
+        print(f"Skipping 0.4 degree plots: FORECAST_04DEG_URL is not set and no forecast is in {forecast_path}")
+        sys.exit(0)
     url,init_str=find_chc_forecast(date_str)
     if url is None:
         print(f"Skipping 0.4 degree plots: no forecast initialized on {date_str} or up to "
-              f"{MAX_INIT_LAG_DAYS} days before it under {CHC_URL}")
+              f"{MAX_INIT_LAG_DAYS} days before it on CHC's server")
         sys.exit(0)
     if init_str!=date_str:
         print(f"No 0.4 degree forecast initialized on {date_str}, using the {init_str} one")
-    print(f"Downloading {url}")
+    print(f"Downloading the {init_str} forecast")
     # the range requests to CHC's server get reset now and then
     for attempt in range(1,4):
         try:
@@ -148,9 +163,9 @@ else:
         except Exception as e:
             if attempt==3:
                 raise
-            print(f"  download failed ({type(e).__name__}: {e}), retry {attempt}/2")
-    os.makedirs(data_path,exist_ok=True)
-    data.to_zarr(f'{data_path}/ECMWF_s2s_precip_04deg_{init_str}.zarr',mode='w',consolidated=True)
+            print(f"  download failed ({type(e).__name__}), retry {attempt}/2")
+    os.makedirs(forecast_path,exist_ok=True)
+    data.to_zarr(f'{forecast_path}/ECMWF_s2s_precip_04deg_{init_str}.zarr',mode='w',consolidated=True)
 
 steps=data.step.values*1e-9/3600
 steps=steps.astype('int')
@@ -265,10 +280,11 @@ for country in countries:
     m_climate=m_climate_big.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     fs={'Madagascar':12,'Malawi':14}.get(country,16)
 
-    base_path=f'plots/{country}/{date_str}'
-    weekly_path=f'{base_path}/weekly/04deg'
-    dekade_path=f'{base_path}/dekadal/04deg'
-    monthly_path=f'{base_path}/monthly/04deg'
+    # raw 0.4 degree fields: not under plots/, which is synced to the public bucket
+    base_path=f'private_plots/{country}/{date_str}/04deg'
+    weekly_path=f'{base_path}/weekly'
+    dekade_path=f'{base_path}/dekadal'
+    monthly_path=f'{base_path}/monthly'
 
     os.makedirs(weekly_path, exist_ok=True)
     os.makedirs(dekade_path, exist_ok=True)

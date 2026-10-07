@@ -366,8 +366,12 @@ jobs:
 
       # ── Stage: downscale_04deg ──────────────────────────────────────
       # 0.4 degree precipitation. plot_s2s_04deg_.py downloads the CHC forecast
-      # (kept as data/<date>/ECMWF_s2s_precip_04deg_<init>.zarr) and writes its
-      # plots into 04deg/ subfolders. downscale_04deg_.py then overwrites the
+      # from the address in the FORECAST_04DEG_URL secret. The forecast itself is
+      # not public: it is kept as
+      # private_data/forecast_04deg/<date>/ECMWF_s2s_precip_04deg_<init>.zarr and
+      # its plots as private_plots/<country>/<date>/04deg/, outside data/ and
+      # plots/, so no step that publishes or emails those picks them up -- keep
+      # it that way. downscale_04deg_.py then overwrites the
       # Kenya weekly downscaled outputs of the step above under their normal
       # names -- but only when the forecast for DATE_STR and a hindcast close to
       # that date are there; otherwise it exits and the 1.5 degree outputs stay.
@@ -383,6 +387,7 @@ jobs:
           python plot_s2s_04deg_.py
         env:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
+          FORECAST_04DEG_URL: ${{ secrets.FORECAST_04DEG_URL }}
 
       - name: Perform 0.4 degree downscaling
         if: ${{ inputs.run_downscale_04deg && !inputs.skills_only && contains(inputs.countries, 'Kenya') }}
