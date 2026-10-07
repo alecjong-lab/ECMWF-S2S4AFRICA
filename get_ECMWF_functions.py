@@ -455,6 +455,81 @@ def build_rescaled_forecast(extended_fclim, chirps_ds, attrs_source, var='tp', u
     rescaled[var].attrs = attrs_source[var].attrs
     return rescaled
 
+def align_to_forecast_grid(clim, forecast):
+    """
+    A climatology/hindcast field on the forecast's own grid points, limited to
+    the part of the forecast grid the field covers. Comparing the two cell by
+    cell needs identical coordinates; when the field sits on another grid (the
+    first 0.4 degree hindcasts were half a cell off the forecast in latitude) it
+    is linearly interpolated onto the forecast's points, otherwise just selected.
+    """
+    clim = clim.sortby('latitude', ascending=False)
+    clim = clim.assign_coords(latitude=np.round(clim.latitude.values, 4), longitude=np.round(clim.longitude.values, 4))
+    lats = forecast.latitude.sel(latitude=slice(float(clim.latitude.max()), float(clim.latitude.min()))).values
+    lons = forecast.longitude.sel(longitude=slice(float(clim.longitude.min()), float(clim.longitude.max()))).values
+    if np.isin(lats, clim.latitude.values).all() and np.isin(lons, clim.longitude.values).all():
+        return clim.sel(latitude=lats, longitude=lons)
+    print("climatology is not on the forecast grid, interpolating it onto the forecast's points")
+    return clim.interp(latitude=lats, longitude=lons)
+
+def rank_downscale_to_grid(forecast_da, hindcast_da, target_da, rank_dim='year',
+                           closing_size=None, rank_sigma=0, field_sigma=0):
+    """
+    Empirical quantile matching of a forecast onto a finer observed climatology,
+    for any grid spacing -- the counterpart of rank_upscale_and_align, which is
+    tied to 1.5 degree cells (a fixed x30 repeat lined up with the target by
+    array position).
+
+    Each forecast value is ranked among the hindcast years of its own cell and
+    lead, every target cell takes the rank of its nearest forecast cell, and that
+    rank picks a value out of the target's sorted years.
+
+    Parameters
+    ----------
+    forecast_da : (..., step, latitude, longitude), e.g. with a leading 'number'
+    hindcast_da : (rank_dim, step, latitude, longitude) on forecast_da's grid
+    target_da : (step, rank, latitude, longitude), sorted along 'rank' (see
+        sort_by_rank), on the fine grid
+    closing_size : window (fine-grid cells) of a grey closing of the ranks, which
+        fills small low-rank holes from their surroundings; None/0 skips it
+    rank_sigma : gaussian sigma (fine-grid cells) smoothing the ranks across
+        forecast-cell edges; 0 skips it
+    field_sigma : gaussian sigma (fine-grid cells) smoothing the final field; 0 skips it
+
+    A forecast among N hindcast years has N + 1 possible positions (below all of
+    them ... above all of them). That position is scaled onto the target's ranks,
+    so the two don't need the same number of years: 20 hindcast years give
+    positions 0..20, exactly the 21 ranks of a 21-year target.
+    """
+    n_years = hindcast_da.sizes[rank_dim]
+    n_ranks = target_da.sizes['rank']
+
+    # position among the hindcast years, ties sharing the average like DataArray.rank
+    position = (hindcast_da < forecast_da).sum(rank_dim) + 0.5 * (hindcast_da == forecast_da).sum(rank_dim)
+    index = np.ceil(position / n_years * (n_ranks - 1) - 0.5).clip(0, n_ranks - 1)
+
+    # every fine cell takes its nearest forecast cell's rank
+    index = index.sel(latitude=target_da.latitude, longitude=target_da.longitude, method='nearest')
+    index = index.assign_coords(latitude=target_da.latitude, longitude=target_da.longitude)
+    index = index.transpose(..., 'latitude', 'longitude')
+
+    values = index.values
+    lead = (1,) * (values.ndim - 2)
+    if closing_size:
+        values = grey_closing(values, size=lead + (closing_size, closing_size))
+    if rank_sigma:
+        values = gaussian_filter(values, sigma=(0,) * (values.ndim - 2) + (rank_sigma, rank_sigma))
+    index = index.copy(data=np.rint(values).clip(0, n_ranks - 1).astype('int16'))
+
+    # the picked rank per cell would otherwise ride along as a full-size coordinate
+    downscaled = target_da.isel(rank=index).drop_vars('rank', errors='ignore')
+    if field_sigma:
+        downscaled = downscaled.transpose(..., 'latitude', 'longitude')
+        sigma = (0,) * (downscaled.ndim - 2) + (field_sigma, field_sigma)
+        downscaled = downscaled.copy(data=nan_gaussian_filter(downscaled.values, sigma))
+    # keep the target's own gaps (sea, outside its domain)
+    return downscaled + target_da.isel(rank=0, drop=True) * 0
+
 def compute_rainfall_anomaly(forecast_ds, climatology_ds, var='tp', rank_dim='rank'):
     """forecast_ds - climatology_ds.mean(rank_dim), tagged with rainfall-anomaly attrs."""
     anomaly = forecast_ds - climatology_ds.mean(rank_dim)
@@ -637,6 +712,21 @@ def discrete_cmap(name, boundaries, start=0.08):
         colors = matplotlib.colormaps[name](np.linspace(start, 1.0, n_bins))
     return mcolors.ListedColormap(colors), mcolors.BoundaryNorm(boundaries, n_bins)
 
+def week_spell_scale(colors, max_days):
+    """
+    (cmap, norm, ticks) for median spell lengths within a week: one colour per
+    whole day from 0 up to max_days, the longest week being shown, so the
+    colourbar ends at the longest spell that can actually occur (7 for 7-day
+    weeks) with each day's label centred on its colour. A day count keeps the
+    same colour whatever max_days is. Calendar weeks running from the 22nd to
+    the month's end are up to 10 days long, one more than `colors` has room
+    for: the last colour then holds both 9 and 10.
+    """
+    top = min(max_days, len(colors) - 1)
+    bounds = list(np.arange(-0.5, top)) + [max_days + 0.5]
+    cmap_, norm = discrete_cmap(list(colors[:top + 1]), bounds)
+    return cmap_, norm, list(range(top + 1))
+
 def plot_downscaled_exceedance(week_totals, threshold, shapefile_path, save_path, fontsize):
     """
     Chance (% of ensemble members) of the downscaled forecast exceeding
@@ -741,11 +831,11 @@ def plot_downscaled_spell_maps(rescaled_forecast, data, shapefile_path, save_dir
         count_above = (probs >= 50).sum('spell_length')
         median_length = (count_above - 1).where(count_above > 0)
         ds = to_plot(median_length, f'Median {spell_name} spell length in the week', 'days')
-        days_cmap, days_norm = discrete_cmap(spell_colors, WEEK_SPELL_DAY_BOUNDS)
+        days_cmap, days_norm, days_ticks = week_spell_scale(spell_colors, int(windows.n_days.max()))
         with extent_of(ds):
             plot_panel_and_save(ds, 'tp', days_cmap, fontsize,
                                 f'{save_dir}/median_{spell_name}spell_length{suffix}.png',
-                                norm=days_norm, cbar_ticks=WEEK_SPELL_DAY_BOUNDS, boundary_gdf=outline, boundary_axes=slice(0, n_panels))
+                                norm=days_norm, cbar_ticks=days_ticks, boundary_gdf=outline, boundary_axes=slice(0, n_panels))
         plt.close()
 
     return week_totals
@@ -1164,6 +1254,21 @@ def calendar_windows(init_time, n_windows=4, boundaries=(1, 8, 15, 22), max_lead
         raise ValueError(f"{n_windows} calendar windows from {init:%Y-%m-%d} need {lead_days} "
                          f"lead days, forecast only covers {max_lead_days}")
     return windows
+
+def calendar_windows_that_fit(init_time, max_lead_days, n_windows=4, boundaries=(1, 8, 15, 22)):
+    """
+    calendar_windows, but with as many of the n_windows as lie inside
+    max_lead_days instead of raising when the last one doesn't: a forecast
+    shorter than the 42 days four calendar weeks can need (the 28-day 0.4
+    degree downscaled one) still gets the two or three weeks it does cover.
+    Raises only when not even one fits.
+    """
+    for n in range(n_windows, 0, -1):
+        try:
+            return calendar_windows(init_time, n_windows=n, boundaries=boundaries, max_lead_days=max_lead_days)
+        except ValueError:
+            continue
+    raise ValueError(f"no calendar window from {pd.Timestamp(init_time):%Y-%m-%d} fits in {max_lead_days} lead days")
 
 def window_coords(windows, init_time):
     """
@@ -2885,6 +2990,20 @@ def gaussian_filter_ignore_nan(field, sigma):
     result[nan_mask] = np.nan
 
     return result
+
+def save_downscaled_zarr(ds, path):
+    """Write a downscaled forecast as a zarr store, replacing any store already there.
+    The .zarr stores in data/<date>/ are what the workflows upload (NetCDF is skipped).
+    One chunk per step, each holding the whole map: crop_kenya_zarr.py cuts these stores
+    to the Kenya box, and a chunk boundary inside the map leaves it uneven chunks that
+    zarr refuses to write."""
+    if isinstance(ds, xr.DataArray):
+        ds = ds.to_dataset(name=ds.name or 'tp')
+    ds = ds.copy()
+    for var in ds.variables.values():
+        var.encoding.clear()
+    ds = ds.chunk({dim: 1 if dim == 'step' else -1 for dim in ds.dims})
+    ds.to_zarr(path, mode='w', consolidated=True)
 
 def disaggregate_weekly_to_daily(
     rescaled_forecast: xr.DataArray, data: xr.DataArray, profile_sigma=None

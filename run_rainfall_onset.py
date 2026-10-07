@@ -317,6 +317,17 @@ def forecast_files(init):
     return ['data_weekly_Kenya_downscaled.nc', f'ECMWF_s2s_precip_{init}.zarr']
 
 
+# When the weekly downscaled forecast is the 4-week 0.4 degree one, downscale_04deg_.py
+# also writes this file: the same weeks followed by the 1.5 degree weeks 5-6, so the
+# onset definitions keep their 6-week look-ahead. Used instead when it is there.
+ONSET_WEEKLY_FILE = 'data_weekly_Kenya_downscaled_onset.nc'
+
+
+def downscaled_weekly_path(path):
+    onset_path = f'{path}/{ONSET_WEEKLY_FILE}'
+    return onset_path if os.path.exists(onset_path) else f'{path}/data_weekly_Kenya_downscaled.nc'
+
+
 def has_forecast(path, init):
     return all(os.path.exists(f'{path}/{f}') for f in forecast_files(init))
 
@@ -343,6 +354,8 @@ def fetch_forecast(init):
             if not fs.exists(f'{remote}/{f}'):
                 raise FileNotFoundError(f'gs://{remote}/{f}')
             fs.get(f'{remote}/{f}', f'{tmp}/{f}', recursive=True)
+        if fs.exists(f'{remote}/{ONSET_WEEKLY_FILE}'):
+            fs.get(f'{remote}/{ONSET_WEEKLY_FILE}', f'{tmp}/{ONSET_WEEKLY_FILE}')
     except Exception as e:
         print(f"forecast: {init} not available from the bucket ({e})")
         shutil.rmtree(tmp, ignore_errors=True)
@@ -397,7 +410,10 @@ def load_daily_downscaled_forecast(chirps, forecast_date, forecast_path):
     Forecast step s covers the 24h ending at init + s, i.e. the rain that falls
     on date init + s - 1 day -- matching CHIRPS's "24h starting at time" label.
     """
-    rescaled = xr.open_dataset(f'{forecast_path}/data_weekly_Kenya_downscaled.nc').load()
+    weekly_path = downscaled_weekly_path(forecast_path)
+    rescaled = xr.open_dataset(weekly_path).load()
+    print(f"forecast: {rescaled.sizes['step']} weeks from {os.path.basename(weekly_path)}"
+          + (f" ({rescaled.attrs['forecast_resolution']})" if 'forecast_resolution' in rescaled.attrs else ""))
     rescaled = rescaled.interp(latitude=chirps.latitude, longitude=chirps.longitude)
     s2s = xr.open_zarr(f'{forecast_path}/ECMWF_s2s_precip_{forecast_date}.zarr', consolidated=True).compute()
     init = pd.Timestamp(s2s.time.values)

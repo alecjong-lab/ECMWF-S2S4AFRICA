@@ -29,6 +29,11 @@ STAGES = [
     "climate_indices_timeseries",
     "plot_gefs",
     "dowscale_dekade",
+    # 0.4 degree precip: plot_s2s_04deg_ downloads the forecast (network) and plots it,
+    # downscale_04deg_ then replaces dowscale_dekade's Kenya weekly outputs when the
+    # forecast and a matching hindcast are there
+    "plot_s2s_04deg_",
+    "downscale_04deg_",
     "run_rainfall_onset",
     "chirps_agro_climatology",
     "replot_precip_shared_colorscale",

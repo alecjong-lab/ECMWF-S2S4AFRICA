@@ -8,7 +8,7 @@ name: Test Pipeline (manual)
 #
 # Each stage can be turned off. Tick skills_only to skip every non-ws_scripts
 # stage (download, plot_s2s, Indian Ocean, climate indices, GEFS, downscale,
-# rainfall onset, CHIRPS climatology) in one go; those still restore from GCS. Fill ws_scripts
+# 0.4 degree downscale, rainfall onset, CHIRPS climatology) in one go; those still restore from GCS. Fill ws_scripts
 # with comma-separated stems to rebuild only those briefing plots (blank
 # keeps the current "all except timeseries_verification" set).
 # use_dev_template is ON by default here, so ai_weather_briefing.py builds from
@@ -74,6 +74,10 @@ on:
         default: true
       run_downscale_dekade:
         description: "Perform downscaling"
+        type: boolean
+        default: true
+      run_downscale_04deg:
+        description: "0.4 degree precip plots + Kenya weekly downscaling (replaces the 1.5 degree one when its forecast and hindcast are available)"
         type: boolean
         default: true
       run_rainfall_onset:
@@ -166,6 +170,7 @@ jobs:
             stage climate_indices     "${{ inputs.run_climate_indices }}"
             stage plot_gefs           "${{ inputs.run_plot_gefs }}"
             stage downscale_dekade    "${{ inputs.run_downscale_dekade }}"
+            stage downscale_04deg     "${{ inputs.run_downscale_04deg }}"
             stage rainfall_onset      "${{ inputs.run_rainfall_onset }}"
             stage chirps_climatology  "${{ inputs.run_chirps_climatology }}"
             echo
@@ -358,6 +363,35 @@ jobs:
               gcloud storage rsync -r --no-clobber "gs://${BUCKET}/$src" "$src" || true
             done
           done
+
+      # ── Stage: downscale_04deg ──────────────────────────────────────
+      # 0.4 degree precipitation. plot_s2s_04deg_.py downloads the CHC forecast
+      # (kept as data/<date>/ECMWF_s2s_precip_04deg_<init>.zarr) and writes its
+      # plots into 04deg/ subfolders. downscale_04deg_.py then overwrites the
+      # Kenya weekly downscaled outputs of the step above under their normal
+      # names -- but only when the forecast for DATE_STR and a hindcast close to
+      # that date are there; otherwise it exits and the 1.5 degree outputs stay.
+      # The hindcasts are read from the private gs://sheerwater-datalake/ecmwf-0_4 store
+      # with the credentials of "Auth to Google Cloud" above, so the service
+      # account needs read access to that bucket. Nothing to restore from GCS
+      # when skipped.
+      - name: Generate 0.4 degree precip plots
+        if: ${{ inputs.run_downscale_04deg && !inputs.skills_only }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python plot_s2s_04deg_.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+
+      - name: Perform 0.4 degree downscaling
+        if: ${{ inputs.run_downscale_04deg && !inputs.skills_only && contains(inputs.countries, 'Kenya') }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python downscale_04deg_.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
 
       - name: Install rclone
         continue-on-error: true

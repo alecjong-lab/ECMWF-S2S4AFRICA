@@ -349,6 +349,7 @@ for country in countries_to_downscale:
             latitude=slice(weekly_bboxes['Kenya']['lat1'], weekly_bboxes['Kenya']['lat2']),
         )
         kenya_weekly.to_netcdf(f'data/{date_str}/data_weekly_Kenya_downscaled.nc')
+        gef.save_downscaled_zarr(kenya_weekly, f'data/{date_str}/data_weekly_Kenya_downscaled.zarr')
 
     tick(f'weekly {country}: concat members + save nc')
     rescaled_forecast_month = rescaled_forecast.isel(step=slice(0,4)).sum('step',keep_attrs=True).assign_coords(step=rescaled_forecast.isel(step=3).step).expand_dims('step')
@@ -400,6 +401,8 @@ for country in countries_to_downscale:
             f'{data_path}/daily_downscaled_kenya.tif',
             tags={"band_dim_name": "day"},
         )
+        # the same ensemble-mean daily field as a zarr store
+        gef.save_downscaled_zarr(daily_downscaled.tp.astype('float32').transpose('step','latitude','longitude'), f'{data_path}/daily_downscaled_kenya.zarr')
 
         tick('weekly Kenya: daily downscaled GeoTIFF')
         # Dry/wet spell maps per calendar week (1st/8th/15th/22nd of the month, see

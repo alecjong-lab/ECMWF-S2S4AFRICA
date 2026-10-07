@@ -123,11 +123,17 @@ if season_start > init:
     season_start -= pd.DateOffset(years=1)
 
 
-def forecast_horizon_days():
+def forecast_horizon_days(for_onset=False):
     """Lead days the downscaled forecast covers (42 for the weekly downscaled
     product), read from this date's file when it's there -- the same number
-    dowscale_dekade.py passes calendar_windows as max_lead_days."""
+    dowscale_dekade.py passes calendar_windows as max_lead_days. for_onset:
+    the horizon run_rainfall_onset.py works with, which is longer when the
+    weekly product is the 4-week 0.4 degree one (downscale_04deg_.py then keeps
+    the 1.5 degree weeks 5-6 in data_weekly_Kenya_downscaled_onset.nc)."""
     path = f'{data_path}/data_weekly_Kenya_downscaled.nc'
+    onset_path = f'{data_path}/data_weekly_Kenya_downscaled_onset.nc'
+    if for_onset and os.path.exists(onset_path):
+        path = onset_path
     if os.path.exists(path):
         with xr.open_dataset(path) as ds:
             return int(ds.step.values[-1] / np.timedelta64(1, 'D'))
@@ -406,28 +412,30 @@ def plot_analog_onsets(onset_days, land, label, pad_days, save_path):
 
 fs = 16
 horizon = forecast_horizon_days()
-# last rain date the downscaled forecast covers: step s is the rain on init + s - 1 day
-series_end = init + pd.Timedelta(days=horizon - 1)
+# last rain date the onset forecast covers: step s is the rain on init + s - 1 day
+series_end = init + pd.Timedelta(days=forecast_horizon_days(for_onset=True) - 1)
 outline = (gpd.read_file(kenya_shapefile).set_crs("EPSG:4326", allow_override=True).dissolve()
            if country == 'Kenya' else None)
 
 # ---- dry / wet spells per calendar week ----------------------------------------
 try:
-    windows = gef.calendar_windows(init.to_datetime64(), max_lead_days=horizon)
+    # as many calendar weeks as the downscaled forecast covers, like its own spell maps
+    windows = gef.calendar_windows_that_fit(init.to_datetime64(), max_lead_days=horizon)
     print(f"{country}: calendar weeks {', '.join(windows.label)}")
     stats, years = load_week_spell_stats(windows)
     n_panels = len(windows)
 
-    def save_panels(da, name, units, colors, bounds, save_path):
+    def save_panels(da, name, units, colors, bounds, save_path, scale=None):
         # the shape plot_downscaled_spell_maps' to_plot builds: a 'tp' dataset
         # with one step per calendar week (panel titles from the window coords)
         da = da.assign_coords(time=init.to_datetime64())
         da.attrs['GRIB_name'] = name
         da.attrs['units'] = units
         ds = da.to_dataset(name='tp')
-        cmap_, norm = gef.discrete_cmap(colors, bounds)
+        # scale: a ready (cmap, norm, ticks), for scales that aren't one colour per `bounds` bin
+        cmap_, norm, ticks = scale or (*gef.discrete_cmap(colors, bounds), bounds)
         with gef.extent_of(ds):  # map ends at the shapefile's edges, not the country bbox
-            gef.plot_panel_and_save(ds, 'tp', cmap_, fs, save_path, norm=norm, cbar_ticks=bounds,
+            gef.plot_panel_and_save(ds, 'tp', cmap_, fs, save_path, norm=norm, cbar_ticks=ticks,
                                     boundary_gdf=outline, boundary_axes=slice(0, n_panels))
         plt.close()
 
@@ -438,8 +446,9 @@ try:
                         spell_colors, gef.PROB_BOUNDS,
                         f'{weekly_dir}/prob_{spell_name}spell_{min_len}days_chirps_clim.png')
         save_panels(stats[f'{spell_name}_median'], f'clim. median {spell_name} spell length in the week', 'days',
-                    spell_colors, gef.WEEK_SPELL_DAY_BOUNDS,
-                    f'{weekly_dir}/median_{spell_name}spell_length_chirps_clim.png')
+                    spell_colors, None,
+                    f'{weekly_dir}/median_{spell_name}spell_length_chirps_clim.png',
+                    scale=gef.week_spell_scale(spell_colors, int(windows.n_days.max())))
     print(f"spells: CHIRPS {years} climatology maps -> {weekly_dir}/*_chirps_clim.png")
 except Exception as e:
     print(f"spells: CHIRPS climatology failed ({e}), skipping")

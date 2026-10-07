@@ -18,4 +18,5 @@ onset_forecast_cache/
 chirps_clim_cache/
 test_chirps_agro_climatology.py
 olr_obs/
+convert_hindcast_04deg_to_zarr.py
 data/**/*.zarr/
