@@ -370,6 +370,41 @@ jobs:
           WEEK_COUNTRIES: "Kenya"
           DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
 
+      # ── 0.4 degree precipitation ────────────────────────────────────
+      # plot_s2s_04deg_.py downloads the CHC forecast from the address in the
+      # FORECAST_04DEG_URL secret. The forecast itself is not public: it is kept
+      # as private_data/forecast_04deg/<date>/ECMWF_s2s_precip_04deg_<init>.zarr
+      # and its plots as private_plots/<country>/<date>/04deg/, outside data/
+      # and plots/, so no step that publishes or emails those picks them up --
+      # keep it that way. downscale_04deg_.py then overwrites the Kenya weekly
+      # downscaled outputs of the step above under their normal names -- but
+      # only when the forecast for DATE_STR and a hindcast close to that date
+      # are there; otherwise it exits and the 1.5 degree outputs stay. The
+      # hindcasts are read from the private gs://sheerwater-datalake/ecmwf-0_4
+      # store with the credentials of "Auth to Google Cloud" above, so the
+      # service account needs read access to that bucket.
+      - name: Generate 0.4 degree precip plots
+        if: ${{ steps.detect.outputs.run_downscale != 'false' }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python plot_s2s_04deg_.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          COUNTRIES: "Kenya"
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+          FORECAST_04DEG_URL: ${{ secrets.FORECAST_04DEG_URL }}
+
+      - name: Perform 0.4 degree downscaling
+        if: ${{ steps.detect.outputs.run_downscale != 'false' }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python downscale_04deg_.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+
       - name: Run rainfall onset
         if: ${{ steps.detect.outputs.run_rainfall_onset != 'false' }}
         continue-on-error: true
