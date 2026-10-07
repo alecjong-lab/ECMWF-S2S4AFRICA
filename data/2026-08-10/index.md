@@ -1,18 +1,5 @@
 # Domain-wide — 2026-08-10
 
-- [ECMWF_s2s_control_forecast_10wind_42days_7N-32E-6S-43E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_control_forecast_10wind_42days_7N-32E-6S-43E.grib.5b7b6.idx)
-- [ECMWF_s2s_control_forecast_500wind_42days_7N-32E-6S-43E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_control_forecast_500wind_42days_7N-32E-6S-43E.grib.5b7b6.idx)
-- [ECMWF_s2s_control_forecast_700wind_42days_7N-32E-6S-43E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_control_forecast_700wind_42days_7N-32E-6S-43E.grib.5b7b6.idx)
-- [ECMWF_s2s_control_forecast_CAPE_tcw_t2m_d2m_RH_42days_7N-32E-6S-43E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_control_forecast_CAPE_tcw_t2m_d2m_RH_42days_7N-32E-6S-43E.grib.5b7b6.idx)
-- [ECMWF_s2s_control_forecast_Tminmax_42days_7N-32E-6S-43E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_control_forecast_Tminmax_42days_7N-32E-6S-43E.grib.5b7b6.idx)
-- [ECMWF_s2s_control_forecast_forecast_precip_46days_23N-20W-37S-59E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_control_forecast_forecast_precip_46days_23N-20W-37S-59E.grib.5b7b6.idx)
-- [ECMWF_s2s_perturbed_forecast_10wind_42days_7N-32E-6S-43E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_perturbed_forecast_10wind_42days_7N-32E-6S-43E.grib.5b7b6.idx)
-- [ECMWF_s2s_perturbed_forecast_500wind_42days_7N-32E-6S-43E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_perturbed_forecast_500wind_42days_7N-32E-6S-43E.grib.5b7b6.idx)
-- [ECMWF_s2s_perturbed_forecast_700wind_42days_7N-32E-6S-43E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_perturbed_forecast_700wind_42days_7N-32E-6S-43E.grib.5b7b6.idx)
-- [ECMWF_s2s_perturbed_forecast_CAPE_tcw_t2m_d2m_RH_42days_7N-32E-6S-43E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_perturbed_forecast_CAPE_tcw_t2m_d2m_RH_42days_7N-32E-6S-43E.grib.5b7b6.idx)
-- [ECMWF_s2s_perturbed_forecast_Tminmax_42days_7N-32E-6S-43E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_perturbed_forecast_Tminmax_42days_7N-32E-6S-43E.grib.5b7b6.idx)
-- [ECMWF_s2s_perturbed_forecast_forecast_precip_46days_23N-20W-37S-59E.grib.5b7b6.idx](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_perturbed_forecast_forecast_precip_46days_23N-20W-37S-59E.grib.5b7b6.idx)
-- [daily_downscaled_kenya.tif](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-10/daily_downscaled_kenya.tif)
 - **ECMWF_s2s_10wind_2026-08-10.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_10wind_2026-08-10.zarr) · `gs://africa-forecasting-data/data/2026-08-10/ECMWF_s2s_10wind_2026-08-10.zarr`
 - **ECMWF_s2s_500wind_2026-08-10.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_500wind_2026-08-10.zarr) · `gs://africa-forecasting-data/data/2026-08-10/ECMWF_s2s_500wind_2026-08-10.zarr`
 - **ECMWF_s2s_700wind_2026-08-10.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-08-10/ECMWF_s2s_700wind_2026-08-10.zarr) · `gs://africa-forecasting-data/data/2026-08-10/ECMWF_s2s_700wind_2026-08-10.zarr`

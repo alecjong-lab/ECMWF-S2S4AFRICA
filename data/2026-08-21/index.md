@@ -1,6 +1,5 @@
 # Domain-wide — 2026-08-21
 
-- [daily_downscaled_kenya.tif](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-21/daily_downscaled_kenya.tif)
 - [downscaled_rainfall_forecast_init_2026-08-21_August_Dekad3.tif](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-21/geotifs_kenya/downscaled_rainfall_forecast_init_2026-08-21_August_Dekad3.tif)
 - [downscaled_rainfall_forecast_init_2026-08-21_August_Dekad3.tif.bil](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-21/geotifs_kenya/downscaled_rainfall_forecast_init_2026-08-21_August_Dekad3.tif.bil)
 - [downscaled_rainfall_forecast_init_2026-08-21_August_Dekad3.tif.bil.aux.xml](https://storage.googleapis.com/africa-forecasting-data/data/2026-08-21/geotifs_kenya/downscaled_rainfall_forecast_init_2026-08-21_August_Dekad3.tif.bil.aux.xml)

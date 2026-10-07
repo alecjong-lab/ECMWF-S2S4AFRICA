@@ -15,10 +15,12 @@
 #
 # Scheduling: GitHub only reads `schedule:` cron triggers from workflow
 # files on the repo's default branch, so THIS FILE must live on `main` for
-# the cron below to fire at all — even though every checkout step in the
-# job pins `ref: dev` so the actual pipeline code that runs is dev's. A
-# manual `workflow_dispatch` run also always uses `ref: dev`, regardless of
-# which branch you pick in the Actions "Run workflow" dropdown.
+# the cron below to fire at all. But a run started from `main` also uses
+# `main`'s copy of this YAML (its steps/env), not dev's — pinning checkouts
+# to `ref: dev` only swaps the scripts. So any run whose github.ref isn't
+# dev (the nightly cron, or a manual run started from another branch) does
+# nothing but re-dispatch this workflow on `dev` via the redispatch-to-dev
+# job; the real jobs only ever run from dev's copy of this file.
 name: "Dev Briefing Generation Pipeline"
 
 permissions:
@@ -48,7 +50,33 @@ on:
         default: "genevieve@rhizaresearch.org,mohini@rhizaresearch.org,alec.jong@gmail.com"
 
 jobs:
+  redispatch-to-dev:
+    if: github.ref != 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Re-run this workflow from the dev branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          IN_DATE_STR: ${{ inputs.date_str }}
+          IN_FORCE_ALL: ${{ inputs.force_all }}
+          IN_TEST_RECIPIENTS: ${{ inputs.test_recipients }}
+        run: |
+          echo "Triggered on ${GITHUB_REF} (${EVENT_NAME}); re-dispatching on dev."
+          args=()
+          # A scheduled run has no inputs, so dev's workflow_dispatch
+          # defaults apply; a manual run forwards whatever was entered.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            args+=(-f "date_str=${IN_DATE_STR}")
+            args+=(-f "force_all=${IN_FORCE_ALL}")
+            args+=(-f "test_recipients=${IN_TEST_RECIPIENTS}")
+          fi
+          gh workflow run "${{ github.workflow }}" --repo "$GITHUB_REPOSITORY" --ref dev "${args[@]}"
+
   download:
+    if: github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     outputs:
       briefing_date: ${{ steps.briefing_date.outputs.date }}

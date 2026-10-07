@@ -18,6 +18,7 @@
 - [weekly_change_in_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-09-11/weekly/weekly_change_in_precip.png)
 - [weekly_medium_range_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-09-11/weekly/weekly_medium_range_precip.png)
 - [weekly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-09-11/weekly/weekly_precip.png)
+- [weekly_precip_downscaled.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-09-11/weekly/weekly_precip_downscaled.png)
 
 ### t2m
 
@@ -54,3 +55,4 @@
 - [meteogram_Accra.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-09-11/monthly/meteogram_Accra.png)
 - [meteogram_Kumasi.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-09-11/monthly/meteogram_Kumasi.png)
 - [monthly_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-09-11/monthly/monthly_precip.png)
+- [monthly_precip_downscaled.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ghana/2026-09-11/monthly/monthly_precip_downscaled.png)
