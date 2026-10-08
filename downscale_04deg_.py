@@ -291,6 +291,8 @@ if later_weeks is not None:
     print(f"Rainfall onset forecast: {onset_weekly.attrs['forecast_resolution']} -> {onset_file}")
 da.rio.to_raster(f'{data_path}/daily_downscaled_kenya.tif', tags={"band_dim_name": "day"})
 gef.save_downscaled_zarr(daily_downscaled.tp.astype('float32').transpose('step','latitude','longitude'), f'{data_path}/daily_downscaled_kenya.zarr')
+# the per-member daily field, split into days as the spell maps below are
+gef.save_daily_downscaled_members_zarr(kenya_weekly, data, f'{data_path}/daily_downscaled_kenya_members.zarr', profile_sigma=SPELL_PROFILE_SIGMA)
 CE_Kenya_dwnscaled_timeseries_daily.to_zarr(f'{data_path}/CE_Kenya_dwnscaled_timeseries_daily.zarr', mode='w', consolidated=True)
 
 #-----plots------------------------------------------------------------------------------------------------------------#

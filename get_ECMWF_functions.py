@@ -3005,6 +3005,33 @@ def save_downscaled_zarr(ds, path):
     ds = ds.chunk({dim: 1 if dim == 'step' else -1 for dim in ds.dims})
     ds.to_zarr(path, mode='w', consolidated=True)
 
+def save_daily_downscaled_members_zarr(rescaled_forecast, data, path, profile_sigma=None):
+    """Write the per-member daily downscaled forecast (number, step, latitude, longitude)
+    as a zarr store, replacing any store already there.
+
+    Same recipe as plot_downscaled_spell_maps: each member of the weekly downscaled
+    forecast is split into days with its own ECMWF member's daily profile. Members are
+    written one at a time (one chunk each), so the full (member, day, fine grid) array is
+    never held in memory at once.
+
+    rescaled_forecast : weekly downscaled Dataset with a 'number' dim
+    data : raw daily accumulated ECMWF ensemble Dataset (same 'number' values)
+    profile_sigma : passed to disaggregate_weekly_to_daily
+    """
+    for i, n in enumerate(rescaled_forecast.number.values):
+        daily = disaggregate_weekly_to_daily(
+            rescaled_forecast.tp.sel(number=n), data.tp.sel(number=n), profile_sigma=profile_sigma
+        )
+        daily = daily.astype('float32').expand_dims('number').transpose('number', 'step', 'latitude', 'longitude')
+        daily.attrs = dict(rescaled_forecast.attrs)
+        for var in daily.variables.values():
+            var.encoding.clear()
+        daily = daily.chunk(-1)
+        if i == 0:
+            daily.to_zarr(path, mode='w', consolidated=True)
+        else:
+            daily.to_zarr(path, append_dim='number', consolidated=True)
+
 def disaggregate_weekly_to_daily(
     rescaled_forecast: xr.DataArray, data: xr.DataArray, profile_sigma=None
 ) -> xr.Dataset:

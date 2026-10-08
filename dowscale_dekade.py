@@ -403,6 +403,9 @@ for country in countries_to_downscale:
         )
         # the same ensemble-mean daily field as a zarr store
         gef.save_downscaled_zarr(daily_downscaled.tp.astype('float32').transpose('step','latitude','longitude'), f'{data_path}/daily_downscaled_kenya.zarr')
+        # the per-member daily field, split into days as the spell maps below are. A
+        # separate store: the briefing slides read the one above as an ensemble mean
+        gef.save_daily_downscaled_members_zarr(kenya_weekly, data, f'{data_path}/daily_downscaled_kenya_members.zarr', profile_sigma=SPELL_PROFILE_SIGMA)
 
         tick('weekly Kenya: daily downscaled GeoTIFF')
         # Dry/wet spell maps per calendar week (1st/8th/15th/22nd of the month, see
