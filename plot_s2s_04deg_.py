@@ -19,9 +19,12 @@ there: the remote file is 1.6 GB and only a recent few are kept on CHC's server.
 The 0.4 degree forecast is not public data. It is kept out of data/<date>/ on
 purpose: the workflows upload every .zarr under data/ to the public bucket,
 while private_data/ is gitignored and never uploaded. Don't write it, or
-anything it can be reconstructed from, under data/. The plots show the raw
-0.4 degree fields, so they stay out of plots/ (synced to the public bucket)
-for the same reason.
+anything it can be reconstructed from, under data/. The plots of the raw
+0.4 degree fields (precipitation totals, their week to week change, the
+meteograms) stay out of plots/ (synced to the public bucket) for the same
+reason. The derived ones (probabilities, EFI/SOT, anomalies, spell lengths:
+PUBLIC_PLOTS below) are also copied to
+plots/<country>/<date>/04deg/{weekly,dekadal,monthly}/, which is public.
 
 Only precipitation exists at 0.4 degrees, so the temperature, wind and moisture
 plots, the website NetCDF export and the AI prompt data all stay in plot_s2s.py.
@@ -54,6 +57,8 @@ import os
 import re
 import sys
 import glob
+import shutil
+import fnmatch
 import requests
 from datetime import datetime, timedelta
 
@@ -74,6 +79,10 @@ mclimate_path=os.environ.get("MCLIMATE_04DEG_PATH",f'{prefix}/m-climate/')
 MCLIMATE_WINDOW_DAYS=4
 MCLIMATE_WEEKS=6
 bounding_box=list(map(float,os.environ.get("BOUNDING_BOX","25,20,-15,55").split(',')))
+# the plots that don't show the raw 0.4 degree field and so may go to the public plots/.
+# Anything not matched here stays private, so a new plot is private until it is added.
+PUBLIC_PLOTS=['efi_sot_precip.png','*th_percentile_exedance.png','anomaly_from_*th.png','chance_of_above_or_below.png',
+              '*chance_higherthan_*mm.png','median_*spell_length.png','prob_*spell_*days.png']
 
 #-----precip extended range, 0.4 degrees----------------------------------------------------------------------------#
 # the address is not public, so it is never printed either
@@ -280,7 +289,8 @@ for country in countries:
     m_climate=m_climate_big.sel(longitude=slice(gef.lon1, gef.lon2),latitude=slice(gef.lat1, gef.lat2))
     fs={'Madagascar':12,'Malawi':14}.get(country,16)
 
-    # raw 0.4 degree fields: not under plots/, which is synced to the public bucket
+    # everything is written here first: the raw 0.4 degree fields can't go under plots/,
+    # which is synced to the public bucket. The PUBLIC_PLOTS are copied there at the end.
     base_path=f'private_plots/{country}/{date_str}/04deg'
     weekly_path=f'{base_path}/weekly'
     dekade_path=f'{base_path}/dekadal'
@@ -390,3 +400,11 @@ for country in countries:
             fig=gef.panel_plot_variable(spell_ds,variable='tp',forecast_timestep=spell_ds.step.values,cmap=spell_cmap,fontsize=fs,vmin=0,vmax=100)
             plt.savefig(f'{monthly_path}/prob_{spell_name}.png',bbox_inches='tight')
             plt.close()
+
+    #copy the derived plots to the public plots folder, in a 04deg/ folder next to the 1.5 degree ones (same filenames)
+    for sub in ['weekly','dekadal','monthly']:
+        public_path=f'plots/{country}/{date_str}/04deg/{sub}'
+        for plot in sorted(glob.glob(f'{base_path}/{sub}/*.png')):
+            if any(fnmatch.fnmatch(os.path.basename(plot),pattern) for pattern in PUBLIC_PLOTS):
+                os.makedirs(public_path, exist_ok=True)
+                shutil.copy2(plot,public_path)

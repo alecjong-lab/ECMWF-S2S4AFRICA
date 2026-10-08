@@ -201,7 +201,10 @@ jobs:
       # as private_data/forecast_04deg/<date>/ECMWF_s2s_precip_04deg_<init>.zarr
       # and its plots as private_plots/<country>/<date>/04deg/, outside data/
       # and plots/, so no step that publishes or emails those picks them up --
-      # keep it that way. downscale_04deg_.py then overwrites the Kenya weekly
+      # keep it that way. Only the derived plots (probabilities, EFI/SOT,
+      # anomalies, spell lengths: PUBLIC_PLOTS in the script) are copied to
+      # plots/<country>/<date>/04deg/ and uploaded with the rest of plots/.
+      # downscale_04deg_.py then overwrites the Kenya weekly
       # downscaled outputs of the step above under their normal names -- but
       # only when the forecast for DATE_STR and a hindcast close to that date
       # are there; otherwise it exits and the 1.5 degree outputs stay. The
