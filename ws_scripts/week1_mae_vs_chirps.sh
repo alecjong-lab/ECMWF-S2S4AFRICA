@@ -8,6 +8,8 @@ set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
 
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@old-dev forecasting-skills"
+# cumulus-fetch tracks current dev; everything else stays on old-dev.
+CUMULUS="uvx --from git+https://github.com/rhiza-research/weather-skills@dev forecasting-skills"
 
 BBOX="5.506/33.893569/-4.67677/41.855083"
 N_WEEKS=4
@@ -128,7 +130,7 @@ week_mae() {  # $1=key $2=week
       fi
       ;;
     cumulus)
-      $WS cumulus-fetch --date "$w" -v tp \
+      $CUMULUS cumulus-fetch --date "$w" -v tp \
         --bbox "$BBOX" --output "${p}_raw.zarr" || return 1
       $WS aggregate-temporal --period weekly --method mean --align left \
         --input "${p}_raw.zarr" --output "${p}_wk.zarr" || return 1
