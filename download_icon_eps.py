@@ -1,9 +1,16 @@
 """
-Download the DWD ICON-EPS global ensemble (40 members, ~40 km icosahedral grid) from
+Download the DWD ICON-EPS global ensemble (40 members) from
 https://opendata.dwd.de/weather/nwp/icon-eps/grib/<HH>/<var>/ and regrid it to a regular
 lat/lon grid over Africa, writing one zarr store per variable to
 data/<date>/ICON_eps_<var>_<date>.zarr with the same layout as the ECMWF S2S stores
 (number, step, latitude [descending], longitude), so the gef plotting functions work on it.
+
+The native grid is ICON grid 39 (R02B07): 1,310,720 triangular cells, ~20 km mean cell size
+(~0.18 deg; DWD quotes ~26 km). The regridding is linear (barycentric) between the cell centres,
+onto 0.25 deg by default, the same grid as the IFS-ENS and GEFS 0.25 deg stores. Tested against
+conservative remapping (CDO remapcon equivalent): at 0.25 deg area means differ by <0.3% and
+peaks are kept slightly better, so linear is good enough here. For box averages on a coarser
+grid (e.g. the CHC 0.4 deg one) conservative remapping from the native cells would be better.
 
 DWD keeps only the last ~24 h of runs, so this has to run on the day of the init: there is
 no backfill. The date therefore comes from ICON_DATE_STR (not DATE_STR, which is the ECMWF
@@ -66,7 +73,7 @@ def parse_args():
     p.add_argument('--bbox', default=os.environ.get('BOUNDING_BOX', '22.5,-21,-34.5,55.5'),
                    help='N,W,S,E as in download_s2s.py')
     p.add_argument('--resolution', type=float, default=float(os.environ.get('ICON_RESOLUTION', 0.25)),
-                   help='target grid spacing in degrees (native ICON-EPS is ~0.36)')
+                   help='target grid spacing in degrees (native ICON-EPS cells are ~0.18)')
     p.add_argument('--out-dir', default=None, help='default: <MAIN_PATH or cwd>/data/<date>')
     p.add_argument('--workers', type=int, default=4, help='parallel downloads')
     return p.parse_args()
