@@ -32,13 +32,16 @@ anomaly from WINDOW_BEFORE days before the forecast to its end:
                     share of members with an active wave at 5S-5N
                     (Janiga et al. 2018 amplitude > AMP_THRESHOLD) in the enhanced /
                     suppressed half of its cycle (time, longitude)
-and in plots/olr_waves/<date>/: waves_hovmoeller.png, waves_hovmoeller_ncics_style.png
-(Carl Schreck's NCICS monitor look), waves_probability.png (ensemble
-agreement on each wave) kenya_wave_phase_<wave>.png (local phase-amplitude
-diagram at Kenya), kenya_wave_rose_<wave>.png (its weekly phase roses),
-kenya_wave_rose_daily_Kelvin.png (daily roses over the first 20 days) and
+and in plots/olr_waves/<date>/: waves_hovmoeller.png,
+waves_hovmoeller_ncics_style[_amplitude].png (Carl Schreck's NCICS monitor
+look; MJO and Kelvin contours, the Low band left out), waves_probability.png
+(ensemble agreement on each wave), kenya_wave_rose_<wave>.png (weekly phase
+roses at Kenya) and kenya_wave_rose_daily_Kelvin.png (daily roses over the
+first 20 days); the per-member <wave>_kenya_A / _B are stored for the roses.
+Switched off in main() but kept (uncomment to bring back):
+kenya_wave_phase_<wave>.png (local phase-amplitude diagram at Kenya) and
 kenya_wave_amplitude_<wave>.png (the local amplitude against time, every member
-coloured by its phase); the per-member <wave>_kenya_A / _B are stored for them.
+coloured by its phase).
 
 Env vars:
     DATE_STR      forecast init date, defaults to today-2
@@ -315,6 +318,9 @@ def main():
     ds.to_zarr(out, mode="w")
     print(f"Wrote {out}")
 
+    # Only the Hovmoellers, wave probability and phase roses are published now (with
+    # olr_wave_rain_maps.py's maps and mjo_rmm_index.py's phase diagram). The other
+    # plots are switched off but kept: uncomment a call to bring one back.
     unfiltered = xr.concat([an.obs_anom.isel(time=slice(-WINDOW_BEFORE, None)).drop_vars("source"),
                             an.fc_anom.swap_dims(step="valid_date").drop_vars("step").rename(valid_date="time")],
                            dim="time")
@@ -322,18 +328,19 @@ def main():
     plot_ncics_style(ds, unfiltered, f"{plot_path}waves_hovmoeller_ncics_style.png")
     plot_ncics_style(ds, unfiltered, f"{plot_path}waves_hovmoeller_ncics_style_amplitude.png", std=std)
     plot_probability(ds, unfiltered, f"{plot_path}waves_probability.png")
-    plot_local_phase(ds, clim_local, f"{plot_path}kenya_wave_phase_{{wave}}.png")
+    # plot_local_phase(ds, clim_local, f"{plot_path}kenya_wave_phase_{{wave}}.png")
     plot_phase_roses(ds, clim_local, f"{plot_path}kenya_wave_rose_{{wave}}.png")
     plot_phase_roses(ds, clim_local, f"{plot_path}kenya_wave_rose_daily_{{wave}}.png", days_per_rose=1,
                      n_roses=ROSE_DAILY_DAYS, waves=ROSE_DAILY_WAVES, ncols=5)
-    plot_amplitude_series(ds, clim_local, f"{plot_path}kenya_wave_amplitude_{{wave}}.png")
+    # plot_amplitude_series(ds, clim_local, f"{plot_path}kenya_wave_amplitude_{{wave}}.png")
 
 
 # ============================================================
 # Plot
 # ============================================================
 
-CONTOURS = {"MJO": ("k", 5), "Kelvin": ("tab:green", 10), "ER": ("tab:purple", 5), "MRG_TD": ("tab:orange", 10)}
+# ER is still filtered (and in the zarr) but left out of every plot: little link with East African rainfall
+CONTOURS = {"MJO": ("k", 5), "Kelvin": ("tab:green", 10), "MRG_TD": ("tab:orange", 10)}
 
 
 def plot_waves(ds, unfiltered, out):
@@ -343,7 +350,7 @@ def plot_waves(ds, unfiltered, out):
             ("control", unfiltered.sel(number=0), "member 0 (control)"))
     for r, (suffix, shade, label) in enumerate(rows):
         shade = lon_0_360(equatorial_mean(shade.drop_vars("number", errors="ignore"), 10))
-        for c, pair in enumerate((("MJO", "Kelvin"), ("ER", "MRG_TD"))):
+        for c, pair in enumerate((("MJO", "Kelvin"), ("MRG_TD",))):
             ax = axes[r, c]
             pc = hovmoeller(ax, shade, vmax=40)
             pc.set_alpha(0.6)
@@ -376,7 +383,7 @@ def plot_waves(ds, unfiltered, out):
 NCICS_LAT = 5
 NCICS_LEVEL = 16
 NCICS_WEEKS = (12, 4)
-NCICS_CONTOURS = {"Kelvin": "blue", "ER": "red", "MJO": "black", "Low": "darkviolet"}
+NCICS_CONTOURS = {"Kelvin": "blue", "MJO": "black"}   # "Low": "darkviolet" taken out
 
 
 def ncics_colormap():
@@ -454,7 +461,7 @@ PROB_WEEKS_BEFORE = 12      # observed weeks shown, as on the NCICS monitor
 AMP_THRESHOLD = 1.0               # forecast agreement
 OBS_AMP_THRESHOLD = 2.0           # observed line: ~16 W m-2 for Kelvin, close to the NCICS +-16 contour
 OBS_SUFFIX = f"_amp{OBS_AMP_THRESHOLD:g}".replace(".", "p")   # dataset variable suffix
-PROB_WAVES = ("Kelvin", "ER", "MJO")   # Low left out: no high-pass, so the drop to zero padding after
+PROB_WAVES = ("Kelvin", "MJO")   # Low left out: no high-pass, so the drop to zero padding after
                                        # day 46 makes B (and the amplitude) large at the end of the forecast
 STD_YEARS = ("2007", "2021")     # ERA5 years for the amplitude scale (a year off each archive end)
 STD_HALF_WINDOW = 60             # calendar days either side of the forecast's middle
@@ -494,7 +501,7 @@ def plot_probability(ds, unfiltered, out):
     cb = fig.colorbar(pc, ax=axes, orientation="horizontal", shrink=0.6, extend="both", ticks=ticks)
     cb.set_label("ensemble-mean OLR anomaly (W m$^{-2}$)", fontsize=15)
     cb.ax.tick_params(labelsize=14)
-    fig.suptitle(f"ECMWF extended range from {date_str}: ensemble agreement on wave activity, "
+    fig.suptitle(f"ECMWF extended range from {date_str}: ensemble agreement on wave activity,\n"
                  f"{NCICS_LAT}S-{NCICS_LAT}N (ERA5 before the line)", fontsize=19)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     fig.savefig(out, dpi=110)
@@ -512,7 +519,7 @@ def plot_probability(ds, unfiltered, out):
 # forecast week (daily dots would ring the whole circle for a Kelvin wave,
 # weekly means would collapse it to the centre).
 KENYA_POINT = 37.5                   # middle of KENYA_LON (33-42E) on the 1.5 degree grid
-PHASE_WAVES = ("Kelvin", "ER", "MJO")
+PHASE_WAVES = ("Kelvin", "MJO")
 PHASE_OBS_DAYS = 30                  # observed days drawn before the forecast
 PHASE_WEEK_DAYS = (3, 10, 17, 24, 31, 38)   # days after init: lead days 4, 11, ..., 39, mid-week
 PHASE_LIM = 4.5

@@ -3,9 +3,13 @@ Weekly Kenya downscaling from the 0.4 degree forecast -- when its inputs are
 there, this replaces the 1.5 degree product dowscale_dekade.py made earlier in
 the same run.
 
-Ranks every member's weekly total among the 0.4 degree hindcast years of the
-same lead week, and looks that rank up in the sorted CHIRPS 0.05 degree weekly
-climatology (gef.rank_downscale_to_grid).
+Ranks every member's weekly total among all 0.4 degree hindcast members of every
+hindcast year (20 years x 11 members) for the same lead week, and looks that
+rank up in the sorted CHIRPS 0.05 degree weekly climatology
+(gef.rank_downscale_to_grid). A single member is ranked among single runs, not
+among each year's ensemble mean: those vary less from year to year, which put
+about 40% of members in weeks 3-4 on the driest or wettest CHIRPS year and made
+the ensemble mean 15-25% too wet from week 2 on (test/ensemble_rank_test/).
 
 It writes the Kenya weekly downscaled outputs under the same names
 dowscale_dekade.py uses (data_weekly_Kenya_downscaled.nc, daily_downscaled_kenya.tif,
@@ -21,15 +25,17 @@ DATE_STR is the 0.4 degree forecast's own init, which in the workflows is
 normally a day newer than the 1.5 degree ECMWF date (see forecast_04deg_dates.py),
 so the outputs go to that date's folders.
 
-The 0.4 degree forecast is 33 days long, so this product has 4 weeks where the
-1.5 degree one has 6. Rainfall onset needs the longer horizon (its definitions
-look up to 30 days ahead of a candidate day), so a second store,
-daily_downscaled_kenya_members_onset.zarr, holds the per-member daily 0.4 degree
-days 1-28 followed by the per-member daily days of dowscale_dekade.py's 1.5
-degree run (data/<ONSET_1P5_DATE>/daily_downscaled_kenya_members.zarr), matched
-by the date the rain falls on: up to day 42 when both runs have the same init,
-one day less per day the 1.5 degree init is older. Only run_rainfall_onset.py
-and the onset part of chirps_agro_climatology.py read it.
+The product has as many weeks as the 0.4 degree forecast holds: 6, like the 1.5
+degree one, now that CHC's files are 46 days long (older files of 33 days give
+4). Rainfall onset looks up to 30 days ahead of a candidate day, so a second
+store, daily_downscaled_kenya_members_onset.zarr, holds the per-member daily
+0.4 degree days followed by any later per-member daily days of
+dowscale_dekade.py's 1.5 degree run
+(data/<ONSET_1P5_DATE>/daily_downscaled_kenya_members.zarr), matched by the date
+the rain falls on. With a 6-week 0.4 degree forecast the 1.5 degree run, which
+also ends at day 42 and is initialized the same day or earlier, rarely adds
+any; it extends a 4-week one up to day 42. Only run_rainfall_onset.py and the
+onset part of chirps_agro_climatology.py read it.
 
 Inputs
     private_data/forecast_04deg/<date>/ECMWF_s2s_precip_04deg_<date>.zarr
@@ -46,7 +52,10 @@ Inputs
                                                      the bucket
     <HINDCAST_04DEG_PATH>/hindcast_weekly_<init>.nc  used when the store can't be opened;
                                                      written by build_mclimate_0p4.py
-                                                     --yearly-output
+                                                     --yearly-output (year, number, week, ...).
+                                                     Older files hold only each year's
+                                                     ensemble mean; they are still used,
+                                                     with a warning
     downscale_data/chirpsv3_weeks/chirpsv3_weeks_2005_2025_sorted_<MM-DD>_Kenya.nc
 
 Env vars: DATE_STR and MAIN_PATH as in dowscale_dekade.py, plus
@@ -188,19 +197,25 @@ if hindcast_gap>MAX_HINDCAST_GAP_DAYS:
 # hindcast week k is ranked against forecast week k
 n_weeks=data_weekly.sizes['step']
 if store is not None:
-    # ensemble-mean weekly total of every hindcast year, as build_mclimate_0p4.py --yearly-output makes them
+    # weekly total of every member of every hindcast year, as build_mclimate_0p4.py --yearly-output makes them
     weekly_marks=[np.timedelta64(7*k,'D') for k in range(n_weeks+1)]
     accumulated=store.tp.isel(init=hindcast_index).sel(step=weekly_marks).compute()
     if bool(accumulated.isnull().any()):
         keep_1p5deg(f"{hindcast_name} is incomplete in the store")
-    hindcast=accumulated.diff('step').clip(min=0).mean('number')
+    hindcast=accumulated.diff('step').clip(min=0)
 else:
     hindcast=xr.open_dataset(hindcast_file).tp.isel(week=slice(0,n_weeks)).rename(week='step')
+    if 'number' not in hindcast.dims:
+        print(f"WARNING: {hindcast_name} holds only each year's ensemble mean, so members are ranked among "
+              f"those -- too many land on the driest/wettest CHIRPS year. Rebuild it with "
+              f"build_mclimate_0p4.py --yearly-output to keep the members.")
 hindcast=hindcast.assign_coords(step=data_weekly.step.values)
 hindcast=gef.align_to_forecast_grid(hindcast,data_weekly)
 if not (hindcast.sizes['latitude']==data_weekly.sizes['latitude'] and hindcast.sizes['longitude']==data_weekly.sizes['longitude']):
     keep_1p5deg(f"{hindcast_name} does not cover Kenya's CHIRPS box")
-print(f"Hindcast years from: {hindcast_name}")
+# every member of every year is one sample to rank among (20 x 11 = 220 per cell)
+hindcast=hindcast.stack(sample=[d for d in ('year','number') if d in hindcast.dims]).reset_index('sample',drop=True)
+print(f"Hindcast from: {hindcast_name} ({hindcast.sizes['sample']} samples per cell and week)")
 
 #-----CHIRPS weekly climatology (same file choice as dowscale_dekade.py)-----------------------------------------------#
 forecast_year = int(data.time.dt.year.values)
@@ -228,7 +243,7 @@ if missing_chirps:
 chirps_weeks_ds = gef.stack_climatology_steps(fclim_chirps, data_weekly.step.values)
 
 #-----downscale every member, and derive the daily products, before writing anything-----------------------------------#
-rescaled=gef.rank_downscale_to_grid(data_weekly.tp,hindcast,chirps_weeks_ds.tp,
+rescaled=gef.rank_downscale_to_grid(data_weekly.tp,hindcast,chirps_weeks_ds.tp,rank_dim='sample',
                                     closing_size=closing_size,rank_sigma=rank_sigma,field_sigma=field_sigma)
 rescaled_forecast=rescaled.assign_coords({'time':data_weekly.time,'valid_time':data_weekly.valid_time}).to_dataset(name='tp')
 rescaled_forecast=rescaled_forecast.where(rescaled_forecast>=0)
@@ -236,6 +251,7 @@ rescaled_forecast['tp'].attrs=data_weekly.tp.attrs
 rescaled_forecast=rescaled_forecast.transpose('number','step','latitude','longitude')
 # which version made the product: dowscale_dekade.py's 1.5 degree file has no such attribute
 rescaled_forecast.attrs={'forecast_resolution':'0.4deg','hindcast':hindcast_name,
+                         'hindcast_samples':int(hindcast.sizes['sample']),
                          'downscaling':f'downscale_04deg_.py, closing {closing_size}, rank sigma {rank_sigma:g}, field sigma {field_sigma:g}'}
 
 kenya_weekly=rescaled_forecast.sel(longitude=slice(bbox['lon1'],bbox['lon2']),latitude=slice(bbox['lat1'],bbox['lat2']))
@@ -297,12 +313,20 @@ if later_days is None:
           f"the {n_weeks} weeks of the 0.4 degree product")
 
 def save_onset_members():
-    """members_file's days followed by later_days, one member at a time, as onset_members_file."""
+    """
+    members_file's days followed by later_days (if any), one member at a time, as
+    onset_members_file. Written even without later days: this date's folder has no
+    ECMWF_s2s_precip_<date>.zarr, so without it run_rainfall_onset.py can't use this
+    forecast and falls back to an older one.
+    """
     members=xr.open_zarr(members_file,consolidated=True)
-    attrs=dict(members.attrs,forecast_resolution=f"0.4deg days 1-{members.sizes['step']} (init {date_str}), {later_source}")
+    resolution=f"0.4deg days 1-{members.sizes['step']} (init {date_str})"
+    attrs=dict(members.attrs,forecast_resolution=resolution+(f", {later_source}" if later_days is not None else ""))
     for i,n in enumerate(members.number.values):
-        both=xr.concat([members.tp.sel(number=[n]).reset_coords(drop=True).load(),
-                        later_days.sel(number=[n]).transpose(*members.tp.dims)],dim='step')
+        parts=[members.tp.sel(number=[n]).reset_coords(drop=True).load()]
+        if later_days is not None:
+            parts.append(later_days.sel(number=[n]).transpose(*members.tp.dims))
+        both=xr.concat(parts,dim='step')
         one=both.assign_coords(time=members.time).to_dataset(name='tp')
         one['tp'].attrs=members.tp.attrs
         one.attrs=attrs
@@ -347,8 +371,7 @@ da.rio.to_raster(f'{data_path}/daily_downscaled_kenya.tif', tags={"band_dim_name
 gef.save_downscaled_zarr(daily_downscaled.tp.astype('float32').transpose('step','latitude','longitude'), f'{data_path}/daily_downscaled_kenya.zarr')
 # the per-member daily field, split into days as the spell maps below are
 gef.save_daily_downscaled_members_zarr(kenya_weekly, data, members_file, profile_sigma=SPELL_PROFILE_SIGMA)
-if later_days is not None:
-    save_onset_members()
+save_onset_members()
 CE_Kenya_dwnscaled_timeseries_daily.to_zarr(f'{data_path}/CE_Kenya_dwnscaled_timeseries_daily.zarr', mode='w', consolidated=True)
 
 #-----plots------------------------------------------------------------------------------------------------------------#
@@ -395,7 +418,7 @@ def spell_week_windows():
         starts=[init+pd.Timedelta(days=7*k) for k in range(lead_days//7)]
         return pd.DataFrame({'start':starts,'end':[s+pd.Timedelta(days=7) for s in starts],
                              'label':[f'Week {k+1}' for k in range(len(starts))],'n_days':7})
-    # the downscaled forecast is shorter than the 42 days four calendar weeks can need
+    # only the calendar weeks that end within the downscaled forecast
     return gef.calendar_windows_that_fit(init, max_lead_days=lead_days)
 
 week_totals = None

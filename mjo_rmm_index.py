@@ -293,8 +293,8 @@ def phase_axes(ax, lim):
         ang = np.radians(-180 + 45 * (p - 0.5))
         ax.text(0.85 * lim * np.cos(ang) / max(abs(np.cos(ang)), abs(np.sin(ang))),
                 0.85 * lim * np.sin(ang) / max(abs(np.cos(ang)), abs(np.sin(ang))),
-                str(p), ha="center", va="center", fontsize=13, color="grey")
-    kw = dict(ha="center", va="center", fontsize=10, color="dimgrey")
+                str(p), ha="center", va="center", fontsize=16, color="grey")
+    kw = dict(ha="center", va="center", fontsize=13, color="dimgrey")
     ax.text(0, -lim * 0.95, "Indian Ocean", **kw)
     ax.text(lim * 0.95, 0, "Maritime Continent", rotation=-90, **kw)
     ax.text(0, lim * 0.95, "Western Pacific", **kw)
@@ -308,8 +308,9 @@ def plot_phase(members_fc, ens_mean, is_fc, times, bom_xy, out):
 
     fig, ax = plt.subplots(figsize=(9, 9), layout="constrained")
     phase_axes(ax, lim)
-    ax.set_xlabel("RMM1")
-    ax.set_ylabel("RMM2")
+    ax.set_xlabel("RMM1", fontsize=13)
+    ax.set_ylabel("RMM2", fontsize=13)
+    ax.tick_params(labelsize=12)
     fc_times = times[is_fc]                                   # fc_mean[d] is valid on fc_times[d - 1]
     for day, color in MEMBER_DAYS.items():
         ax.scatter(*members_fc[day - 1].T, s=24, color=color, linewidths=0, zorder=2,
@@ -318,18 +319,18 @@ def plot_phase(members_fc, ens_mean, is_fc, times, bom_xy, out):
     for d in range(8, len(fc_mean), 7):                       # a week, two weeks, ... after the start
         ax.plot(*fc_mean[d], "o", color=MEAN_COLOR, ms=6, zorder=3)
         ax.annotate(f"{fc_times[d - 1]:%d %b}", fc_mean[d], textcoords="offset points", xytext=(5, 5),
-                    fontsize=8, color="w", zorder=6,
+                    fontsize=11, color="w", zorder=6,
                     path_effects=[patheffects.withStroke(linewidth=2, foreground="k")])
     ax.plot(obs_xy[:, 0], obs_xy[:, 1], color="k", lw=2, label=f"ERA5, last {len(obs_xy)} days")
     ax.plot(*obs_xy[0], "s", color="k", ms=6)
-    ax.annotate(times[0].strftime("%d %b"), obs_xy[0], textcoords="offset points", xytext=(5, -10), fontsize=8)
+    ax.annotate(times[0].strftime("%d %b"), obs_xy[0], textcoords="offset points", xytext=(5, -12), fontsize=11)
     if len(bom_xy):
         ax.plot(bom_xy[:, 0], bom_xy[:, 1], color="grey", lw=1.5, ls="--", label="BoM RMM, same days")
     ax.plot(*obs_xy[-1], "o", color="k", ms=7, zorder=5)
-    ax.legend(loc="lower left", fontsize=9, framealpha=0.9)
+    ax.legend(loc="lower left", fontsize=11, framealpha=0.9)
     ax.set_title(f"RMM index (Wheeler-Hendon), ECMWF extended range from {date_str}\n"
                  f"ensemble-mean dots every 7 days; EOFs of ERA5 OLR, u850 and u200, {EOF_YEARS[0]}-{EOF_YEARS[1]}",
-                 fontsize=11)
+                 fontsize=13)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     fig.savefig(out, dpi=120)
     plt.close(fig)

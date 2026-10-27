@@ -17,7 +17,7 @@ m-climate/T_pr_0p4/ are used instead.
 The cut-out of the forecast (the Horn of Africa by default) is kept as
 private_data/forecast_04deg/<date>/ECMWF_s2s_precip_04deg_<init>.zarr, in the
 same layout as ECMWF_s2s_precip_<date>.zarr, and reused when it is already
-there: the remote file is 1.6 GB and only a recent few are kept on CHC's server.
+there: the remote file is 2.2 GB and only a recent few are kept on CHC's server.
 The 0.4 degree forecast is not public data. It is kept out of data/<date>/ on
 purpose: the workflows upload every .zarr under data/ to the public bucket,
 while private_data/ is gitignored and never uploaded. Don't write it, or
@@ -52,7 +52,7 @@ import xarray as xr
 import get_ECMWF_functions as gef
 import efi_sot
 import build_mclimate_0p4
-from forecast_04deg_dates import available_inits, archive_fs
+from forecast_04deg_dates import available_inits, archive_fs, open_archived_zarr
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -114,9 +114,13 @@ def download_04deg_precip(url,init_str):
     integer day steps, step i being the rain falling in the 24h starting at
     init + i days, and no time coords. "#mode=bytes" has netCDF read it over
     HTTP range requests, so only the chunks covering the cut-out are fetched.
-    An archived copy (gs:// path) is downloaded whole to private_data/ first, and
-    deleted again once the cut-out is read.
+    An archived zarr store (gs://...zarr) is read lazily the same way, with all its
+    chunks fetched concurrently. An archived .nc from before the archive switched to
+    zarr is downloaded whole to private_data/ first, and deleted again once the
+    cut-out is read.
     """
+    if url.endswith('.zarr'):
+        return cut_out_04deg_precip(open_archived_zarr(url),init_str)
     if url.startswith('gs://'):
         local=f'{prefix}/private_data/forecast_04deg/{os.path.basename(url)}'
         os.makedirs(os.path.dirname(local),exist_ok=True)

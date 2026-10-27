@@ -18,11 +18,15 @@ onset maps of run_rainfall_onset_legacy.py.
 
 2. Observed + forecast (Kenya only -- the downscaled forecast is Kenya-only):
    the same CHIRPS series continued, per ensemble member, with the daily
-   downscaled forecast that starts the day after the last CHIRPS day (see
-   resolve_forecast), and the onset search rerun over the joined series. When
-   CHIRPS lags, that forecast only bridges the days up to the newest forecast
-   (DATE_STR's, see resolve_latest_forecast), which takes over from its first
-   day, member by member.
+   downscaled forecast that starts the day after the last observed day (see
+   resolve_forecast), and the onset search rerun over the joined series.
+   CHIRPS lags DATE_STR by ~4-9 days, so the days between its last day and
+   DATE_STR are first filled with IMERG (Late, topped up with Early; see
+   load_imerg_days), after which DATE_STR's forecast follows straight on.
+   Where IMERG doesn't reach (or with ONSET_BRIDGE=forecast), an older
+   forecast bridges the days up to the newest one (DATE_STR's, see
+   resolve_latest_forecast), which takes over from its first day, member by
+   member.
    -> plots/<country>/<date>/monthly/onset_downscaled{,_icpac10mm,_accum}.png
       data/<date>/rainfall_onset_{,icpac10mm_,accum_}downscaled_<country>.nc
       (rainfall_onset_downscaled_<country>.nc feeds ai_weather_briefing.py)
@@ -90,8 +94,9 @@ chirps_source = os.environ.get("CHIRPS_SOURCE", "combined")
 
 # ---- combined observed + forecast (Kenya only: the downscaled forecast is Kenya-only)
 # By default the forecast is picked to start the day right after the last
-# CHIRPS day (see resolve_forecast): CHIRPS lags ~4-5 days, the forecast ~2,
-# so the newest forecast would leave a 1-2 day hole between the two. The
+# observed day (see resolve_forecast): CHIRPS lags ~4-9 days, the forecast ~1-2,
+# so IMERG fills the days in between first (ONSET_BRIDGE, load_imerg_days);
+# without them the newest forecast would leave a hole after CHIRPS. The
 # matching (older) forecast is taken from data/<date>/ if it's there locally,
 # otherwise downloaded (anonymously -- the bucket is public) from the Kenya
 # bucket into FORECAST_CACHE. The cache deliberately lives outside data/: the
@@ -106,6 +111,13 @@ FORECAST_BUCKET = "kenya-forecasting-data"
 forecast_cache = os.environ.get("FORECAST_CACHE", f"{prefix}/onset_forecast_cache")
 # how many days further back than the ideal init to look if it's missing
 FORECAST_MAX_LOOKBACK = int(os.environ.get("FORECAST_MAX_LOOKBACK", 7))
+# what fills the days between the last CHIRPS day and DATE_STR's forecast:
+# 'imerg' (observed IMERG, an older forecast only where IMERG doesn't reach)
+# or 'forecast' (an older forecast, as before)
+onset_bridge = os.environ.get("ONSET_BRIDGE", "imerg")
+# dynamical.org's half-hourly IMERG, in the order they are tried: Late (~12 h
+# behind) first, Early (~1 h behind) for the days Late doesn't fully cover yet
+IMERG_DATASETS = ("nasa-imerg-analysis-late", "nasa-imerg-analysis-early")
 # same knobs (and defaults) as run_rainfall_onset_legacy.py
 ONSET_AGREEMENT_THRESH = float(os.environ.get("ONSET_AGREEMENT_THRESH", 66))
 ONSET_PROFILE_SIGMA = float(os.environ.get("ONSET_PROFILE_SIGMA", 10))
@@ -174,6 +186,53 @@ def load_chirps_window(start, end_date):
     # 'statistics_approximate' can't be written to netCDF)
     return da.drop_vars('spatial_ref', errors='ignore').assign_coords(
         {d: da[d].values for d in ('time', 'latitude', 'longitude')})
+
+
+def load_imerg_days(first_day, last_day, like):
+    """
+    Daily IMERG (mm/day) on like's (CHIRPS) grid and land cells, for the
+    complete UTC days from first_day on, up to last_day, without gaps: the
+    days IMERG_DATASETS[0] has all 48 half-hours of, then the next dataset's
+    from where the previous one stops. Returns (DataArray or None, description
+    of the days per dataset). IMERG's 0.1 degree grid is linearly interpolated
+    onto CHIRPS's 0.05 degree one.
+    """
+    import dynamical_catalog
+    margin = 0.2  # keeps the interpolation onto the grid's edge cells inside IMERG's cut-out
+    land = like.notnull().any('time')
+    day, days, used = pd.Timestamp(first_day), [], []
+    for name in IMERG_DATASETS:
+        if day > last_day:
+            break
+        try:
+            pr = dynamical_catalog.open(name, chunks=None).precipitation_surface
+            pr = pr.sel(time=slice(day, last_day + pd.Timedelta(days=1) - pd.Timedelta(minutes=1)),
+                        latitude=slice(gef.lat1 + margin, gef.lat2 - margin),
+                        longitude=slice(gef.lon1 - margin, gef.lon2 + margin)).compute()
+        except Exception as e:
+            print(f"IMERG: {name} not read ({type(e).__name__}: {e})")
+            continue
+        if not pr.sizes['time']:
+            continue
+        # a rate in kg m-2 s-1 (== mm/s), like CHIRPS: the day's mean rate * 86400 is its mm/day
+        counts = pr.time.resample(time='1D').count()
+        daily = pr.resample(time='1D').mean() * 86400
+        n_before = len(days)
+        for t, n in zip(pd.to_datetime(daily.time.values), counts.values):
+            if t != day or n < 48:
+                break
+            days.append(daily.sel(time=t))
+            day += pd.Timedelta(days=1)
+        if len(days) > n_before:
+            used.append(f"{name.rsplit('-', 1)[1]} {days[n_before].time.dt.strftime('%m-%d').item()}"
+                        f"-{days[-1].time.dt.strftime('%m-%d').item()}")
+    if not days:
+        return None, ""
+    da = xr.concat(days, dim='time').drop_vars('spatial_ref', errors='ignore')
+    da = da.interp(latitude=like.latitude, longitude=like.longitude).where(land)
+    da.attrs = {'units': 'mm day-1'}
+    da = da.assign_coords({d: da[d].values for d in ('time', 'latitude', 'longitude')})
+    return da.transpose('time', 'latitude', 'longitude'), f"IMERG {', '.join(used)}"
 
 
 def onset_status(da, onset_fn, fully_observed_days, pad_days, **kwargs):
@@ -520,7 +579,7 @@ def combine_obs_forecast(chirps, forecast_daily, latest_daily=None):
     return series.reindex(time=pd.date_range(series.time.values[0], series.time.values[-1]))
 
 
-def plot_combined(onset, obs_met, first_day, last_day, obs_end, forecast_label, label, save_path):
+def plot_combined(onset, obs_met, first_day, last_day, obs_label, forecast_label, label, save_path):
     """Left: ensemble-mean onset date (obs + forecast), hatched where fewer than
     ONSET_AGREEMENT_THRESH % of members find an onset, with cells already met in
     CHIRPS outlined in black. Right: % of members with an onset by the end of
@@ -556,7 +615,7 @@ def plot_combined(onset, obs_met, first_day, last_day, obs_end, forecast_label, 
     ax.set_title(f'Chance onset has happened by {last_day:%b %d}', fontsize=13, fontweight='bold')
 
     fig.suptitle(f'Rainy season onset, CHIRPS + downscaled forecast ({label}) — {country}\n'
-                 f'observed {first_day:%Y-%m-%d} to {obs_end:%Y-%m-%d}, {forecast_label}',
+                 f'observed {first_day:%Y-%m-%d} to {obs_label}, {forecast_label}',
                  fontsize=15, fontweight='bold')
     fig.tight_layout()
     plt.savefig(save_path, bbox_inches='tight', dpi=110)
@@ -597,11 +656,30 @@ for label, (onset_fn, kwargs, fully_observed_days, pad_days) in definitions.item
                 f'{plot_dir}/onset_chirps_observed{png_suffix[label]}.png')
 
 # ---- CHIRPS continued with the daily downscaled forecast --------------------
+# The days from the last CHIRPS day up to DATE_STR (the newest forecast's first
+# rain day) come from IMERG where it has them, so the forecast that follows
+# straight on is DATE_STR's own rather than an older one bridging the gap.
+obs, obs_end = chirps.drop_vars('spatial_ref', errors='ignore'), window_end
+obs_label = f'{window_end:%Y-%m-%d}'
+if country == 'Kenya' and onset_bridge == 'imerg':
+    last_bridge_day = pd.Timestamp(date_str) - pd.Timedelta(days=1)
+    if last_bridge_day > window_end:
+        imerg, imerg_label = load_imerg_days(window_end + pd.Timedelta(days=1), last_bridge_day, chirps)
+        if imerg is None:
+            print(f"IMERG: no complete day after {window_end:%Y-%m-%d}, an older forecast bridges the gap")
+        else:
+            obs = xr.concat([obs, imerg], dim='time')
+            obs_end = pd.Timestamp(imerg.time.values[-1])
+            obs_label = f'{window_end:%Y-%m-%d} + {imerg_label}'
+            print(f"IMERG: {imerg.sizes['time']} days after CHIRPS ({imerg_label})"
+                  + ("" if obs_end == last_bridge_day else
+                     f", {(last_bridge_day - obs_end).days} day(s) short of {last_bridge_day:%Y-%m-%d}"))
+
 forecast_date, forecast_path = None, None
 if country != 'Kenya':
     print("combined: downscaled forecast only available for Kenya, skipping")
 else:
-    forecast_date, forecast_path = resolve_forecast(window_end)
+    forecast_date, forecast_path = resolve_forecast(obs_end)
     if forecast_path and not has_forecast(forecast_path, forecast_date):
         print(f"combined: no downscaled forecast for {forecast_date} in {forecast_path}, skipping")
         forecast_path = None
@@ -624,22 +702,24 @@ if forecast_path:
         forecast_label = f'forecast init {forecast_date}'
     onsets = {label: [] for label in definitions}
     series = None
-    members = load_daily_downscaled_forecast(chirps, forecast_date, forecast_path)
-    latest_members = (load_daily_downscaled_forecast(chirps, latest_date, latest_path)
+    members = load_daily_downscaled_forecast(obs, forecast_date, forecast_path)
+    latest_members = (load_daily_downscaled_forecast(obs, latest_date, latest_path)
                       if latest_path else None)
     for n, forecast_daily in members:
         latest_daily = next(latest_members)[1] if latest_members else None
-        series = combine_obs_forecast(chirps, forecast_daily, latest_daily)
+        series = combine_obs_forecast(obs, forecast_daily, latest_daily)
         for label, (onset_fn, kwargs, _, _) in definitions.items():
             onsets[label].append(onset_fn(series, time_dim='time', **kwargs).expand_dims(number=[n]))
 
     series_start, series_end = pd.Timestamp(series.time.values[0]), pd.Timestamp(series.time.values[-1])
-    n_obs = chirps.sizes['time']
+    n_chirps, n_obs = chirps.sizes['time'], obs.sizes['time']
     n_gap = int(series.isel(time=slice(n_obs, None)).isnull().all(['latitude', 'longitude']).sum())
     print(f"combined series: {series_start:%Y-%m-%d} to {series_end:%Y-%m-%d} "
-          f"({n_obs} days CHIRPS + {series.sizes['time'] - n_obs} days forecast"
-          + (f", {n_gap} of them missing: gap between CHIRPS and forecast init" if n_gap else "")
-          + (f", the first {(pd.Timestamp(latest_date) - window_end).days - 1} from init {forecast_date}"
+          f"({n_chirps} days CHIRPS + "
+          + (f"{n_obs - n_chirps} days IMERG + " if n_obs > n_chirps else "")
+          + f"{series.sizes['time'] - n_obs} days forecast"
+          + (f", {n_gap} of them missing: gap between observations and forecast init" if n_gap else "")
+          + (f", the first {(pd.Timestamp(latest_date) - obs_end).days - 1} from init {forecast_date}"
              if latest_path else "") + ")")
 
     for label, (_, _, _, pad_days) in definitions.items():
@@ -650,5 +730,5 @@ if forecast_path:
         # window, like the legacy script's forecast plots
         last_day = series_end - pd.Timedelta(days=pad_days - 1)
         obs_met = (obs_status[label] == 2).astype(float).where(obs_status[label].notnull())
-        plot_combined(onset, obs_met, series_start, last_day, window_end, forecast_label, label,
+        plot_combined(onset, obs_met, series_start, last_day, obs_label, forecast_label, label,
                       f'{plot_dir}/onset_downscaled{png_suffix[label]}.png')

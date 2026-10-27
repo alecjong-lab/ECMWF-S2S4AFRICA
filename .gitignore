@@ -30,3 +30,6 @@ prompts/plot_descriptions/images/
 prompts/plot_descriptions/runs/
 # hand-written plot captions, kept local for now
 plot_descriptions/
+
+# Twin-vortex case study (Oct 2026): local scripts and ERA5/IFS data, not part of the pipeline
+double_vortex_experiment/

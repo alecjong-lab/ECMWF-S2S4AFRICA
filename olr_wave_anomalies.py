@@ -30,8 +30,9 @@ Writes data/<date>/olr_anom_<date>.zarr with
     obs_anom (time, latitude, longitude)          the 730-day lead-in
     fc_anom  (number, step, latitude, longitude)  every member
     bias     (step, latitude, longitude), beta (step)
-and a check plot plots/olr_waves/<date>/anomaly_join.png of the equatorial
-anomalies across the observation -> forecast join.
+The check plot plots/olr_waves/<date>/anomaly_join.png of the equatorial
+anomalies across the observation -> forecast join is switched off (commented
+out at the end of main()).
 
 Env vars:
     DATE_STR      forecast init date, defaults to today-2
@@ -301,7 +302,8 @@ def main():
     ds.to_zarr(out, mode="w")
     print(f"Wrote {out}")
 
-    plot_join(obs_anom, fc_anom, fc_anom + bias, f"{plot_path}anomaly_join.png")
+    # switched off (not published), kept for checking the obs/forecast join by hand
+    # plot_join(obs_anom, fc_anom, fc_anom + bias, f"{plot_path}anomaly_join.png")
 
 
 if __name__ == "__main__":

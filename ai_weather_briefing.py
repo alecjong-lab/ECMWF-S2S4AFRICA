@@ -502,7 +502,10 @@ exceed20mm_path = prefer_04deg(f"{kenya_path}/weekly/chance_higherthan_20mm.png"
 # downscaled counterparts (Kenya only): onset maps from observed CHIRPS
 # continued with the per-member daily downscaled forecast (run_rainfall_onset.py), and dry/wet
 # spell + weekly >20mm chance maps (gef.plot_downscaled_spell_maps /
-# gef.plot_downscaled_exceedance, called from dowscale_dekade.py).
+# gef.plot_downscaled_exceedance, called from downscale_04deg_.py, or from
+# dowscale_dekade.py when the 0.4 degree downscaling didn't run). All of them are
+# under the downscaled date: forecast_04deg_dates.py keep-published removes the
+# 1.5 degree spell/20mm maps from the ECMWF date when 0.4 degree ones exist.
 # downscaled_onset_icpac is the default 20mm wet-spell definition. The _obs
 # keys are the observed-only CHIRPS met/pending/not-met maps from the same script.
 downscaled_picture_paths = {
@@ -512,13 +515,13 @@ downscaled_picture_paths = {
     "downscaled_onset_icpac_obs": f"{kenya_dwn_path}/monthly/onset_chirps_observed.png",
     "downscaled_onset_icpac10mm_obs": f"{kenya_dwn_path}/monthly/onset_chirps_observed_icpac10mm.png",
     "downscaled_onset_accum_obs": f"{kenya_dwn_path}/monthly/onset_chirps_observed_accum.png",
-    "dwn_wet_5": f"{kenya_path}/weekly/prob_wetspell_5days_downscaled.png",
-    "dwn_wet_7": f"{kenya_path}/weekly/prob_wetspell_7days_downscaled.png",
-    "dwn_wet_median": f"{kenya_path}/weekly/median_wetspell_length_downscaled.png",
-    "dwn_dry_5": f"{kenya_path}/weekly/prob_dryspell_5days_downscaled.png",
-    "dwn_dry_7": f"{kenya_path}/weekly/prob_dryspell_7days_downscaled.png",
-    "dwn_dry_median": f"{kenya_path}/weekly/median_dryspell_length_downscaled.png",
-    "chance_20mm": f"{kenya_path}/weekly/weekly_chance_higherthan_20mm_downscaled.png",
+    "dwn_wet_5": f"{kenya_dwn_path}/weekly/prob_wetspell_5days_downscaled.png",
+    "dwn_wet_7": f"{kenya_dwn_path}/weekly/prob_wetspell_7days_downscaled.png",
+    "dwn_wet_median": f"{kenya_dwn_path}/weekly/median_wetspell_length_downscaled.png",
+    "dwn_dry_5": f"{kenya_dwn_path}/weekly/prob_dryspell_5days_downscaled.png",
+    "dwn_dry_7": f"{kenya_dwn_path}/weekly/prob_dryspell_7days_downscaled.png",
+    "dwn_dry_median": f"{kenya_dwn_path}/weekly/median_dryspell_length_downscaled.png",
+    "chance_20mm": f"{kenya_dwn_path}/weekly/weekly_chance_higherthan_20mm_downscaled.png",
     # CHIRPS climatology counterparts (chirps_agro_climatology.py): the
     # forecast key + "_clim"
     "downscaled_onset_icpac_clim": f"{kenya_dwn_path}/monthly/onset_chirps_climatology.png",
@@ -617,6 +620,18 @@ briefing_plot_names = [
 ]
 for name in briefing_plot_names:
     picture_paths[name] = f"{briefing_plots_path}/{name}.png"
+
+# Tropical wave / MJO plots of the olr_waves stage (olr_wave_rain_maps.py,
+# olr_wave_filter.py, mjo_rmm_index.py), on the ECMWF date. Our own RMM phase
+# diagram replaces the chc-skills ECMWF one when it exists.
+olr_waves_path = f"plots/olr_waves/{ecmwf_date_str}"
+olr_wave_picture_paths = {
+    "MJO_map": f"{olr_waves_path}/rain_anomaly_mjo_weekly.png",
+    "hovmoller_olr_tropics_prob": f"{olr_waves_path}/waves_probability.png",
+}
+picture_paths.update(olr_wave_picture_paths)
+if os.path.exists(f"{olr_waves_path}/mjo_rmm_phase_diagram.png"):
+    picture_paths["mjo_rmm_ecmwf"] = f"{olr_waves_path}/mjo_rmm_phase_diagram.png"
 
 def resolve_picture_path(path):
     """Prefer the given path; also try the icpac10mm <-> 10mm filename alias."""
@@ -740,6 +755,10 @@ optional_picture_names.add("ECMWF_tercile_plot_EA")
 # Downscaled onset/spell/exceedance plots are new and each generator step
 # runs inside its own try/except, so a missing one is tolerated the same way.
 optional_picture_names |= set(downscaled_picture_paths)
+
+# The olr_waves stage needs ERA5/ECDS/dynamical downloads of its own and runs
+# with continue-on-error, so its plots are optional too.
+optional_picture_names |= set(olr_wave_picture_paths)
 
 # Picture-only shapes (no AI narration). Fill only when the shape name or
 # alt text equals a plot stem exactly (e.g. kenya_weekly_rainfall_analog_years).

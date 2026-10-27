@@ -174,6 +174,40 @@ jobs:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn,Somalia"
 
+      # ── DWD ICON-EPS (40 members, one week) ────────────────────────
+      # DWD keeps only the last ~24 h of runs, so this always takes the newest
+      # 00 UTC run and works on its own date (ICON_DATE_STR = the init date,
+      # usually the run date, newer than the ECMWF date): the stores go to
+      # data/<ICON_DATE_STR>/ICON_eps_*.zarr and the plots to
+      # plots/<country>/<ICON_DATE_STR>/icon/, both published by the upload
+      # steps below (DWD open data, CC BY 4.0).
+      - name: Download ICON-EPS
+        id: icon_download
+        continue-on-error: true
+        working-directory: main_repo
+        env:
+          BOUNDING_BOX: "22.5,-21,-34.5,55.5"
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+        run: |
+          set -o pipefail
+          python download_icon_eps.py | tee "$RUNNER_TEMP/icon_download.log"
+          # the script's last line is the init date; a failed variable is only
+          # logged there, so check the store exists before passing the date on
+          d=$(tail -n 1 "$RUNNER_TEMP/icon_download.log")
+          [[ "$d" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "::error::no ICON date in the download output"; exit 1; }
+          python -c "import xarray as xr; print(xr.open_zarr('data/$d/ICON_eps_tot_prec_$d.zarr'))"
+          echo "ICON_DATE_STR=$d" >> "$GITHUB_ENV"
+
+      - name: Plot ICON-EPS
+        if: ${{ steps.icon_download.outcome == 'success' }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python plot_icon.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          COUNTRIES: "Namibia,Botswana,Kenya,Zambia,Madagascar,Angola,Ghana,Senegal,Ethiopia,Zimbabwe,Malawi,Great_Horn,Somalia"
+
       - name: Perform downscaling
         continue-on-error: true
         working-directory: main_repo
@@ -812,16 +846,18 @@ jobs:
             main_repo/prompts/*.txt
             main_repo/s2s_briefing_*.pptx
 
-  # CHC keeps each 0.4 degree forecast file for only a couple of weeks: copy the
-  # global files to the private Sheerwater data lake (licensed ECMWF data, never
-  # anywhere public) so later reruns and other regions still have them. A job of its
-  # own, next to the pipeline rather than in it: the first run copies every file
-  # CHC still has (~1.6 GB each), later runs only the new one, and a failure here
-  # never holds up the plots or the email. The service account needs write access
-  # to gs://sheerwater-datalake/ecmwf-0_4/forecast/.
+  # CHC keeps each 0.4 degree forecast file for only a couple of weeks: keep the
+  # global files in the private Sheerwater data lake (licensed ECMWF data, never
+  # anywhere public) so later reruns and other regions still have them. They are
+  # stored as zarr stores chunked over all lead days (~2.1 GB each), which regional
+  # reads fetch concurrently; .nc files archived before the switch are converted too.
+  # A job of its own, next to the pipeline rather than in it: a run converts until
+  # --budget-minutes is used up (newest first) and leaves the rest for the next run,
+  # and a failure here never holds up the plots or the email. The service account
+  # needs write access to gs://sheerwater-datalake/ecmwf-0_4/forecast/.
   archive-04deg:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 200
     continue-on-error: true
     steps:
       - name: Checkout repo
@@ -835,7 +871,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install requests gcsfs
+        run: pip install requests gcsfs google-auth numpy xarray zarr netCDF4
 
       - name: Auth to Google Cloud
         uses: google-github-actions/auth@v2
@@ -844,7 +880,7 @@ jobs:
           service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
 
       - name: Archive 0.4 degree forecast files
-        run: python forecast_04deg_dates.py archive
+        run: python forecast_04deg_dates.py archive --budget-minutes 150
         env:
           FORECAST_04DEG_URL: ${{ secrets.FORECAST_04DEG_URL }}
 
