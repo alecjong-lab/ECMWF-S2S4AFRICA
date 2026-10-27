@@ -16,9 +16,10 @@ Expects, per init date, a control and a perturbed file of accumulated tp (m):
     ECMWF-IFS-ext_range_sfc_tp_cf_init_<YYYY-MM-DD>.grib
     ECMWF-IFS-ext_range_sfc_tp_pf_init_<YYYY-MM-DD>.grib
 
-With --yearly-output it also writes, per init, the ensemble-mean weekly total of
-every hindcast year (hindcast_weekly_<init>.nc: year, week, latitude, longitude),
-which downscale_04deg_.py ranks the forecast against.
+With --yearly-output it also writes, per init, the weekly total of every member
+of every hindcast year (hindcast_weekly_<init>.nc: year, number, week, latitude,
+longitude), which downscale_04deg_.py ranks the forecast members against when it
+can't open the hindcast zarr store.
 
 Usage:
     python build_mclimate_0p4.py --hindcast-dir <folder> --output m-climate/T_pr_0p4
@@ -139,7 +140,7 @@ def main():
     parser.add_argument("--inits", help="comma-separated hindcast init dates to pool; default: every date found in --hindcast-dir")
     parser.add_argument("--label", help="date in the output filename (what gef.open_mclimate matches the forecast date against); default: the middle init")
     parser.add_argument("--weeks", type=int, default=6)
-    parser.add_argument("--yearly-output", type=Path, help="folder to also write per-init hindcast_weekly_<init>.nc files to (ensemble mean per hindcast year)")
+    parser.add_argument("--yearly-output", type=Path, help="folder to also write per-init hindcast_weekly_<init>.nc files to (every member of every hindcast year)")
     args = parser.parse_args()
 
     if args.inits:
@@ -155,8 +156,8 @@ def main():
     if args.yearly_output:
         args.yearly_output.mkdir(parents=True, exist_ok=True)
         for init, weekly in zip(inits, per_init):
-            yearly = weekly.mean("number").astype("float32").transpose("year", "week", "latitude", "longitude").to_dataset(name="tp")
-            yearly.tp.attrs = {"long_name": "Ensemble-mean weekly total precipitation", "units": "mm"}
+            yearly = weekly.astype("float32").transpose("year", "number", "week", "latitude", "longitude").to_dataset(name="tp")
+            yearly.tp.attrs = {"long_name": "Weekly total precipitation", "units": "mm"}
             yearly.attrs = {"hindcast_init": init, "members": int(weekly.sizes["number"])}
             yearly_path = args.yearly_output / f"hindcast_weekly_{init}.nc"
             yearly.to_netcdf(yearly_path, encoding={"tp": {"zlib": True, "complevel": 4}})

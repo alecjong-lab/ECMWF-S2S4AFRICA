@@ -3,9 +3,13 @@ Weekly Kenya downscaling from the 0.4 degree forecast -- when its inputs are
 there, this replaces the 1.5 degree product dowscale_dekade.py made earlier in
 the same run.
 
-Ranks every member's weekly total among the 0.4 degree hindcast years of the
-same lead week, and looks that rank up in the sorted CHIRPS 0.05 degree weekly
-climatology (gef.rank_downscale_to_grid).
+Ranks every member's weekly total among all 0.4 degree hindcast members of every
+hindcast year (20 years x 11 members) for the same lead week, and looks that
+rank up in the sorted CHIRPS 0.05 degree weekly climatology
+(gef.rank_downscale_to_grid). A single member is ranked among single runs, not
+among each year's ensemble mean: those vary less from year to year, which put
+about 40% of members in weeks 3-4 on the driest or wettest CHIRPS year and made
+the ensemble mean 15-25% too wet from week 2 on (test/ensemble_rank_test/).
 
 It writes the Kenya weekly downscaled outputs under the same names
 dowscale_dekade.py uses (data_weekly_Kenya_downscaled.nc, daily_downscaled_kenya.tif,
@@ -48,7 +52,10 @@ Inputs
                                                      the bucket
     <HINDCAST_04DEG_PATH>/hindcast_weekly_<init>.nc  used when the store can't be opened;
                                                      written by build_mclimate_0p4.py
-                                                     --yearly-output
+                                                     --yearly-output (year, number, week, ...).
+                                                     Older files hold only each year's
+                                                     ensemble mean; they are still used,
+                                                     with a warning
     downscale_data/chirpsv3_weeks/chirpsv3_weeks_2005_2025_sorted_<MM-DD>_Kenya.nc
 
 Env vars: DATE_STR and MAIN_PATH as in dowscale_dekade.py, plus
@@ -190,19 +197,25 @@ if hindcast_gap>MAX_HINDCAST_GAP_DAYS:
 # hindcast week k is ranked against forecast week k
 n_weeks=data_weekly.sizes['step']
 if store is not None:
-    # ensemble-mean weekly total of every hindcast year, as build_mclimate_0p4.py --yearly-output makes them
+    # weekly total of every member of every hindcast year, as build_mclimate_0p4.py --yearly-output makes them
     weekly_marks=[np.timedelta64(7*k,'D') for k in range(n_weeks+1)]
     accumulated=store.tp.isel(init=hindcast_index).sel(step=weekly_marks).compute()
     if bool(accumulated.isnull().any()):
         keep_1p5deg(f"{hindcast_name} is incomplete in the store")
-    hindcast=accumulated.diff('step').clip(min=0).mean('number')
+    hindcast=accumulated.diff('step').clip(min=0)
 else:
     hindcast=xr.open_dataset(hindcast_file).tp.isel(week=slice(0,n_weeks)).rename(week='step')
+    if 'number' not in hindcast.dims:
+        print(f"WARNING: {hindcast_name} holds only each year's ensemble mean, so members are ranked among "
+              f"those -- too many land on the driest/wettest CHIRPS year. Rebuild it with "
+              f"build_mclimate_0p4.py --yearly-output to keep the members.")
 hindcast=hindcast.assign_coords(step=data_weekly.step.values)
 hindcast=gef.align_to_forecast_grid(hindcast,data_weekly)
 if not (hindcast.sizes['latitude']==data_weekly.sizes['latitude'] and hindcast.sizes['longitude']==data_weekly.sizes['longitude']):
     keep_1p5deg(f"{hindcast_name} does not cover Kenya's CHIRPS box")
-print(f"Hindcast years from: {hindcast_name}")
+# every member of every year is one sample to rank among (20 x 11 = 220 per cell)
+hindcast=hindcast.stack(sample=[d for d in ('year','number') if d in hindcast.dims]).reset_index('sample',drop=True)
+print(f"Hindcast from: {hindcast_name} ({hindcast.sizes['sample']} samples per cell and week)")
 
 #-----CHIRPS weekly climatology (same file choice as dowscale_dekade.py)-----------------------------------------------#
 forecast_year = int(data.time.dt.year.values)
@@ -230,7 +243,7 @@ if missing_chirps:
 chirps_weeks_ds = gef.stack_climatology_steps(fclim_chirps, data_weekly.step.values)
 
 #-----downscale every member, and derive the daily products, before writing anything-----------------------------------#
-rescaled=gef.rank_downscale_to_grid(data_weekly.tp,hindcast,chirps_weeks_ds.tp,
+rescaled=gef.rank_downscale_to_grid(data_weekly.tp,hindcast,chirps_weeks_ds.tp,rank_dim='sample',
                                     closing_size=closing_size,rank_sigma=rank_sigma,field_sigma=field_sigma)
 rescaled_forecast=rescaled.assign_coords({'time':data_weekly.time,'valid_time':data_weekly.valid_time}).to_dataset(name='tp')
 rescaled_forecast=rescaled_forecast.where(rescaled_forecast>=0)
@@ -238,6 +251,7 @@ rescaled_forecast['tp'].attrs=data_weekly.tp.attrs
 rescaled_forecast=rescaled_forecast.transpose('number','step','latitude','longitude')
 # which version made the product: dowscale_dekade.py's 1.5 degree file has no such attribute
 rescaled_forecast.attrs={'forecast_resolution':'0.4deg','hindcast':hindcast_name,
+                         'hindcast_samples':int(hindcast.sizes['sample']),
                          'downscaling':f'downscale_04deg_.py, closing {closing_size}, rank sigma {rank_sigma:g}, field sigma {field_sigma:g}'}
 
 kenya_weekly=rescaled_forecast.sel(longitude=slice(bbox['lon1'],bbox['lon2']),latitude=slice(bbox['lat1'],bbox['lat2']))
