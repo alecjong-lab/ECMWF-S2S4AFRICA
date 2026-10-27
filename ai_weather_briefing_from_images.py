@@ -118,7 +118,7 @@ def caption_request(plot):
     t = plot_slide[plot]
     text = f"Context: this is the pipeline's '{slide_labels[t]}' output for {plot_dates[t]}."
     if "/04deg/" in plot_paths[t]:
-        text += " It is made from the 0.4 degree ECMWF forecast, which covers 4 weeks."
+        text += " It is made from the 0.4 degree ECMWF forecast; take the number of weeks from its panels."
     if caption_prompt != "compact":
         return text
     text += f"\nHow to read this plot: {plot_guide[plot]}"
