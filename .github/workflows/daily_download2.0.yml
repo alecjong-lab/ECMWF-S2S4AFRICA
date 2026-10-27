@@ -812,16 +812,18 @@ jobs:
             main_repo/prompts/*.txt
             main_repo/s2s_briefing_*.pptx
 
-  # CHC keeps each 0.4 degree forecast file for only a couple of weeks: copy the
-  # global files to the private Sheerwater data lake (licensed ECMWF data, never
-  # anywhere public) so later reruns and other regions still have them. A job of its
-  # own, next to the pipeline rather than in it: the first run copies every file
-  # CHC still has (~1.6 GB each), later runs only the new one, and a failure here
-  # never holds up the plots or the email. The service account needs write access
-  # to gs://sheerwater-datalake/ecmwf-0_4/forecast/.
+  # CHC keeps each 0.4 degree forecast file for only a couple of weeks: keep the
+  # global files in the private Sheerwater data lake (licensed ECMWF data, never
+  # anywhere public) so later reruns and other regions still have them. They are
+  # stored as zarr stores chunked over all lead days (~2.1 GB each), which regional
+  # reads fetch concurrently; .nc files archived before the switch are converted too.
+  # A job of its own, next to the pipeline rather than in it: a run converts until
+  # --budget-minutes is used up (newest first) and leaves the rest for the next run,
+  # and a failure here never holds up the plots or the email. The service account
+  # needs write access to gs://sheerwater-datalake/ecmwf-0_4/forecast/.
   archive-04deg:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 200
     continue-on-error: true
     steps:
       - name: Checkout repo
@@ -835,7 +837,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install requests gcsfs
+        run: pip install requests gcsfs google-auth numpy xarray zarr netCDF4
 
       - name: Auth to Google Cloud
         uses: google-github-actions/auth@v2
@@ -844,7 +846,7 @@ jobs:
           service_account: "alec-github-action@rhiza-shared.iam.gserviceaccount.com"
 
       - name: Archive 0.4 degree forecast files
-        run: python forecast_04deg_dates.py archive
+        run: python forecast_04deg_dates.py archive --budget-minutes 150
         env:
           FORECAST_04DEG_URL: ${{ secrets.FORECAST_04DEG_URL }}
 
