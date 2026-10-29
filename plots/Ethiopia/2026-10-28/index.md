@@ -2,13 +2,20 @@
 
 ## Other
 
-### icon
+### 04deg
 
-- [icon_daily_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/icon/icon_daily_precip.png)
-- [icon_daily_precip_prob_10mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/icon/icon_daily_precip_prob_10mm.png)
-- [icon_week_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/icon/icon_week_precip.png)
-- [icon_week_precip_p10.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/icon/icon_week_precip_p10.png)
-- [icon_week_precip_p90.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/icon/icon_week_precip_p90.png)
-- [icon_week_precip_prob_10mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/icon/icon_week_precip_prob_10mm.png)
-- [icon_week_precip_prob_25mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/icon/icon_week_precip_prob_25mm.png)
-- [icon_week_precip_prob_50mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/icon/icon_week_precip_prob_50mm.png)
+- [25th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/monthly/25th_percentile_exedance.png)
+- [50th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/monthly/50th_percentile_exedance.png)
+- [75th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/monthly/75th_percentile_exedance.png)
+- [anomaly_from_25th.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/monthly/anomaly_from_25th.png)
+- [anomaly_from_50th.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/monthly/anomaly_from_50th.png)
+- [anomaly_from_75th.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/monthly/anomaly_from_75th.png)
+- [chance_of_above_or_below.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/monthly/chance_of_above_or_below.png)
+- [25th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/weekly/25th_percentile_exedance.png)
+- [50th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/weekly/50th_percentile_exedance.png)
+- [75th_percentile_exedance.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/weekly/75th_percentile_exedance.png)
+- [anomaly_from_25th.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/weekly/anomaly_from_25th.png)
+- [anomaly_from_50th.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/weekly/anomaly_from_50th.png)
+- [anomaly_from_75th.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/weekly/anomaly_from_75th.png)
+- [chance_of_above_or_below.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/weekly/chance_of_above_or_below.png)
+- [efi_sot_precip.png](https://storage.googleapis.com/africa-forecasting-data/plots/Ethiopia/2026-10-28/04deg/weekly/efi_sot_precip.png)
