@@ -1,0 +1,3 @@
+# weather-skills-core moved from rhiza-research to the weather-skills org; the
+# forecasting-skills old-dev branch still pins the old (now gone) URL.
+weather-skills-core @ git+https://github.com/weather-skills/weather-skills-core@old-dev

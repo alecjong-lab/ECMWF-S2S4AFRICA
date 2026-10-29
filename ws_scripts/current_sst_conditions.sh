@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # OISST SST anomaly, Indian Ocean basin, latest published day, with IOD boxes.
 set -eo pipefail
+export UV_OVERRIDE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/uv_overrides_old_dev.txt"
 
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"

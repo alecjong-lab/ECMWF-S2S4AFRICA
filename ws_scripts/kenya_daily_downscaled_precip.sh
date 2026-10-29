@@ -17,6 +17,7 @@
 # that instead; see compute_prob_above_kmsa for the native-week-to-Monday
 # mapping this requires.
 set -eo pipefail
+export UV_OVERRIDE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/uv_overrides_old_dev.txt"
 
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"

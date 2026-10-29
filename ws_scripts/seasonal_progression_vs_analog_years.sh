@@ -4,6 +4,7 @@
 # Observed weeks are 7-day windows strided on Mondays (Mon–Sun).
 # The weekly downscale is already weekly — convert-to-totals only.
 set -eo pipefail
+export UV_OVERRIDE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/uv_overrides_old_dev.txt"
 
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@old-dev forecasting-skills"
 IR=intermediate_results

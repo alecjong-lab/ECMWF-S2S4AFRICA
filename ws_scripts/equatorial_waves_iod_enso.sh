@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Reproduce the four IOD/ENSO figures.
 set -eo pipefail
+export UV_OVERRIDE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/uv_overrides_chc.txt"
 
 SKILLS="git+https://github.com/rhiza-research/chc-skills@dev"
 

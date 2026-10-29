@@ -3,6 +3,7 @@
 # cycle - 2 for 00Z/12Z, 1 for 06Z/18Z), ECMWF S2S ensemble mean fills the
 # rest, one 6-panel heatmap.
 set -eo pipefail
+export UV_OVERRIDE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/uv_overrides_old_dev.txt"
 
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
