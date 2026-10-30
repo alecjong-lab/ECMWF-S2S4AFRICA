@@ -1,3 +1,0 @@
-# chc-skills dev pins weather-skills-core's dev branch, which the new
-# weather-skills org repo no longer has; main is the current line.
-weather-skills-core @ git+https://github.com/weather-skills/weather-skills-core@main

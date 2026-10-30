@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -eo pipefail
-export UV_OVERRIDE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/uv_overrides_chc.txt"
+# shellcheck source=./_skills_core_redirect.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_skills_core_redirect.sh"
 
-SKILLS="git+https://github.com/rhiza-research/chc-skills@dev"
+SKILLS="git+https://github.com/rhiza-research/chc-skills@main"
 
 # 1) Hovmöller diagram — OLR, tropics (15S-15N)
 uvx --from "$SKILLS" chc-skills ncics-mjo-png \

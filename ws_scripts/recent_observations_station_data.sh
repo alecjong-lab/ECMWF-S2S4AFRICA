@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
-export UV_OVERRIDE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/uv_overrides_old_dev.txt"
+# shellcheck source=./_skills_core_redirect.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_skills_core_redirect.sh"
 
 S="uvx --from git+https://github.com/rhiza-research/forecasting-skills@old-dev forecasting-skills"
 mkdir -p intermediate_results

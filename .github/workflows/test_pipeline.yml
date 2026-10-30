@@ -732,7 +732,6 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           version: "0.11.20"
-          enable-cache: false
 
       - name: Run recent_rainfall_observations_kenya.sh
         if: ${{ steps.ws.outputs.recent_rainfall_observations_kenya == 'true' }}

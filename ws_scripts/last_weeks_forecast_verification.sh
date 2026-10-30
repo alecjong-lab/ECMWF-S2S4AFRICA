@@ -4,7 +4,8 @@
 # Writes kenya_{gefs,aifs,ecmwf,kmsa,cumulus}_chirps_{verify_5mm,bias,mae}.png
 # Cumulus AI needs GOOGLE_APPLICATION_CREDENTIALS (gs://sheerwater-datalake is private).
 set -eo pipefail
-export UV_OVERRIDE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/uv_overrides_old_dev.txt"
+# shellcheck source=./_skills_core_redirect.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_skills_core_redirect.sh"
 
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@old-dev forecasting-skills"
 run() { $WS "$@"; }
