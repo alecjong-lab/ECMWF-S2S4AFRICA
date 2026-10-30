@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
+# shellcheck source=./_skills_core_redirect.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_skills_core_redirect.sh"
 S="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 BBOX=5.0/36.5/-5.0/42.0   # from: resolve-region "Kenya OND region"
 

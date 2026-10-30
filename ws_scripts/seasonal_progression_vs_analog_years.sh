@@ -4,6 +4,8 @@
 # Observed weeks are 7-day windows strided on Mondays (Mon–Sun).
 # The weekly downscale is already weekly — convert-to-totals only.
 set -eo pipefail
+# shellcheck source=./_skills_core_redirect.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_skills_core_redirect.sh"
 
 WS="uvx --from git+https://github.com/rhiza-research/weather-skills@old-dev forecasting-skills"
 IR=intermediate_results

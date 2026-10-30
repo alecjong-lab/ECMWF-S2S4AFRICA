@@ -3,6 +3,8 @@
 # cycle - 2 for 00Z/12Z, 1 for 06Z/18Z), ECMWF S2S ensemble mean fills the
 # rest, one 6-panel heatmap.
 set -eo pipefail
+# shellcheck source=./_skills_core_redirect.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_skills_core_redirect.sh"
 
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"

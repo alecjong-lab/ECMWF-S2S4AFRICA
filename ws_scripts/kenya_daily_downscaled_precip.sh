@@ -17,6 +17,8 @@
 # that instead; see compute_prob_above_kmsa for the native-week-to-Monday
 # mapping this requires.
 set -eo pipefail
+# shellcheck source=./_skills_core_redirect.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_skills_core_redirect.sh"
 
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"

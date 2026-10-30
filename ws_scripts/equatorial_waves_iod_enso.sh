@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Reproduce the four IOD/ENSO figures.
 set -eo pipefail
+# shellcheck source=./_skills_core_redirect.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_skills_core_redirect.sh"
 
-SKILLS="git+https://github.com/rhiza-research/chc-skills@dev"
+SKILLS="git+https://github.com/rhiza-research/chc-skills@main"
 
 # --- Observations ---
 uvx --from "$SKILLS" chc-skills iod-enso-fetch \

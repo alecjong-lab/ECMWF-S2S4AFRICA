@@ -3,6 +3,8 @@
 # Models: AIFS-ENS, ECMWF ENS (IFS 15-day), ECMWF ER (S2S), KMSA downscaled, GEFS, Cumulus AI.
 # Writes kenya_week1_mae_vs_chirps_4wk.png (briefing template picture name).
 set -eo pipefail
+# shellcheck source=./_skills_core_redirect.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_skills_core_redirect.sh"
 
 # shellcheck source=./_portable_date.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_portable_date.sh"
