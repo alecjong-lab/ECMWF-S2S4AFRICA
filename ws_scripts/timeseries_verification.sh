@@ -9,6 +9,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/_skills_core_redirect.sh"
 
 SKILLS="git+https://github.com/rhiza-research/forecasting-skills@old-dev"
 run() { uvx --from "$SKILLS" forecasting-skills "$@"; }
+# cumulus-fetch tracks current dev; everything else stays on old-dev.
+CUMULUS_SKILLS="git+https://github.com/rhiza-research/forecasting-skills@dev"
 
 mkdir -p intermediate_results
 cd intermediate_results
@@ -76,7 +78,7 @@ week_mae() {  # $1=model_key  $2=verify_start
   local out="mae_${key}_${start}_mean.zarr"
 
   if [[ "$key" == "cumulus" ]]; then
-    run cumulus-fetch --date "$start" -v tp --bbox "$BBOX" --output "$raw"
+    uvx --from "$CUMULUS_SKILLS" forecasting-skills cumulus-fetch --date "$start" -v tp --bbox "$BBOX" --output "$raw"
   else
     run dynamical-fetch \
       --dataset "${DATASET[$key]}" \
