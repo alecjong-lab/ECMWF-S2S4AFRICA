@@ -1,8 +1,8 @@
 # Domain-wide — 2026-10-28
 
-- [climate_indices_2026-10-28.csv](https://storage.googleapis.com/africa-forecasting-data/data/2026-10-28/diagnostics/climate_indices_2026-10-28.csv)
-- [climate_indices_anomaly_2026-10-28.csv](https://storage.googleapis.com/africa-forecasting-data/data/2026-10-28/diagnostics/climate_indices_anomaly_2026-10-28.csv)
+- [daily_downscaled_kenya.tif](https://storage.googleapis.com/africa-forecasting-data/data/2026-10-28/daily_downscaled_kenya.tif)
 - [mjo_rmm_index_2026-10-28.nc](https://storage.googleapis.com/africa-forecasting-data/data/2026-10-28/mjo_rmm_index_2026-10-28.nc)
+- **CE_Kenya_dwnscaled_timeseries_daily.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/CE_Kenya_dwnscaled_timeseries_daily.zarr) · `gs://africa-forecasting-data/data/2026-10-28/CE_Kenya_dwnscaled_timeseries_daily.zarr`
 - **ECMWF_s2s_10wind_2026-10-28.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/ECMWF_s2s_10wind_2026-10-28.zarr) · `gs://africa-forecasting-data/data/2026-10-28/ECMWF_s2s_10wind_2026-10-28.zarr`
 - **ECMWF_s2s_10wind_alt_2026-10-28.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/ECMWF_s2s_10wind_alt_2026-10-28.zarr) · `gs://africa-forecasting-data/data/2026-10-28/ECMWF_s2s_10wind_alt_2026-10-28.zarr`
 - **ECMWF_s2s_500wind_2026-10-28.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/ECMWF_s2s_500wind_2026-10-28.zarr) · `gs://africa-forecasting-data/data/2026-10-28/ECMWF_s2s_500wind_2026-10-28.zarr`
@@ -15,6 +15,10 @@
 - **ECMWF_s2s_sst_2026-10-28.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/ECMWF_s2s_sst_2026-10-28.zarr) · `gs://africa-forecasting-data/data/2026-10-28/ECMWF_s2s_sst_2026-10-28.zarr`
 - **ECMWF_s2s_sst_nino34_2026-10-28.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/ECMWF_s2s_sst_nino34_2026-10-28.zarr) · `gs://africa-forecasting-data/data/2026-10-28/ECMWF_s2s_sst_nino34_2026-10-28.zarr`
 - **ECMWF_s2s_tcw_2026-10-28.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/ECMWF_s2s_tcw_2026-10-28.zarr) · `gs://africa-forecasting-data/data/2026-10-28/ECMWF_s2s_tcw_2026-10-28.zarr`
+- **daily_downscaled_kenya.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/daily_downscaled_kenya.zarr) · `gs://africa-forecasting-data/data/2026-10-28/daily_downscaled_kenya.zarr`
+- **daily_downscaled_kenya_members.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/daily_downscaled_kenya_members.zarr) · `gs://africa-forecasting-data/data/2026-10-28/daily_downscaled_kenya_members.zarr`
+- **daily_downscaled_kenya_members_onset.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/daily_downscaled_kenya_members_onset.zarr) · `gs://africa-forecasting-data/data/2026-10-28/daily_downscaled_kenya_members_onset.zarr`
+- **data_weekly_Kenya_downscaled.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/data_weekly_Kenya_downscaled.zarr) · `gs://africa-forecasting-data/data/2026-10-28/data_weekly_Kenya_downscaled.zarr`
 - **gefs_angola.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/gefs/gefs_angola.zarr) · `gs://africa-forecasting-data/data/2026-10-28/gefs/gefs_angola.zarr`
 - **gefs_botswana.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/gefs/gefs_botswana.zarr) · `gs://africa-forecasting-data/data/2026-10-28/gefs/gefs_botswana.zarr`
 - **gefs_ethiopia.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-10-28/gefs/gefs_ethiopia.zarr) · `gs://africa-forecasting-data/data/2026-10-28/gefs/gefs_ethiopia.zarr`
