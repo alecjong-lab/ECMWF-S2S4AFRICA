@@ -135,9 +135,15 @@ forecast_files = {
     (11, 1): ["ECMWF_tp_forecasts_11-01-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_31_Great_Horn.nc","November_Dekad1"],
     (11, 11): ["ECMWF_tp_forecasts_11-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_32_Great_Horn.nc","November_Dekad2"],
     (11, 21): ["ECMWF_tp_forecasts_11-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_33_Great_Horn.nc","November_Dekad3"],
+    (12, 1): ["ECMWF_tp_forecasts_12-01-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_34_Great_Horn.nc","December_Dekad1"],
+    (12, 11): ["ECMWF_tp_forecasts_12-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_35_Great_Horn.nc","December_Dekad2"],
+    (12, 21): ["ECMWF_tp_forecasts_12-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_36_Great_Horn.nc","December_Dekad3"],
     # Later dekads need their reforecast (build_dekad_reforecast.py) and climatology
     # (build_chirps_dekad_climatology.py) files first: adding a key before both
-    # files exist makes the runs before it fail on open.
+    # files exist makes the runs before it fail on open. Going past December also
+    # needs the year handled: keys are (month, day) sliced in order, the filenames
+    # are fixed to 2025, and the Kenya CSV columns are hardcoded as ire2026<dekad>,
+    # so January entries would overwrite the Jan 2026 columns.
 
 }
 
