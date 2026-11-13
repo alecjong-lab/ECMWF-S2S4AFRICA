@@ -6,14 +6,15 @@ CHC posts the 0.4 degree forecast initialized on day X at about 21:05 UTC on day
 so a run at 02:33 UTC already has the init of the day before. The 1.5 degree ECMWF
 forecast the rest of the pipeline uses lags two days. So a run has two forecast
 dates: the 1.5 degree one (ECMWF date, run - 2) and the 0.4 degree one (normally
-run - 1). The 0.4 degree products -- plot_s2s_04deg_.py's plots and
-downscale_04deg_.py's Kenya weekly downscaling, with everything that reads it --
-go under their own date's folders (plots/<country>/<date>/, data/<date>/).
+run - 1). The 0.4 degree products -- plot_s2s_04deg_.py's plots,
+downscale_04deg_.py's Kenya weekly downscaling, with everything that reads it,
+and downscale_dekade_04deg_.py's dekadal downscaling -- go under their own date's
+folders (plots/<country>/<date>/, data/<date>/).
 
 The next day's run has that date as its ECMWF date, and dowscale_dekade.py then
-writes the 1.5 degree Kenya weekly downscaled outputs under the same names into
-the same folders. keep-published stops those from replacing the published 0.4
-degree ones in the buckets.
+writes the 1.5 degree weekly and dekadal downscaled outputs under the same names
+into the same folders. keep-published stops those from replacing the published
+0.4 degree ones in the buckets.
 
     python forecast_04deg_dates.py resolve --run-date 2026-10-15 --ecmwf-date 2026-10-13
         The newest 0.4 degree init on CHC's server from the ECMWF date up to the day
@@ -27,8 +28,10 @@ degree ones in the buckets.
         <date> so the uploads leave the published ones alone; when there is no local
         0.4 degree product for --date-04deg (its downscaling failed), downloads the
         published ones for <date> instead, so the run's downscaled products are still
-        the 0.4 degree ones. Run from the repo root (MAIN_PATH). Nothing to do when the
-        two dates are the same.
+        the 0.4 degree ones. The same for the dekadal product (on dekad starts), apart
+        from the download: it is only made for its own date, so there is nothing to
+        stand in for. Run from the repo root (MAIN_PATH). Nothing to do when the two
+        dates are the same.
 
     python forecast_04deg_dates.py archive [--date 2026-10-14 ...] [--budget-minutes 90]
         Keeps the global CHC files (pr_IFS-SUBS-0.4_<YYYYMMDD>.daily.nc, ~2.2 GB each)
@@ -95,6 +98,16 @@ KENYA_WEEKLY_04DEG_DATA = [
     'daily_downscaled_kenya_members.zarr',
     'daily_downscaled_kenya_members_onset.zarr',
     'CE_Kenya_dwnscaled_timeseries_daily.zarr',
+]
+# what downscale_dekade_04deg_.py writes, relative to plots/ and data/<date>/ (the
+# plots of every DEKADE_COUNTRIES country; the Kenya bucket holds the Kenya ones)
+DEKADAL_04DEG_PLOTS = [
+    '*/{date}/dekadal/dekadal_precip_downscaled*.png',
+    'Kenya/{date}/dekadal/counties',
+]
+DEKADAL_04DEG_DATA = [
+    'data_dekade_*_downscaled.nc',
+    'geotifs_kenya',
 ]
 
 
@@ -438,10 +451,10 @@ def _remove(path):
         os.remove(path)
 
 
-def published_is_04deg(fs, date):
-    """True if the Kenya bucket's weekly downscaled forecast for date is downscale_04deg_.py's."""
+def published_is_04deg(fs, date, product='weekly'):
+    """True if the Kenya bucket's weekly (or 'dekade') downscaled forecast for date is the 0.4 degree one."""
     import xarray as xr
-    remote = f'{KENYA_BUCKET}/{date}/data/data_weekly_Kenya_downscaled.nc'
+    remote = f'{KENYA_BUCKET}/{date}/data/data_{product}_Kenya_downscaled.nc'
     if not fs.exists(remote):
         return False
     # the bucket is public: "#mode=bytes" has netCDF read just the header over HTTP
@@ -456,6 +469,7 @@ def keep_published(date, date_04deg, prefix):
         return
     import gcsfs
     fs = gcsfs.GCSFileSystem(token='anon')
+    keep_published_dekadal(fs, date, prefix)
     if not published_is_04deg(fs, date):
         print(f"No published 0.4 degree Kenya weekly product for {date}: the 1.5 degree one stays")
         return
@@ -479,6 +493,24 @@ def keep_published(date, date_04deg, prefix):
                 os.makedirs(os.path.dirname(local), exist_ok=True)
                 fs.get(remote, local, recursive=True)
                 print(f"  gs://{remote} -> {local}")
+
+
+def keep_published_dekadal(fs, date, prefix):
+    """
+    Remove the local 1.5 degree dekadal outputs for date when the Kenya bucket already
+    holds downscale_dekade_04deg_.py's: the plots of every country, the netCDF files and
+    the Kenya GeoTIFFs. (data/Kenya2026.csv is the run's own copy and isn't published.)
+    """
+    if not published_is_04deg(fs, date, product='dekade'):
+        print(f"No published 0.4 degree dekadal product for {date}: the 1.5 degree one (if any) stays")
+        return
+    plots_dir = os.path.join(prefix, 'plots')
+    data_dir = os.path.join(prefix, 'data', date)
+    plots = _matches(plots_dir, [p.format(date=date) for p in DEKADAL_04DEG_PLOTS])
+    for path in plots + _matches(data_dir, DEKADAL_04DEG_DATA):
+        _remove(path)
+    print(f"Removed the 1.5 degree dekadal downscaled outputs for {date}: "
+          f"gs://{KENYA_BUCKET}/{date}/ already holds the 0.4 degree ones")
 
 
 def main():

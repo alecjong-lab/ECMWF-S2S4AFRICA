@@ -18,8 +18,9 @@ breakdown, promt_unformat3.json, ...), so everything downstream -- rainfall
 onset, the CHIRPS climatology maps, the briefing, the email, the Kenya bucket
 -- uses them unchanged. Run it after dowscale_dekade.py: if the 0.4 degree
 forecast for DATE_STR or a hindcast close to that date is missing, it exits
-without touching anything and the 1.5 degree outputs stay. The dekadal and
-Ghana downscaling are still dowscale_dekade.py's.
+without touching anything and the 1.5 degree outputs stay. The dekadal
+downscaling from the 0.4 degree forecast is downscale_dekade_04deg_.py's; the
+Ghana downscaling is still dowscale_dekade.py's.
 
 DATE_STR is the 0.4 degree forecast's own init, which in the workflows is
 normally a day newer than the 1.5 degree ECMWF date (see forecast_04deg_dates.py),

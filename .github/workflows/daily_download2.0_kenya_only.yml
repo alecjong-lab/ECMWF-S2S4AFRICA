@@ -287,6 +287,11 @@ jobs:
               mkdir -p "data/${DATE_04DEG}"
               gcloud storage cp "gs://${KENYA_BUCKET}/${DATE_04DEG}/data/*Kenya*downscaled*.nc" "data/${DATE_04DEG}/" || true
               gcloud storage cp "gs://${KENYA_BUCKET}/${DATE_04DEG}/data/daily_downscaled_kenya.tif" "data/${DATE_04DEG}/" || true
+              # the 0.4 degree dekadal GeoTIFFs (downscale_dekade_04deg_.py), on dekad starts
+              if gcloud storage ls "gs://${KENYA_BUCKET}/${DATE_04DEG}/data/geotifs_kenya/" >/dev/null 2>&1; then
+                mkdir -p "data/${DATE_04DEG}/geotifs_kenya"
+                gcloud storage rsync -r "gs://${KENYA_BUCKET}/${DATE_04DEG}/data/geotifs_kenya" "data/${DATE_04DEG}/geotifs_kenya" || true
+              fi
             fi
           fi
 
@@ -443,6 +448,21 @@ jobs:
           DATE_STR: ${{ steps.date_04deg.outputs.date }}
           # the 1.5 degree run whose days extend the rainfall onset forecast
           ONSET_1P5_DATE: ${{ steps.ecmwf_date.outputs.date }}
+
+      # downscale_dekade_04deg_.py: the dekadal counterpart of the step above, on
+      # dekad starts only (gef.DEKAD_FORECAST_FILES). Replaces dowscale_dekade.py's
+      # 1.5 degree dekadal outputs of the same names when the 0.4 degree forecast for
+      # its date and the hindcast store are there; otherwise exits and leaves them.
+      - name: Perform 0.4 degree dekadal downscaling
+        if: ${{ steps.detect.outputs.run_downscale != 'false' }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python downscale_dekade_04deg_.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DEKADE_COUNTRIES: "Kenya"
+          DATE_STR: ${{ steps.date_04deg.outputs.date }}
 
       # The run for the day before made the 0.4 degree Kenya downscaling for
       # this ECMWF date; dowscale_dekade.py's 1.5 degree outputs of the same
@@ -661,13 +681,14 @@ jobs:
       # and kenya_daily_downscaled_precip.sh read today's downscaled forecast back from
       # gs://${KENYA_BUCKET}, and uploading afterwards made them silently use the previous init.
       # ── Stage Kenya-only plots, downscaled NetCDF, and cropped zarr data ──
-      # For the ECMWF date and, when it differs, the downscaled forecast's (0.4
-      # degree) date.
+      # For the ECMWF date and, when they differ, the downscaled forecast's date
+      # and the 0.4 degree date (its dekadal product is there even when the weekly
+      # one fell back to the ECMWF date).
       - name: Stage Kenya bucket contents
         continue-on-error: true
         working-directory: main_repo
         run: |
-          for d in $(printf '%s\n' "${{ steps.ecmwf_date.outputs.date }}" "${{ steps.downscaled_date.outputs.date }}" | sort -u); do
+          for d in $(printf '%s\n' "${{ steps.ecmwf_date.outputs.date }}" "${{ steps.downscaled_date.outputs.date }}" "${{ steps.date_04deg.outputs.date }}" | grep . | sort -u); do
             STAGE_DIR="kenya_bucket_staging/$d"
             mkdir -p "$STAGE_DIR"
             for sub in weekly dekadal monthly 04deg; do
