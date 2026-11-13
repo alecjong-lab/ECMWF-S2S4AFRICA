@@ -93,72 +93,17 @@ states1_regions = states1.copy()
 states1_regions['region'] = states1_regions['adm1_name'].map(region_map)
 regions_kenya = states1_regions.dropna(subset=['region']).dissolve(by='region')
 
-# The dekad index inside a chirps climatology filename: the two digits sitting
-# between the 2005_2025 span and the country, with an optional "sorted_" in
-# between (chirpsv3_dekads_2005_2025_26_Great_Horn.nc -> 26,
-# chirpsv3_dekads_2005_2025_sorted_06_Kenya.nc -> 06). Slicing at a fixed offset
-# quietly yields "so" for the sorted_ names, so match the digits instead.
-DEKAD_IN_FILENAME = re.compile(r'_(?:sorted_)?(\d{2})_[A-Za-z_]+\.nc$')
-
-def dekad_index(chirps_filename):
-    match = DEKAD_IN_FILENAME.search(chirps_filename)
-    if match is None:
-        raise ValueError(f"No dekad index in climatology filename {chirps_filename!r}")
-    return match.group(1)
-
-forecast_files = {
-    (2, 17): ["ECMWF_tp_forecasts_02-17-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_06_Kenya.nc","Febuary_Dekad3.tif"],
-    (2, 27): ["ECMWF_tp_forecasts_02-27-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_07_Kenya.nc","March_Dekad1.tif"],
-    (3, 9): ["ECMWF_tp_forecasts_03-09-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_08_Kenya.nc","March_Dekad2.tif"],
-    (3, 20): ["ECMWF_tp_forecasts_03-19-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_09_Kenya.nc","March_Dekad3.tif"],
-    (4, 1): ["ECMWF_tp_forecasts_03-31-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_10_Kenya.nc","April_Dekad1.tif"],
-    (4, 11): ["ECMWF_tp_forecasts_04-09-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_11_Kenya.nc","April_Dekad2.tif"],
-    (4, 21): ["ECMWF_tp_forecasts_04-19-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_12_Kenya.nc","April_Dekad3.tif"],
-    (5, 1): ["ECMWF_tp_forecasts_04-29-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_13_Kenya.nc","May_Dekad1.tif"],
-    (5, 11): ["ECMWF_tp_forecasts_05-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_14_Kenya.nc","May_Dekad2"],
-    (5, 21): ["ECMWF_tp_forecasts_05-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_15_Kenya.nc","May_Dekad3"],
-    (6, 1): ["ECMWF_tp_forecasts_06-01-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_16_Great_Horn.nc","June_Dekad1"],
-    (6, 11): ["ECMWF_tp_forecasts_06-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_17_Great_Horn.nc","June_Dekad2"],
-    (6, 21): ["ECMWF_tp_forecasts_06-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_sorted_18_Great_Horn.nc","June_Dekad3"],
-    (7, 1): ["ECMWF_tp_forecasts_07-01-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_19_Great_Horn.nc","July_Dekad1"],
-    (7, 11): ["ECMWF_tp_forecasts_07-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_20_Great_Horn.nc","July_Dekad2"],
-    (7, 21): ["ECMWF_tp_forecasts_07-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_21_Great_Horn.nc","July_Dekad3"],
-    (8, 1): ["ECMWF_tp_forecasts_08-01-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_22_Great_Horn.nc","August_Dekad1"],
-    (8, 11): ["ECMWF_tp_forecasts_08-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_23_Great_Horn.nc","August_Dekad2"],
-    (8, 21): ["ECMWF_tp_forecasts_08-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_24_Great_Horn.nc","August_Dekad3"],
-    (9, 1): ["ECMWF_tp_forecasts_09-01-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_25_Great_Horn.nc","September_Dekad1"],
-    (9, 11): ["ECMWF_tp_forecasts_09-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_26_Great_Horn.nc","September_Dekad2"],
-    (9, 21): ["ECMWF_tp_forecasts_09-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_27_Great_Horn.nc","September_Dekad3"],
-    (10, 1): ["ECMWF_tp_forecasts_10-01-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_28_Great_Horn.nc","October_Dekad1"],
-    (10, 11): ["ECMWF_tp_forecasts_10-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_29_Great_Horn.nc","October_Dekad2"],
-    (10, 21): ["ECMWF_tp_forecasts_10-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_30_Great_Horn.nc","October_Dekad3"],
-    (11, 1): ["ECMWF_tp_forecasts_11-01-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_31_Great_Horn.nc","November_Dekad1"],
-    (11, 11): ["ECMWF_tp_forecasts_11-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_32_Great_Horn.nc","November_Dekad2"],
-    (11, 21): ["ECMWF_tp_forecasts_11-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_33_Great_Horn.nc","November_Dekad3"],
-    (12, 1): ["ECMWF_tp_forecasts_12-01-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_34_Great_Horn.nc","December_Dekad1"],
-    (12, 11): ["ECMWF_tp_forecasts_12-11-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_35_Great_Horn.nc","December_Dekad2"],
-    (12, 21): ["ECMWF_tp_forecasts_12-21-2025_day2_to_day11_Kenya.nc","chirpsv3_dekads_2005_2025_36_Great_Horn.nc","December_Dekad3"],
-    # Later dekads need their reforecast (build_dekad_reforecast.py) and climatology
-    # (build_chirps_dekad_climatology.py) files first: adding a key before both
-    # files exist makes the runs before it fail on open. Going past December also
-    # needs the year handled: keys are (month, day) sliced in order, the filenames
-    # are fixed to 2025, and the Kenya CSV columns are hardcoded as ire2026<dekad>,
-    # so January entries would overwrite the Jan 2026 columns.
-
-}
+# the dekad table (forecast init -> reforecast, CHIRPS climatology and GeoTIFF name
+# per dekad) and the dekadal domains are shared with downscale_dekade_04deg_.py
+forecast_files = gef.DEKAD_FORECAST_FILES
+dekad_index = gef.dekad_index
 
 tick('weekly/dekadal aggregates + shapefiles')
 if (int(month),int(day)) in forecast_files.keys():
     keys = list(forecast_files)
     start = keys.index((month, day))
 
-    dekade_bboxes = {
-        "Kenya": {"lat1": 7, "lon1": 33, "lat2": -6, "lon2": 42},
-        "kenya_plus":{"lat1": 7.5, "lon1":27, "lat2": -7.5, "lon2": 43},
-        "Great_Horn":{"lat1": 25.5, "lon1": 19.5, "lat2": -8, "lon2": 57},
-        "Ethiopia": {"lat1": 16, "lon1": 32, "lat2": 2, "lon2": 49},
-        "Somalia": {"lat1": 13, "lon1": 40.5, "lat2": -2.5, "lon2": 52},
-    }
+    dekade_bboxes = gef.DEKADE_BBOXES
 
     country='Great_Horn'
 

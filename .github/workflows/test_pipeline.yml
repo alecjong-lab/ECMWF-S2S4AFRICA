@@ -477,6 +477,21 @@ jobs:
           # the 1.5 degree run whose days extend the rainfall onset forecast
           ONSET_1P5_DATE: ${{ env.DATE_STR }}
 
+      # downscale_dekade_04deg_.py: the dekadal counterpart of the step above, on
+      # dekad starts only (gef.DEKAD_FORECAST_FILES). Replaces dowscale_dekade.py's
+      # 1.5 degree dekadal outputs of the same names when the 0.4 degree forecast for
+      # its date and the hindcast store are there; otherwise exits and leaves them.
+      - name: Perform 0.4 degree dekadal downscaling
+        if: ${{ inputs.run_downscale_04deg && !inputs.skills_only && contains(inputs.countries, 'Kenya') }}
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python downscale_dekade_04deg_.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DEKADE_COUNTRIES: ${{ inputs.countries }}
+          DATE_STR: ${{ env.DATE_STR_04DEG }}
+
       # ── Stage: olr_waves (tropical waves + MJO OLR/RMM indices) ──────
       # Needs the ERA5 archive (daily OLR 2006-now, 15S-15N u850/u200, BoM's
       # RMM file) that lives in gs://${BUCKET}/era5/: pull it, top it up to

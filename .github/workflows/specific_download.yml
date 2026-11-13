@@ -172,6 +172,20 @@ jobs:
           MAIN_PATH: ${{ github.workspace }}/main_repo/
           DATE_STR: "${{ inputs.date_str }}"
 
+      # downscale_dekade_04deg_.py: the dekadal counterpart of the step above, on
+      # dekad starts only (gef.DEKAD_FORECAST_FILES). Replaces dowscale_dekade.py's
+      # 1.5 degree dekadal outputs of the same names when the 0.4 degree forecast for
+      # its date and the hindcast store are there; otherwise exits and leaves them.
+      - name: Perform 0.4 degree dekadal downscaling
+        continue-on-error: true
+        working-directory: main_repo
+        run: |
+          python downscale_dekade_04deg_.py
+        env:
+          MAIN_PATH: ${{ github.workspace }}/main_repo/
+          DEKADE_COUNTRIES: "Kenya,Great_Horn,Ethiopia,Somalia"
+          DATE_STR: "${{ inputs.date_str }}"
+
       # ── OLR tropical waves + MJO OLR/RMM indices ─────────────────────
       # Needs the ERA5 archive (daily OLR 2006-now, 15S-15N u850/u200, BoM's
       # RMM file) kept in gs://${BUCKET}/era5/: pull it, top it up to the
