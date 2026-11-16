@@ -1,3 +1,8 @@
 # Domain-wide — 2026-11-15
 
-- **ICON_eps_tot_prec_2026-11-15.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-11-15/ICON_eps_tot_prec_2026-11-15.zarr) · `gs://africa-forecasting-data/data/2026-11-15/ICON_eps_tot_prec_2026-11-15.zarr`
+- [daily_downscaled_kenya.tif](https://storage.googleapis.com/africa-forecasting-data/data/2026-11-15/daily_downscaled_kenya.tif)
+- **CE_Kenya_dwnscaled_timeseries_daily.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-11-15/CE_Kenya_dwnscaled_timeseries_daily.zarr) · `gs://africa-forecasting-data/data/2026-11-15/CE_Kenya_dwnscaled_timeseries_daily.zarr`
+- **daily_downscaled_kenya.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-11-15/daily_downscaled_kenya.zarr) · `gs://africa-forecasting-data/data/2026-11-15/daily_downscaled_kenya.zarr`
+- **daily_downscaled_kenya_members.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-11-15/daily_downscaled_kenya_members.zarr) · `gs://africa-forecasting-data/data/2026-11-15/daily_downscaled_kenya_members.zarr`
+- **daily_downscaled_kenya_members_onset.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-11-15/daily_downscaled_kenya_members_onset.zarr) · `gs://africa-forecasting-data/data/2026-11-15/daily_downscaled_kenya_members_onset.zarr`
+- **data_weekly_Kenya_downscaled.zarr** — [browse](https://console.cloud.google.com/storage/browser/africa-forecasting-data/data/2026-11-15/data_weekly_Kenya_downscaled.zarr) · `gs://africa-forecasting-data/data/2026-11-15/data_weekly_Kenya_downscaled.zarr`
