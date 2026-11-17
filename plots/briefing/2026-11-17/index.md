@@ -1,0 +1,38 @@
+# Briefing — 2026-11-17
+
+## Other
+
+### Precipitation
+
+- [chirps_east_africa_weekly_anomaly.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/chirps_east_africa_weekly_anomaly.png)
+- [chirps_east_africa_weekly_rainfall.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/chirps_east_africa_weekly_rainfall.png)
+- [chirps_kenya_weekly_anomaly.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/chirps_kenya_weekly_anomaly.png)
+- [chirps_kenya_weekly_rainfall.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/chirps_kenya_weekly_rainfall.png)
+- [enso_forecast.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/enso_forecast.png)
+- [enso_observed.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/enso_observed.png)
+- [hovmoller_olr_tropics.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/hovmoller_olr_tropics.png)
+- [iod_forecast.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/iod_forecast.png)
+- [iod_observed.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/iod_observed.png)
+- [itcz_africa_latest.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/itcz_africa_latest.png)
+- [kenya_aifs_chirps_bias.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_aifs_chirps_bias.png)
+- [kenya_aifs_chirps_mae.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_aifs_chirps_mae.png)
+- [kenya_aifs_chirps_verify_5mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_aifs_chirps_verify_5mm.png)
+- [kenya_ecmwf_chirps_bias.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_ecmwf_chirps_bias.png)
+- [kenya_ecmwf_chirps_mae.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_ecmwf_chirps_mae.png)
+- [kenya_ecmwf_chirps_verify_5mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_ecmwf_chirps_verify_5mm.png)
+- [kenya_gefs_chirps_bias.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_gefs_chirps_bias.png)
+- [kenya_gefs_chirps_mae.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_gefs_chirps_mae.png)
+- [kenya_gefs_chirps_verify_5mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_gefs_chirps_verify_5mm.png)
+- [kenya_kmsa_chirps_verify_5mm.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_kmsa_chirps_verify_5mm.png)
+- [kenya_ond_daily_rainfall_vs_climatology.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_ond_daily_rainfall_vs_climatology.png)
+- [kenya_ond_last_week_rainfall_kenya_extent.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_ond_last_week_rainfall_kenya_extent.png)
+- [kenya_ond_weekly_rainfall_vs_climatology.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_ond_weekly_rainfall_vs_climatology.png)
+- [kenya_ond_weekly_standardized_anomaly.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_ond_weekly_standardized_anomaly.png)
+- [kenya_weekly_rainfall_analog_years.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/kenya_weekly_rainfall_analog_years.png)
+- [mjo_rmm_ecmwf.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/mjo_rmm_ecmwf.png)
+- [mjo_rmm_gefs.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/mjo_rmm_gefs.png)
+- [olr_map_africa.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/olr_map_africa.png)
+- [sst_global_oisst_nino_iod.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/sst_global_oisst_nino_iod.png)
+- [tahmo_kenya_cities_humidity.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/tahmo_kenya_cities_humidity.png)
+- [tahmo_kenya_cities_rainfall.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/tahmo_kenya_cities_rainfall.png)
+- [tahmo_kenya_cities_temperature.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-17/tahmo_kenya_cities_temperature.png)
