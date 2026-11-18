@@ -262,7 +262,9 @@ std_IO_monthly_precip=io_precip_mclimate.tp_monthly_std
 
 precip_total=IO_precip_weekly.sum('step')
 anom_precip=precip_total-mclimate_IO_monthly_precip           # raw anomaly (mm)
-std_anom_precip=anom_precip/std_IO_monthly_precip             # anomaly in std-dev units
+# anomaly in std-dev units. Where every reforecast was dry the spread is 0 and the
+# standardized anomaly is undefined (+/-inf): leave those points blank
+std_anom_precip=anom_precip/std_IO_monthly_precip.where(std_IO_monthly_precip > 0)
 
 period_end = str(anom_precip.time.values + pd.Timedelta("28d"))[:10]
 precip_title = f'Indian Ocean Monthly Precipitation Anomaly {str(anom_precip.time.values)[:10]} until {period_end}'
@@ -286,7 +288,7 @@ plot_moisture_anomaly_map(
 IO_precip_calweek = gef.window_daily(gef.acum_to_instant(IO_precip_raw), cal_windows, init, how='sum').mean('number')
 
 anom_precip_weekly = IO_precip_calweek - io_calweek_single.tp
-std_anom_precip_weekly = anom_precip_weekly / io_calweek_single.tp_std
+std_anom_precip_weekly = anom_precip_weekly / io_calweek_single.tp_std.where(io_calweek_single.tp_std > 0)
 
 precip_weekly_title = f'Indian Ocean Weekly Precipitation Anomaly | {cal_period}'
 std_precip_weekly_title = f'Indian Ocean Weekly Standardized Precipitation Anomaly | {cal_period}'
@@ -367,8 +369,9 @@ anom_ivt_monthly = ivt_monthly - ivt_mclimate_monthly
 anom_ivt_weekly = ivt_weekly - io_calweek_moisture[['ivt_u']]
 
 # anomaly in std-dev units, like the standardized precipitation maps above
-std_anom_ivt_monthly = anom_ivt_monthly / std_ivt_monthly
-std_anom_ivt_weekly = anom_ivt_weekly / io_calweek_moisture.ivt_u_std
+# (points with zero spread left blank, as there)
+std_anom_ivt_monthly = anom_ivt_monthly / std_ivt_monthly.where(std_ivt_monthly > 0)
+std_anom_ivt_weekly = anom_ivt_weekly / io_calweek_moisture.ivt_u_std.where(io_calweek_moisture.ivt_u_std > 0)
 
 period_end = str(anom_ivt_monthly.time.values + pd.Timedelta("28d"))[:10]
 ivt_title = f'Indian Ocean Monthly Eastward Moisture Transport Anomaly {str(anom_ivt_monthly.time.values)[:10]} until {period_end}'
