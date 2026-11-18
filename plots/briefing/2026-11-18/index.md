@@ -41,6 +41,7 @@
 - [mjo_rmm_ecmwf.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-18/mjo_rmm_ecmwf.png)
 - [mjo_rmm_gefs.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-18/mjo_rmm_gefs.png)
 - [olr_map_africa.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-18/olr_map_africa.png)
+- [s2s_briefing_2026-11-18.pptx](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-18/s2s_briefing_2026-11-18.pptx)
 - [sst_global_oisst_nino_iod.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-18/sst_global_oisst_nino_iod.png)
 - [tahmo_kenya_cities_humidity.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-18/tahmo_kenya_cities_humidity.png)
 - [tahmo_kenya_cities_rainfall.png](https://storage.googleapis.com/africa-forecasting-data/plots/briefing/2026-11-18/tahmo_kenya_cities_rainfall.png)
