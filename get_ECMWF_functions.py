@@ -539,8 +539,11 @@ def compute_rainfall_anomaly(forecast_ds, climatology_ds, var='tp', rank_dim='ra
 def symmetric_vmin_vmax(ds, var='tp', qlow=0.01, qhigh=0.99):
     """
     Symmetric-around-zero vmin/vmax for anomaly plots, sized to the larger
-    magnitude of the low/high quantiles of ds[var].
+    magnitude of the low/high quantiles of ds[var]. Non-finite values are
+    left out: a few +/-inf points (e.g. a standardized anomaly divided by a
+    zero spread) would otherwise turn the quantile into NaN.
     """
+    ds = ds.where(np.isfinite(ds[var]))
     vmax = int(ds.quantile(qhigh)[var].values)
     vmin = int(ds.quantile(qlow)[var].values)
     limit = max(abs(vmax), abs(vmin))
