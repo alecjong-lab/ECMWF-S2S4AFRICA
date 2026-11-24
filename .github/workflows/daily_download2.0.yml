@@ -128,6 +128,18 @@ jobs:
         id: ecmwf_date
         run: echo "date=${{ steps.dates.outputs.ecmwf_date }}" >> $GITHUB_OUTPUT
 
+      # Medium-range 0.1 x 0.1 degree precipitation (ECMWF open data), written to
+      # data/<ecmwf_date>/medium_range_precip_01.zarr and published by the upload
+      # step below. continue-on-error: the medium-range panel is optional.
+      - name: Download medium-range precipitation (0.1 degree)
+        continue-on-error: true
+        working-directory: main_repo
+        env:
+          BOUNDING_BOX: "22.5,-21,-34.5,55.5"
+          DATE_STR: ${{ steps.ecmwf_date.outputs.date }}
+        run: |
+          python download_medium_range.py
+
       - name: Fetch forecast
         working-directory: main_repo
         run: |
@@ -290,20 +302,6 @@ jobs:
           DATE_STR: ${{ steps.date_04deg.outputs.date }}
           # the 1.5 degree run whose days extend the rainfall onset forecast
           ONSET_1P5_DATE: ${{ steps.ecmwf_date.outputs.date }}
-
-      # downscale_dekade_04deg_.py: the dekadal counterpart of the step above, on
-      # dekad starts only (gef.DEKAD_FORECAST_FILES). Replaces dowscale_dekade.py's
-      # 1.5 degree dekadal outputs of the same names when the 0.4 degree forecast for
-      # its date and the hindcast store are there; otherwise exits and leaves them.
-      - name: Perform 0.4 degree dekadal downscaling
-        continue-on-error: true
-        working-directory: main_repo
-        run: |
-          python downscale_dekade_04deg_.py
-        env:
-          MAIN_PATH: ${{ github.workspace }}/main_repo/
-          DEKADE_COUNTRIES: "Kenya,Great_Horn,Ethiopia,Somalia"
-          DATE_STR: ${{ steps.date_04deg.outputs.date }}
 
       # Yesterday's run made the 0.4 degree Kenya downscaling for today's ECMWF
       # date; dowscale_dekade.py's 1.5 degree outputs of the same names must not
@@ -513,14 +511,13 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       # ── Stage Kenya-only plots, downscaled NetCDF, and cropped zarr data ──
-      # For the ECMWF date and, when they differ, the downscaled forecast's date
-      # and the 0.4 degree date (its dekadal product is there even when the weekly
-      # one fell back to the ECMWF date).
+      # For the ECMWF date and, when it differs, the downscaled forecast's (0.4
+      # degree) date.
       - name: Stage Kenya bucket contents
         continue-on-error: true
         working-directory: main_repo
         run: |
-          for d in $(printf '%s\n' "${{ steps.ecmwf_date.outputs.date }}" "${{ steps.downscaled_date.outputs.date }}" "${{ steps.date_04deg.outputs.date }}" | grep . | sort -u); do
+          for d in $(printf '%s\n' "${{ steps.ecmwf_date.outputs.date }}" "${{ steps.downscaled_date.outputs.date }}" | sort -u); do
             STAGE_DIR="kenya_bucket_staging/$d"
             mkdir -p "$STAGE_DIR"
             for sub in weekly dekadal monthly 04deg; do
