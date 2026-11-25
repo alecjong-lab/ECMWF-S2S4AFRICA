@@ -42,16 +42,24 @@ ERROR_RE = re.compile(
     r"exit code [1-9]|Killed|out of memory|timed out|HTTP Error [45]\d\d",
     re.IGNORECASE)
 MAX_ERROR_LINES = 1500
+# ANSI CSI/OSC sequences and stray control characters (job logs carry colour codes).
+ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 def gh_api(path, raw=False, attempts=3):
-    """Call the GitHub API through gh; return parsed JSON (or text if raw)."""
+    """Call the GitHub API through gh; return parsed JSON (or text if raw).
+
+    Raw responses (job logs) contain terminal escape sequences, which gh refuses
+    to print without --allow-escape-sequences; they are stripped afterwards so
+    the saved logs and the error grep see plain text.
+    """
+    cmd = ["gh", "api", path] + (["--allow-escape-sequences"] if raw else [])
     last = ""
     for _ in range(attempts):
-        proc = subprocess.run(["gh", "api", path], capture_output=True,
+        proc = subprocess.run(cmd, capture_output=True,
                               text=True, encoding="utf-8", errors="replace")
         if proc.returncode == 0:
-            return proc.stdout if raw else json.loads(proc.stdout)
+            return ESCAPE_RE.sub("", proc.stdout) if raw else json.loads(proc.stdout)
         last = proc.stderr.strip()
     raise RuntimeError(f"gh api {path} failed: {last}")
 
